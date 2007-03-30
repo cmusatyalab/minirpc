@@ -1,12 +1,15 @@
 AM_CPPFLAGS = -Iclasses -Isupport
 
-include protocol.mk
-
-noinst_LIBRARIES = libisrproto.a
-libisrproto_a_SOURCES = $(SUPPORT_FILES) $(CLASS_FILES)
-MAINTAINERCLEANFILES = classes support
-
-protocol.mk: protocol.asn
+include stamp
+stamp: protocol.asn
 	./compile.sh $<
+MAINTAINERCLEANFILES = stamp
 
-# XXX don't build objects in root dir
+SUBDIRS = support classes
+
+noinst_LTLIBRARIES = libisrproto.la
+libisrproto_la_SOURCES = 
+libisrproto_la_LIBADD = support/libsupport.la classes/libclasses.la
+libisrproto_la_LDFLAGS = -static
+
+# XXX autoreconf fails if make fragments don't exist
