@@ -1,0 +1,67 @@
+OPENISR -- { XXXoid }
+DEFINITIONS
+AUTOMATIC TAGS ::=
+BEGIN
+
+ChunkID ::= INTEGER (0..MAX)
+Hash ::= OCTET STRING (SIZE (16..64))
+EncryptedKeyRecord ::= OCTET STRING
+
+KeyRecord ::= SEQUENCE {
+	key Hash,
+	compress Compression,
+	encrypt Encryption
+}
+
+Compression ::= ENUMERATED {
+	none,
+	zlib,
+	lzf
+}
+
+Encryption ::= ENUMERATED {
+	blowfish-sha1,
+	none-sha1
+}
+
+Want ::= BIT STRING {
+	key (0),
+	data (1)
+}
+
+ChunkRequest ::= SEQUENCE {
+	seq INTEGER (0..MAX),
+	key CHOICE {
+		cid ChunkID,
+		tag Hash
+	},
+	want Want (ALL EXCEPT 0),
+	...
+}
+
+ChunkResponse ::= SEQUENCE {
+	seq INTEGER (0..MAX),
+	keyrec EncryptedKeyRecord OPTIONAL,
+	data OCTET STRING (SIZE (1..131072)) OPTIONAL
+}
+
+ISRClientMessage ::= CHOICE {
+	lookup ChunkRequest,
+	...
+}
+
+ISRServerMessage ::= CHOICE {
+	data ChunkResponse,
+	...
+}
+
+ISRMessage ::= SEQUENCE {
+	id INTEGER (0..MAX),
+	lastResponse BOOLEAN,
+	msg CHOICE {
+		client ISRClientMessage,
+		server ISRServerMessage
+	}
+}
+
+END

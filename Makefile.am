@@ -1,4 +1,4 @@
-SUBDIRS = 
+SUBDIRS = protocol
 EXTRA_DIST  = LICENSE CHANGES
 #EXTRA_DIST += debian openisr.spec
 
