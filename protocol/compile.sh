@@ -20,14 +20,23 @@ cond_cat() {
 	rm -f $src
 }
 
-# XXX check for asn1c
+if [ "$ASN1C" = "" ] ; then
+	ASN1C=asn1c
+fi
+err=0
+$ASN1C 2>/dev/null || err=$?
+if [ $err = 127 ] ; then
+	echo -n "Error: Can't find asn1c.  Try adding it to your PATH or " >&2
+	echo -e "setting the ASN1C\nenvironment variable." >&2
+	exit 1
+fi
 
 tempfile="output.$$"
 classrules="classes/classes.$$"
 supportrules="support/support.$$"
 trap "rm -f $tempfile $classrules $supportrules" EXIT
 
-asn1c -Werror -fskeletons-copy $* > $tempfile 2>&1
+$ASN1C -Werror -fskeletons-copy $* > $tempfile 2>&1
 result=$?
 egrep -v "^(Copied|Generated|Compiled)" $tempfile >&2
 if [ $result != 0 ] ; then

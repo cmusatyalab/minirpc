@@ -10,7 +10,7 @@ if [ ! -e protocol/stamp ] ; then
 	# any subsequent update of protocol.asn, Automake will properly rebuild
 	# the depfiles and the right thing will happen.  Odd.
 	asnfiles=`grep ^ASNFILES protocol/Makefile.am | cut -f2 -d=`
-	(cd protocol && ./compile.sh $asnfiles)
+	(cd protocol && ./compile.sh $asnfiles) || exit 1
 fi
 
 if [ -e configure ] ; then
