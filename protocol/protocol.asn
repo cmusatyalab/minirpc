@@ -4,8 +4,10 @@ AUTOMATIC TAGS ::=
 BEGIN
 
 ChunkID ::= INTEGER (0..MAX)
+ParcelVer ::= INTEGER (0..MAX)
 Hash ::= OCTET STRING (SIZE (16..64))
 EncryptedKeyRecord ::= OCTET STRING
+String ::= UTF8String (SIZE (1..80))
 
 KeyRecord ::= SEQUENCE {
 	key Hash,
@@ -29,39 +31,117 @@ Want ::= BIT STRING {
 	data (1)
 }
 
+ClientHello ::= SEQUENCE {
+	software String,
+	version String,
+	...
+}
+
+ServerHello ::= SEQUENCE {
+	software String,
+	version String,
+	...
+}
+
+Status ::= ENUMERATED {
+	ok,
+	message-unknown,
+	no-chunk,
+	parcel-locked,
+	no-such-version,
+	tls-required,
+	...
+}
+
+-- need a way to change password
+-- need a way to force password change
+
+AcquireLock ::= SEQUENCE {
+	parcel String,
+	version ParcelVer,
+	force BOOLEAN,
+	...
+}
+
+ReleaseLock ::= SEQUENCE {
+	parcel String,
+	nonce INTEGER,
+	...
+}
+
+ListParcels ::= SEQUENCE {
+	name String OPTIONAL,
+	versions INTEGER (-1..MAX),  -- -1 == all
+	...
+}
+
+ParcelRecord ::= SEQUENCE {
+	name String,
+	size INTEGER (0..MAX), -- unique chunks
+	version ParcelVer,
+	checkin GeneralizedTime,
+	acquired SEQUENCE {
+		by String,
+		at GeneralizedTime
+	} OPTIONAL,
+	...
+}
+
+ListParcelResponse ::= SEQUENCE OF ParcelRecord
+
+-- can use this to ask what chunks are needed for upload?  we need to provide
+-- a mechanism to lock chunks from GCing if we're about to upload them.
+-- what if we upload the keyring first?
 ChunkRequest ::= SEQUENCE {
-	seq INTEGER (0..MAX),
 	key CHOICE {
 		cid ChunkID,
 		tag Hash
 	},
-	want Want (ALL EXCEPT 0),
+	want Want,
 	...
 }
 
 ChunkResponse ::= SEQUENCE {
-	seq INTEGER (0..MAX),
+	status Status DEFAULT ok,  -- XXX may be encoded if specified, in violation of DER
 	keyrec EncryptedKeyRecord OPTIONAL,
 	data OCTET STRING (SIZE (1..131072)) OPTIONAL
 }
 
-ISRClientMessage ::= CHOICE {
-	lookup ChunkRequest,
-	...
+-- should chunkrequest/chunkresponse be bidirectional?  (it'd be chunkprovide
+-- or something rather than chunkresponse.)  has a nice symmetry to it.  but
+-- then we'd need support for putting the tag in the response, for unsolicited
+-- uploads.
+
+-- we may want a SET OF keyrecs.
+
+-- should we upload the keyring entries along with the associated chunk, or
+-- should keyring and data upload be separate?  the former requires some way
+-- to mark a keyring as in-progress.  or, we could just have temporary keyrings
+-- which can be committed.  after we commit to them they're immutable
+ChunkUpload ::= SEQUENCE {
+	
 }
 
-ISRServerMessage ::= CHOICE {
+MessageType ::= ENUMERATED {
+	request,
+	response,
+	last-response
+}
+
+ISRMessageBody ::= CHOICE {
+	status Status,
+	serverhello ServerHello,
+	clienthello ClientHello,
+	chunkrequest ChunkRequest,
 	data ChunkResponse,
+	starttls NULL,
 	...
 }
 
 ISRMessage ::= SEQUENCE {
-	id INTEGER (0..MAX),
-	lastResponse BOOLEAN,
-	msg CHOICE {
-		client ISRClientMessage,
-		server ISRServerMessage
-	}
+	sequence INTEGER (0..MAX),
+	type MessageType,
+	body ISRMessageBody
 }
 
 END
