@@ -36,37 +36,38 @@ sub parseErr {
 }
 
 sub validateAttr {
+	my $type = shift;
 	my $attr = shift;
 	my $value = shift;
 	
-	my $type;
+	my $rtype;
 	my @vl;
 	
 	if ($attr eq "Define") {
 		$value =~ /^request|choice$/
-			or parseErr("tmp", $attr, "Invalid definition");
+			or parseErr($type, $attr, "Invalid definition");
 	}
 	if ($attr eq "Response") {
 		$value =~ /^single|multi$/
-			or parseErr("tmp", $attr, "Invalid response type");
+			or parseErr($type, $attr, "Invalid response type");
 	}
 	if ($attr eq "Responses") {
-		foreach $type (split(/[\t ]+/, $value)) {
-			grep(/^$type$/, @alltypes)
-				or parseErr("tmp", $attr, "Invalid type " .
-							"reference name $type");
+		foreach $rtype (split(/[\t ]+/, $value)) {
+			grep(/^$rtype$/, @alltypes)
+				or parseErr($type, $attr, "Invalid type " .
+						"reference name $rtype");
 		}
 	}
 	if ($attr eq "Initiators") {
 		@vl = split(/[\t ]+/, $value);
 		grep(/^client|server$/, @vl) == @vl
-			or parseErr("tmp", $attr, "Invalid initiators");
+			or parseErr($type, $attr, "Invalid initiators");
 	}
 }
 
 sub validateHash {
-	my $attrs = shift;
 	my $type = shift;
+	my $attrs = shift;
 	
 	my @attrlist;
 	my $attr;
@@ -89,6 +90,7 @@ sub validateHash {
 	foreach $attr ("Define", @attrlist) {
 		parseErr($type, "decl", "$attr attribute not specified")
 			if (!defined($attrs->{$attr}));
+		validateAttr($type, $attr, $attrs->{$attr});
 	}
 }
 
@@ -115,18 +117,7 @@ getopts("o:");
 die "No output file specified"
 	if !defined($opt_o);
 
-# Stage 1: find all type reference names
-for $filename (@ARGV) {
-	open(FH, "<", $filename)
-		or die "Can't open $filename";
-	while (<FH>) {
-		push @alltypes, $1
-			if (/^[\t ]*([a-zA-Z0-9]+)[\t ]+::=/);
-	}
-	close FH;
-}
-
-# Stage 2: parse and validate attributes for types that have them
+# Stage 1: read input files and parse types and attributes
 my $attrs = {};
 my %types;
 my %choicemap;
@@ -139,10 +130,11 @@ for $filename (@ARGV) {
 		if (/^[\t ]*([a-zA-Z0-9]+)[\t ]+::=/) {
 			# Type reference name definition
 			setline($1, "decl");
+			push @alltypes, $1;
 			if (%$attrs) {
-				validateHash($attrs, $1);
 				$choiceName = $1
-					if $attrs->{"Define"} eq "choice";
+					if (defined($attrs->{"Define"}) and
+						$attrs->{"Define"} eq "choice");
 				$types{$1} = $attrs;
 				$attrs = {};
 			}
@@ -151,7 +143,8 @@ for $filename (@ARGV) {
 		if (/^[\t ]*--[\t ]+([a-zA-Z]+)[\t ]*:[\t ]+(.+)$/) {
 			# Attribute definition
 			setline("tmp", $1);
-			validateAttr($1, $2);
+			parseErr("tmp", $1, "Redefinition of attribute $1")
+				if (defined($attrs->{$1}));
 			$attrs->{$1} = $2;
 		}
 		if ($choiceName) {
@@ -175,6 +168,12 @@ for $filename (@ARGV) {
 		}
 	}
 	close FH;
+}
+
+# Stage 2: validate input
+my $type;
+while (($type, $attrs) = each %types) {
+	validateHash($type, $attrs);
 }
 
 # Stage 3: produce output
@@ -202,7 +201,6 @@ struct flow_params {
 
 EOF
 
-my $type;
 my $multi;
 my $initiator;
 my $initiators;
@@ -210,6 +208,8 @@ my $responses;
 my $rtype;
 my $emitted;
 my $typevar;
+
+# Produce flow_params structure declarations
 while (($type, $attrs) = each %types) {
 	next if $attrs->{"Define"} ne "request";
 	$multi = ($attrs->{"Response"} eq "multi") ? "1" : "0";
@@ -237,6 +237,7 @@ while (($type, $attrs) = each %types) {
 	print CF "{$multi, $initiators, {${responses}0}};\n\n";
 }
 
+# Produce *_get_flow() functions
 while (($choiceName, $curchoicemap) = each %choicemap) {
 	print HF "const struct flow_params *${choiceName}_get_flow";
 	print HF "(enum ${choiceName}_PR key);\n";
