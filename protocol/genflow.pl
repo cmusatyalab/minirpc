@@ -9,9 +9,17 @@
 
 use strict;
 use warnings;
+use Getopt::Std;
 
 our $filename;
 our @alltypes;
+our $opt_o;
+
+END {
+    my $status=$?;
+    unlink("$opt_o.c.$$", "$opt_o.h.$$");
+    $? = $status;
+}
 
 sub fail {
 	print(STDERR "$filename, line $.: ", @_, "\n");
@@ -72,6 +80,8 @@ sub validateHash {
 	}
 }
 
+getopts("o:");
+
 # Stage 1: find all type reference names
 for $filename (@ARGV) {
 	open(FH, "<", $filename)
@@ -131,13 +141,20 @@ for $filename (@ARGV) {
 }
 
 # Stage 3: produce output
-print <<EOF;
-#include "protocol.h"
+my $outfile_hdr_define = uc "${opt_o}_H";
+
+open(CF, ">", "${opt_o}.c.$$") || die "Can't open ${opt_o}.c.$$";
+open(HF, ">", "${opt_o}.h.$$") || die "Can't open ${opt_o}.h.$$";
+print CF "#include \"protocol.h\"\n";
+print CF "#include \"${opt_o}.h\"\n\n";
+print HF <<EOF;
+#ifndef $outfile_hdr_define
+#define $outfile_hdr_define
 
 #define CLIENT 0x1
 #define SERVER 0x2
 
-struct validate_params {
+struct flow_params {
 	int multi;
 	unsigned initiators;
 	int response_types[];
@@ -174,21 +191,29 @@ while (($type, $attrs) = each %types) {
 		fail "No CHOICE representation available for response $rtype"
 			if (!$emitted);
 	}
-	print "static const struct validate_params validate_$type =\n";
-	print "{$multi, $initiators, {${responses}0}};\n\n";
+	print CF "static const struct flow_params flow_$type =\n";
+	print CF "{$multi, $initiators, {${responses}0}};\n\n";
 }
 
 while (($choiceName, $curchoicemap) = each %choicemap) {
-	print "const struct validate_params *${choiceName}_restrictions";
-	print "(enum ${choiceName}_PR key)\n{\n";
-	print "\tswitch (key) {\n";
+	print HF "const struct flow_params *${choiceName}_get_flow";
+	print HF "(enum ${choiceName}_PR key);\n";
+	print CF "const struct flow_params *${choiceName}_get_flow";
+	print CF "(enum ${choiceName}_PR key)\n{\n";
+	print CF "\tswitch (key) {\n";
 	while (($type, $typevar) = each %$curchoicemap) {
 		next if !defined($types{$type});
 		$attrs = $types{$type};
-		print "\tcase ${choiceName}_PR_$typevar:\n";
-		print "\t\treturn &validate_$type;\n";
+		print CF "\tcase ${choiceName}_PR_$typevar:\n";
+		print CF "\t\treturn &flow_$type;\n";
 	}
-	print "\tdefault:\n";
-	print "\t\treturn NULL;\n";
-	print "\t}\n}\n\n";
+	print CF "\tdefault:\n";
+	print CF "\t\treturn NULL;\n";
+	print CF "\t}\n}\n\n";
 }
+
+print HF "\n#endif\n";
+close CF;
+close HF;
+rename("${opt_o}.c.$$", "${opt_o}.c") || die "Couldn't overwrite ${opt_o}.c";
+rename("${opt_o}.h.$$", "${opt_o}.h") || die "Couldn't overwrite ${opt_o}.h";
