@@ -14,7 +14,7 @@ our $filename;
 our @alltypes;
 
 sub fail {
-	print("$filename, line $.: ", @_, "\n");
+	print(STDERR "$filename, line $.: ", @_, "\n");
 	exit 1;
 }
 
@@ -137,8 +137,7 @@ print <<EOF;
 #define CLIENT 0x1
 #define SERVER 0x2
 
-struct validate_entry {
-	int type;
+struct validate_params {
 	int multi;
 	unsigned initiators;
 	int response_types[];
@@ -146,39 +145,50 @@ struct validate_entry {
 
 EOF
 
-my $responses;
 my $type;
-my $rtype;
-my $typevar;
-while (($type, $attrs) = each %types) {
-	next if $attrs->{"Define"} ne "request";
-	undef $responses;
-	foreach $rtype (split(/[\t ]+/, $attrs->{"Responses"})) {
-		while (($choiceName, $curchoicemap) = each %choicemap) {
-			if (defined($curchoicemap->{$rtype})) {
-				$typevar = $curchoicemap->{$rtype};
-				$responses .= "${choiceName}_PR_$typevar, "
-			}
-		}
-	}
-	print "int ${type}_responses[] =\n";
-	print "{${responses}0};\n\n";
-}
-
 my $multi;
 my $initiator;
 my $initiators;
+my $responses;
+my $rtype;
+my $emitted;
+my $typevar;
+while (($type, $attrs) = each %types) {
+	next if $attrs->{"Define"} ne "request";
+	$multi = ($attrs->{"Response"} eq "multi") ? "1" : "0";
+	$initiators = "0";
+	foreach $initiator (split(/[\t ]+/, $attrs->{"Initiators"})) {
+		$initiators .= "|" . uc $initiator;
+	}
+	$responses = "";
+	foreach $rtype (split(/[\t ]+/, $attrs->{"Responses"})) {
+		$emitted = 0;
+		while (($choiceName, $curchoicemap) = each %choicemap) {
+			if (defined($curchoicemap->{$rtype})) {
+				$typevar = $curchoicemap->{$rtype};
+				$responses .= "${choiceName}_PR_$typevar, ";
+				$emitted = 1;
+			}
+		}
+		# XXX need to track line number
+		fail "No CHOICE representation available for response $rtype"
+			if (!$emitted);
+	}
+	print "static const struct validate_params validate_$type =\n";
+	print "{$multi, $initiators, {${responses}0}};\n\n";
+}
+
 while (($choiceName, $curchoicemap) = each %choicemap) {
-	print "struct validate_entry validate_entries_${choiceName}[] = {\n";
+	print "const struct validate_params *${choiceName}_restrictions";
+	print "(enum ${choiceName}_PR key)\n{\n";
+	print "\tswitch (key) {\n";
 	while (($type, $typevar) = each %$curchoicemap) {
 		next if !defined($types{$type});
 		$attrs = $types{$type};
-		$multi = ($attrs->{"Response"} eq "multi");
-		$initiators = "0";
-		foreach $initiator (split(/[\t ]+/, $attrs->{"Initiators"})) {
-			$initiators .= "|" . uc $initiator;
-		}
-		print "{${choiceName}_PR_$typevar, $multi, $initiators, ${type}_responses},\n"
+		print "\tcase ${choiceName}_PR_$typevar:\n";
+		print "\t\treturn &validate_$type;\n";
 	}
-	print "{0, 0, 0, NULL}\n};\n";
+	print "\tdefault:\n";
+	print "\t\treturn NULL;\n";
+	print "\t}\n}\n\n";
 }
