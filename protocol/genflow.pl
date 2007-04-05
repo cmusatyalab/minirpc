@@ -190,8 +190,8 @@ print HF <<EOF;
 #ifndef $outfile_hdr_define
 #define $outfile_hdr_define
 
-#define CLIENT 0x1
-#define SERVER 0x2
+#define INITIATOR_CLIENT 0x1
+#define INITIATOR_SERVER 0x2
 
 struct flow_params {
 	int multi;
@@ -215,7 +215,7 @@ while (($type, $attrs) = each %types) {
 	$multi = ($attrs->{"Response"} eq "multi") ? "1" : "0";
 	$initiators = "0";
 	foreach $initiator (split(/[\t ]+/, $attrs->{"Initiators"})) {
-		$initiators .= "|" . uc $initiator;
+		$initiators .= "|" . uc "INITIATOR_$initiator";
 	}
 	$responses = "";
 	foreach $rtype (split(/[\t ]+/, $attrs->{"Responses"})) {
