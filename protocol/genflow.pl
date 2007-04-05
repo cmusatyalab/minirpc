@@ -1,7 +1,5 @@
 #!/usr/bin/perl
 
-#attributes: is-request
-#
 # Define: {request|choice}
 # Response: {single|multi}
 # Responses: Status Foo
@@ -14,16 +12,26 @@ use File::Compare;
 
 our $filename;
 our @alltypes;
+our %line;
 our $opt_o;
 
 END {
-    my $status=$?;
-    unlink("$opt_o.c.$$", "$opt_o.h.$$");
-    $? = $status;
+	my $status = $?;
+	unlink("$opt_o.c.$$", "$opt_o.h.$$")
+		if defined($opt_o);
+	$? = $status;
 }
 
-sub fail {
-	print(STDERR "$filename, line $.: ", @_, "\n");
+sub parseErr {
+	my $type = shift;
+	my $attr = shift;
+	my $msg = shift;
+	
+	my $filename;
+	my $line;
+	
+	($filename, $line) = @{$line{$type}->{$attr}};
+	print(STDERR "$filename, line $line: $msg\n");
 	exit 1;
 }
 
@@ -36,22 +44,23 @@ sub validateAttr {
 	
 	if ($attr eq "Define") {
 		$value =~ /^request|choice$/
-			or fail "Invalid definition"
+			or parseErr("tmp", $attr, "Invalid definition");
 	}
 	if ($attr eq "Response") {
 		$value =~ /^single|multi$/
-			or fail "Invalid response type";
+			or parseErr("tmp", $attr, "Invalid response type");
 	}
 	if ($attr eq "Responses") {
 		foreach $type (split(/[\t ]+/, $value)) {
 			grep(/^$type$/, @alltypes)
-				or fail "Invalid type reference name $type";
+				or parseErr("tmp", $attr, "Invalid type " .
+							"reference name $type");
 		}
 	}
 	if ($attr eq "Initiators") {
 		@vl = split(/[\t ]+/, $value);
 		grep(/^client|server$/, @vl) == @vl
-			or fail "Invalid initiators";
+			or parseErr("tmp", $attr, "Invalid initiators");
 	}
 }
 
@@ -62,8 +71,10 @@ sub validateHash {
 	my @attrlist;
 	my $attr;
 	
-	fail "Definition not specified, but other attributes are"
-		if (!defined($attrs->{"Define"}));
+	if (!defined($attrs->{"Define"})) {
+		parseErr($type, "decl", "Definition not specified, but other "
+					. "attributes are");
+	}
 	if ($attrs->{"Define"} eq "request") {
 		@attrlist = ("Response", "Responses", "Initiators");
 	} elsif ($attrs->{"Define"} eq "choice") {
@@ -72,21 +83,42 @@ sub validateHash {
 	
 	foreach $attr (keys %$attrs) {
 		grep(/^$attr$/, ("Define", @attrlist))
-			or fail "Invalid attribute specified for $type";
+			or parseErr($type, $attr, "Invalid attribute");
 	}
 	
 	foreach $attr ("Define", @attrlist) {
-		fail "$attr attribute not specified for $type"
+		parseErr($type, "decl", "$attr attribute not specified")
 			if (!defined($attrs->{$attr}));
 	}
 }
 
+sub setline {
+	my $type = shift;
+	my $attr = shift;
+	
+	if (!defined($line{$type})) {
+		if ($attr eq "decl") {
+			# For request definitions, we get attributes before
+			# we get the name of the type.  So we store attribute
+			# line numbers under the "tmp" type and move the
+			# hashref once we know the type name.
+			$line{$type} = $line{"tmp"};
+			$line{"tmp"} = {};
+		} else {
+			$line{$type} = {};
+		}
+	}
+	$line{$type}->{$attr} = [$filename, $.];
+}
+
 getopts("o:");
+die "No output file specified"
+	if !defined($opt_o);
 
 # Stage 1: find all type reference names
 for $filename (@ARGV) {
 	open(FH, "<", $filename)
-		or fail "Can't open $filename";
+		or die "Can't open $filename";
 	while (<FH>) {
 		push @alltypes, $1
 			if (/^[\t ]*([a-zA-Z0-9]+)[\t ]+::=/);
@@ -102,10 +134,11 @@ my $curchoicemap = ();
 my $choiceName = undef;
 for $filename (@ARGV) {
 	open(FH, "<", $filename)
-		or fail "Can't open $filename";
+		or die "Can't open $filename";
 	while (<FH>) {
 		if (/^[\t ]*([a-zA-Z0-9]+)[\t ]+::=/) {
 			# Type reference name definition
+			setline($1, "decl");
 			if (%$attrs) {
 				validateHash($attrs, $1);
 				$choiceName = $1
@@ -117,17 +150,20 @@ for $filename (@ARGV) {
 		}
 		if (/^[\t ]*--[\t ]+([a-zA-Z]+)[\t ]*:[\t ]+(.+)$/) {
 			# Attribute definition
+			setline("tmp", $1);
 			validateAttr($1, $2);
 			$attrs->{$1} = $2;
 		}
 		if ($choiceName) {
 			if (/SEQUENCE|SET|CHOICE|{/) {
-				fail "Nested definitions not supported " .
+				parseErr($choiceName, "decl", "Nested " .
+						"definitions not supported " .
 						"in choices with \"Define: " .
-						"choice\" set"
+						"choice\" set");
 			}
 			if (/^[\t ]*([a-zA-Z0-9-]+)[\t ]+([a-zA-Z0-9-]+),/) {
 				# Choice member
+				setline($choiceName, $1);
 				$curchoicemap->{$2} = $1;
 			}
 			if (/}/) {
@@ -191,9 +227,11 @@ while (($type, $attrs) = each %types) {
 				$emitted = 1;
 			}
 		}
-		# XXX need to track line number
-		fail "No CHOICE representation available for response $rtype"
-			if (!$emitted);
+		if (!$emitted) {
+			parseErr($type, "Responses", "No CHOICE " .
+					"representation available for " .
+					"response $rtype");
+		}
 	}
 	print CF "static const struct flow_params flow_$type =\n";
 	print CF "{$multi, $initiators, {${responses}0}};\n\n";
