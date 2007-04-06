@@ -56,6 +56,10 @@ Status ::= ENUMERATED {
 -- need a way to change password
 -- need a way to force password change
 
+-- Define    : request
+-- Response  : single
+-- Responses : Status
+-- Initiators: client
 AcquireLock ::= SEQUENCE {
 	parcel String,
 	version ParcelVer,
@@ -63,6 +67,10 @@ AcquireLock ::= SEQUENCE {
 	...
 }
 
+-- Define    : request
+-- Response  : single
+-- Responses : Status
+-- Initiators: client
 ReleaseLock ::= SEQUENCE {
 	parcel String,
 	nonce INTEGER,
@@ -92,6 +100,10 @@ ListParcelResponse ::= SEQUENCE OF ParcelRecord
 -- can use this to ask what chunks are needed for upload?  we need to provide
 -- a mechanism to lock chunks from GCing if we're about to upload them.
 -- what if we upload the keyring first?
+-- Define    : request
+-- Response  : multi
+-- Responses : ChunkResponse
+-- Initiators: client server
 ChunkRequest ::= SEQUENCE {
 	key CHOICE {
 		cid ChunkID,
@@ -122,20 +134,23 @@ ChunkUpload ::= SEQUENCE {
 	
 }
 
-MessageType ::= ENUMERATED {
-	request,
-	response,
-	last-response
-}
-
+-- Define: choice
 ISRMessageBody ::= CHOICE {
 	status Status,
 	serverhello ServerHello,
 	clienthello ClientHello,
 	chunkrequest ChunkRequest,
 	data ChunkResponse,
+	acquire AcquireLock,
+	release ReleaseLock,
 	starttls NULL,
 	...
+}
+
+MessageType ::= ENUMERATED {
+	request,
+	response,
+	last-response
 }
 
 ISRMessage ::= SEQUENCE {
