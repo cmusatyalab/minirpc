@@ -1,5 +1,7 @@
 #!/usr/bin/perl
 
+our $cflags = "-Werror -fskeletons-copy -funnamed-unions";
+
 use strict;
 use warnings;
 use IO::Handle;
@@ -119,7 +121,7 @@ EOF
 
 my @generated;
 my @copied;
-my $command = "$compiler -Werror -fskeletons-copy";
+my $command = "$compiler $cflags";
 my $file;
 for $file (@ARGV) {
 	$command .= " $file";
