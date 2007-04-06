@@ -5,7 +5,7 @@ ASNFILES = protocol.asn
 
 include stamp
 stamp: $(ASNFILES)
-	./compile.sh $^
+	./compile.pl $^
 MAINTAINERCLEANFILES = stamp
 
 flow.c flow.h: $(ASNFILES)
