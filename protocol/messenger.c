@@ -4,30 +4,11 @@
 #include <string.h>
 #include "protocol.h"
 #include "list.h"
+#define LIBPROTOCOL
+#include "internal.h"
 #include "errno.h"
 
 #define POLLEVENTS (EPOLLIN|EPOLLERR|EPOLLHUP)
-
-static int epoll_fd;
-
-static struct {
-	pthread_mutex_t lock;
-	struct htable *table;
-	unsigned buflen;
-} conn_set;
-
-struct connection {
-	struct list_head *lh_hash;
-	int fd;
-	char *send_buf;
-	unsigned send_offset;
-	unsigned send_length;
-	pthread_mutex_t send_msgs_lock;
-	struct list_head *send_msgs;
-	char *recv_buf;
-	unsigned recv_offset;
-	struct ISRMessage *recv_msg;
-};
 
 struct message {
 	struct list_head *lh_msgs;
@@ -43,15 +24,15 @@ static unsigned conn_hash(struct list_head *entry, unsigned buckets)
 static int conn_match(struct list_head *entry, void *data)
 {
 	struct connection *conn=list_entry(entry, struct connection, lh_hash);
-	int fd=(int)data;
-	return (fd == conn->fd);
+	int *fd=data;
+	return (*fd == conn->fd);
 }
 
-static struct connection *conn_lookup(int fd)
+static struct connection *conn_lookup(struct isr_conn_set *set, int fd)
 {
 	struct list_head *head;
 	
-	head=hash_get(conn_set.table, conn_match, fd, (void*)fd);
+	head=hash_get(set->table, conn_match, fd, &fd);
 	if (head == NULL)
 		return NULL;
 	return list_entry(head, struct connection, lh_hash);
@@ -69,9 +50,10 @@ static int set_nonblock(int fd)
 	return 0;
 }
 
-int add_fd(int fd)
+int add_conn(struct isr_connection **ret, struct isr_conn_set *set, int fd,
+			void *private)
 {
-	struct connection *conn;
+	struct isr_connection *conn;
 	struct epoll_event event;
 	int ret;
 	
@@ -85,46 +67,52 @@ int add_fd(int fd)
 	INIT_LIST_HEAD(&conn->lh_hash);
 	INIT_LIST_HEAD(&conn->send_msgs);
 	pthread_mutex_init(&conn->send_msgs_lock);
+	pthread_mutex_init(&conn->pending_replies_lock, NULL);
+	conn->set=set;
 	conn->fd=fd;
-	conn->send_buf=malloc(conn_set.buflen);
+	conn->send_buf=malloc(set->buflen);
 	if (conn->send_buf == NULL) {
 		free(conn);
 		return -ENOMEM;
 	}
-	conn->recv_buf=malloc(conn_set.buflen);
+	conn->recv_buf=malloc(set->buflen);
 	if (conn->recv_buf == NULL) {
 		free(conn->send_buf);
 		free(conn);
 		return -ENOMEM;
 	}
+	conn->pending_replies=hash_alloc(set->msg_buckets, mux_hash);
+	if (conn->pending_replies == NULL) {
+		free(conn->recv_buf);
+		free(conn->send_buf);
+		free(con);
+		return -ENOMEM;
+	}
 	event.events=POLLEVENTS;
 	event.data.ptr=conn;
-	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &event)) {
+	if (epoll_ctl(set->epoll_fd, EPOLL_CTL_ADD, fd, &event)) {
 		ret=-errno;
+		hash_free(conn->pending_replies);
 		free(conn->recv_buf);
 		free(conn->send_buf);
 		free(con);
 		return ret;
 	}
-	pthread_mutex_lock(&conn_set->lock);
-	hash_add(conn_set->table, &conn->lh_hash);
-	pthread_mutex_unlock(&conn_set->lock);
+	pthread_mutex_lock(&set->lock);
+	hash_add(set->table, &conn->lh_hash);
+	pthread_mutex_unlock(&set->lock);
+	*ret=conn;
 	return 0;
 }
 
-int remove_fd(int fd)
+void remove_conn(struct isr_connection *conn)
 {
-	struct connection *conn;
+	struct isr_conn_set *set=conn->set;
 	
 	/* XXX data already in buffer? */
-	pthread_mutex_lock(&conn_set->lock);
-	conn=conn_lookup(fd);
-	if (conn == NULL) {
-		pthread_mutex_unlock(&conn_set->lock);
-		return -EINVAL;
-	}
-	hash_remove(conn_set.table, &conn->lh_hash);
-	pthread_mutex_unlock(&conn_set->lock);
+	pthread_mutex_lock(&set->lock);
+	hash_remove(set->table, &conn->lh_hash);
+	pthread_mutex_unlock(&set->lock);
 	free(conn->recv_buf);
 	free(conn->send_buf);
 	free(conn);
@@ -139,7 +127,7 @@ static int need_writable(struct connection *conn, int writable)
 	event.events=POLLEVENTS;
 	if (writable)
 		event.events |= EPOLLOUT;
-	return epoll_ctl(epoll_fd, EPOLL_CTL_MOD, conn->fd, &event);
+	return epoll_ctl(conn->set->epoll_fd, EPOLL_CTL_MOD, conn->fd, &event);
 }
 
 static void conn_kill(struct connection *conn)
@@ -187,7 +175,7 @@ static void try_read_conn(struct connection *conn)
 	
 	while (1) {
 		count=read(conn->fd, conn->recv_buf + conn->recv_offset,
-					conn_set.buflen - conn->recv_offset);
+					conn->set->buflen - conn->recv_offset);
 		if (count == -1 && errno == EINTR) {
 			continue;
 		} else if (count == -1 && errno == EAGAIN) {
@@ -213,7 +201,7 @@ static void try_read_conn(struct connection *conn)
 			}
 		}
 		
-		if (conn->recv_offset == conn_set.buflen) {
+		if (conn->recv_offset == conn->set->buflen) {
 			conn_kill(conn);
 			break;
 		}
@@ -236,7 +224,7 @@ static int form_buffer(struct connection *conn)
 	pthread_mutex_unlock(&conn->send_msgs_lock);
 	
 	rval=der_encode_to_buffer(&asn_DEF_ISRMessage, msg->msg,
-				conn->recv_buf, conn_set.buflen);
+				conn->recv_buf, conn->set->buflen);
 	if (rval.encoded == -1)
 		return -EINVAL;
 	conn->send_offset=0;
@@ -274,14 +262,14 @@ static void try_write_conn(struct connection *conn)
 	}
 }
 
-void listener(int maxevents)
+void listener(struct isr_conn_set *set, int maxevents)
 {
 	struct epoll_events events[maxevents];
 	int count;
 	int i;
 	
 	while (1) {
-		count=epoll_wait(epoll_fd, &events, maxevents, -1);
+		count=epoll_wait(set->epoll_fd, &events, maxevents, -1);
 		for (i=0; i<count; i++) {
 			if (events[i].events & (EPOLLERR | EPOLLHUP)) {
 				conn_kill(events[i].data.ptr);
@@ -318,15 +306,38 @@ int send_message(struct connection *conn, struct ISRMessage *msg)
 	return 0;
 }
 
-int messenger_init(int fds, unsigned buckets, unsigned buflen)
+int set_alloc(struct isr_conn_set **ret, int fds, unsigned conn_buckets,
+			unsigned msg_buckets, unsigned buflen, int server,
+			new_request_fn *func)
 {
-	epoll_fd=epoll_create(fds);
-	if (epoll_fd < 0)
-		return -errno;
-	pthread_mutex_init(&conn_set.lock, NULL);
-	conn_set.table=hash_alloc(buckets, conn_hash);
-	if (conn_set.table == NULL)
+	struct isr_conn_set *set;
+	
+	set=malloc(sizeof(*set));
+	if (set == NULL)
 		return -ENOMEM;
-	conn_set.buflen=buflen;
+	pthread_mutex_init(&set->lock, NULL);
+	set->table=hash_alloc(conn_buckets, conn_hash);
+	if (set->table == NULL) {
+		free(set);
+		return -ENOMEM;
+	}
+	set->buflen=buflen;
+	set->server=server;
+	set->request_fn=func;
+	set->msg_buckets=msg_buckets;
+	set->epoll_fd=epoll_create(fds);
+	if (set->epoll_fd < 0) {
+		free(set->table);
+		free(set);
+		return -errno;
+	}
+	*ret=set;
 	return 0;
+}
+
+void set_free(struct isr_conn_set *set)
+{
+	close(set->epoll_fd);
+	free(set->table);
+	free(set);
 }

@@ -3,17 +3,17 @@
 
 #include "list.h"
 
-typedef (unsigned)(struct list_head *entry, unsigned buckets) hash_func_t;
-typedef (int)(struct list_head *entry, void *data) hash_match_t;
+typedef (unsigned)(struct list_head *entry, unsigned buckets) hash_fn;
+typedef (int)(struct list_head *entry, void *data) hash_match_fn;
 
 struct htable {
-	hash_func_t hfunc;
+	hash_fn hfunc;
 	struct list_head *hash;
 	unsigned buckets;
 	unsigned count;
 }
 
-static inline struct htable *hash_alloc(unsigned buckets, hash_func_t hfunc)
+static inline struct htable *hash_alloc(unsigned buckets, hash_fn hfunc)
 {
 	struct htable *table;
 	int i;
@@ -52,7 +52,7 @@ static inline void hash_add(struct htable *table, struct list_head *entry)
 
 /* XXX "bucketkey" parameter sucks */
 static inline struct list_head *hash_get(struct htable *table,
-			hash_match_t match, unsigned bucketkey, void *data)
+			hash_match_fn match, unsigned bucketkey, void *data)
 {
 	struct list_head *cur;
 	

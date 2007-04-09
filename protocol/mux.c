@@ -1,93 +1,90 @@
 #include "protocol.h"
 #include "hash.h"
+#define LIBPROTOCOL
+#include "internal.h"
 
-typedef (void)(struct ISRMessage *request, struct ISRMessage *reply,
-			void *data) reply_callback_t;
+typedef (void)(struct isr_connection *conn, void *conn_data,
+			struct ISRMessage *request, struct ISRMessage *reply,
+			void *msg_data) reply_callback_fn;
 
-/* XXX need to deal with fd reuse on teardown -- separate linked list per-fd */
 struct pending_entry {
 	struct list_head lh_hash;
-	int fd;
 	struct ISRMessage *request;
-	reply_callback_t callback;
+	reply_callback_fn callback;
 	void *data;
 };
-
-static struct {
-	pthread_mutex_t lock;
-	struct htable *hash;
-} pending;
 
 struct sync_data {
 	pthread_cond_t *cond;
 	struct ISRMessage **reply;
 }
 
-/* XXX sequence wraparound */
-struct match_data {
-	int fd,
-	int sequence;
-}
+/* XXX deal with sequence number wraparound */
 
 static unsigned mux_hash(struct list_head *head, unsigned buckets)
 {
 	struct pending_entry *entry=list_entry(head, struct pending_entry,
 				lh_hash);
-	return (entry->fd + entry->request->sequence) % buckets;
+	return entry->request->sequence % buckets;
 }
 
 static int mux_match(struct list_head *head, void *data)
 {
 	struct pending_entry *entry=list_entry(head, struct pending_entry,
 				lh_hash);
-	struct match_data *mdata=data;
-	
-	return (mdata->fd == entry->fd &&
-				mdata->sequence == entry->request->sequence);
+	int *sequence=data;
+	return (*sequence == entry->request->sequence);
 }
 
-static struct pending_entry *request_lookup(int fd, int sequence)
+static struct pending_entry *request_lookup(struct isr_connection *conn,
+			int sequence)
 {
-	struct match_data mdata;
 	struct list_head *head;
 	
-	mdata.fd=fd;
-	mdata.sequence=sequence;
-	head=hash_get(pending.hash, mux_match, fd + sequence, &mdata);
+	head=hash_get(conn->pending_replies, mux_match, sequence, &sequence);
 	if (head == NULL)
 		return NULL;
 	return list_entry(head, struct pending_entry, lh_hash);
 }
 
-static void sync_callback(struct ISRMessage *request,
-			struct ISRMessage *reply, void *data)
+static void sync_callback(struct isr_connection *conn, void *conn_data,
+			struct ISRMessage *request, struct ISRMessage *reply,
+			void *msg_data)
 {
-	struct sync_data *sdata=data;
+	struct sync_data *sdata=msg_data;
 	
 	*sdata->reply=reply;
 	pthread_cond_signal(sdata->cond);
 }
 
-/* Returns with pending.lock held, except on error */
-static int _send_request_async(struct ISRMessage *msg,
-			reply_callback_t callback, void *data)
+/* If callback != NULL, returns with pending_replies_lock held, except on
+   error */
+static int _send_request_async(struct isr_connection *conn,
+			struct ISRMessage *msg, reply_callback_t callback,
+			void *data)
 {
 	struct pending_entry *entry;
 	int ret;
 	
-	ret=validate_request(msg, fromClient, isAsync);
-	if (ret)
-		return ret;
-	entry=malloc(sizeof(*entry));
-	if (entry == NULL)
-		return -ENOMEM;
-	INIT_LIST_HEAD(&entry->lh_hash);
-	entry->request=msg;
-	entry->callback=callback;
-	entry->data=data;
-	pthread_mutex_lock(&pending.lock);
-	hash_add(pending.hash, &entry->lh_hash);
-	return 0;
+	if (callback != NULL) {
+		entry=malloc(sizeof(*entry));
+		if (entry == NULL)
+			return -ENOMEM;
+		INIT_LIST_HEAD(&entry->lh_hash);
+		entry->request=msg;
+		entry->callback=callback;
+		entry->data=data;
+		pthread_mutex_lock(&conn->pending_replies_lock);
+		hash_add(conn->pending_replies, &entry->lh_hash);
+	}
+	/* XXX check lock ordering */
+	ret=send_message(conn, msg);
+	if (ret && callback != NULL) {
+		hash_remove(conn->pending_replies, &entry->lh_hash);
+		pthread_mutex_unlock(&conn->pending_replies_lock);
+		free(entry);
+	}
+	return ret;
 }
 
 void free_message(struct ISRMessage *msg)
@@ -97,60 +94,81 @@ void free_message(struct ISRMessage *msg)
 	ASN_STRUCT_FREE(&asn_DEF_ISRMessage, msg);
 }
 
-/* XXX do we want to fail if there are no possible replies?  the callback
-   can never be called */
-int send_request_async(struct ISRMessage *msg, reply_callback_t callback,
-			void *data)
+int send_request_async(struct isr_connection *conn, struct ISRMessage *msg,
+			reply_callback_t callback, void *data)
 {
-	_send_request_async(msg, callback, data);
-	pthread_mutex_unlock(&pending.lock);
-	return 0;
+	int ret;
+	int willReply;
+	
+	ret=validate_request(msg, conn->set->server, 1, &willReply);
+	if (ret)
+		return ret;
+	if (!willReply) {
+		/* The callback will never be called */
+		return -EINVAL;
+	}
+	/* Locks pending_replies_lock except on error */
+	ret=_send_request_async(conn, msg, callback, data);
+	if (ret)
+		return ret;
+	pthread_mutex_unlock(&conn->pending_replies_lock);
 }
 
-/* XXX if validate struct says there are no possible replies, return
-   immediately */
-int send_request(struct ISRMessage *request, struct ISRMessage **reply)
+int send_request(struct isr_connection *conn, struct ISRMessage *request,
+			struct ISRMessage **reply)
 {
 	pthread_cond_t cond=PTHREAD_COND_INITIALIZER;
 	struct sync_data sdata;
 	int ret;
+	int willReply;
 	
-	sdata.cond=&cond;
-	sdata.reply=reply;
-	/* Locks pending.lock */
-	ret=_send_request_async(request, sync_callback, &sdata);
+	ret=validate_request(msg, conn->set->server, 0, &willReply);
 	if (ret)
 		return ret;
-	pthread_cond_wait(&cond, &pending.lock);
-	pthread_mutex_unlock(&pending.lock);
-	return 0;
+	if (willReply) {
+		sdata.cond=&cond;
+		sdata.reply=reply;
+		/* Locks pending_replies_lock except on error */
+		ret=_send_request_async(conn, request, sync_callback, &sdata);
+		if (ret)
+			return ret;
+		pthread_cond_wait(&cond, &conn->pending_replies_lock);
+		pthread_mutex_unlock(&pending.lock);
+		return 0;
+	} else {
+		*reply=NULL;
+		/* Does not lock pending_replies_lock */
+		return _send_request_async(conn, request, NULL, NULL);
+	}
 }
 
 /* XXX need to stop using "response" instead of "reply" */
-int send_reply(struct ISRMessage *request, struct ISRMessage *reply)
+int send_reply(struct isr_connection *conn, struct ISRMessage *request,
+			struct ISRMessage *reply)
 {
 	int ret;
 	
 	ret=validate_response(request, reply);
 	if (ret)
 		return ret;
-	XXX;
+	return send_message(conn, reply);
 }
 
 /* XXX what happens if we get a bad reply?  close the connection? */
-void process_incoming_message(struct ISRMessage *msg)
+void process_incoming_message(struct isr_connection *conn,
+			struct ISRMessage *msg)
 {
 	if (msg->direction == MessageDirection_request) {
 		if (validate_request(msg, fromClient, async)) {
 			XXX;
 		}
-		XXX;
+		conn->set->request_fn(conn, conn->private, msg);
 	} else {
 		struct pending_entry *entry;
 		int last = (msg->direction == MessageDirection_last_response);
 		
 		pthread_mutex_lock(&pending.lock);
-		entry=request_lookup(fd, sequence);
+		entry=request_lookup(conn, sequence);
 		if (last && entry != NULL)
 			hash_remove(pending.hash, &entry->lh_hash);
 		pthread_mutex_unlock(&pending.lock);
@@ -168,7 +186,7 @@ void process_incoming_message(struct ISRMessage *msg)
 	}
 }
 
-static int validate_request(struct ISRMessage *request, int fromClient,
+static int validate_request(struct ISRMessage *request, int fromServer,
 			int async, int *willReply)
 {
 	const struct flow_params *params;
@@ -178,9 +196,9 @@ static int validate_request(struct ISRMessage *request, int fromClient,
 		return -EINVAL;
 	if (request->direction != MessageDirection_request)
 		return -EINVAL;  /* XXX necessary? */
-	if (fromClient && !(params->initiators & INITIATOR_CLIENT))
+	if (!fromServer && !(params->initiators & INITIATOR_CLIENT))
 		return -EINVAL;
-	if (!fromClient && !(params->initiators & INITIATOR_SERVER))
+	if (fromServer && !(params->initiators & INITIATOR_SERVER))
 		return -EINVAL;
 	if (params->multi && !async)
 		return -EINVAL;
@@ -209,16 +227,5 @@ static int validate_response(struct ISRMessage *request,
 				!(params->multi && response->direction ==
 				MessageDirection_response))
 		return -EINVAL;
-	return 0;
-}
-
-int protocol_init(unsigned table_size)
-{
-	int i;
-	
-	pthread_mutex_init(&pending.lock, NULL);
-	pending.hash=hash_alloc(table_size, mux_hash);
-	if (pending.hash == NULL)
-		return -ENOMEM;
 	return 0;
 }
