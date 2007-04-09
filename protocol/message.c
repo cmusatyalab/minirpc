@@ -3,7 +3,7 @@
 #include "internal.h"
 #include "flow.h"
 
-struct pending_entry {
+struct pending_reply {
 	struct list_head lh_pending;
 	struct ISRMessage *request;
 	reply_callback_fn *callback;
@@ -19,20 +19,20 @@ struct sync_data {
 
 static unsigned msg_hash(struct list_head *head, unsigned buckets)
 {
-	struct pending_entry *entry=list_entry(head, struct pending_entry,
+	struct pending_reply *pending=list_entry(head, struct pending_reply,
 				lh_pending);
-	return entry->request->sequence % buckets;
+	return pending->request->sequence % buckets;
 }
 
 static int msg_match(struct list_head *head, void *data)
 {
-	struct pending_entry *entry=list_entry(head, struct pending_entry,
+	struct pending_reply *pending=list_entry(head, struct pending_reply,
 				lh_pending);
 	int *sequence=data;
-	return (*sequence == entry->request->sequence);
+	return (*sequence == pending->request->sequence);
 }
 
-static struct pending_entry *request_lookup(struct isr_connection *conn,
+static struct pending_reply *request_lookup(struct isr_connection *conn,
 			int sequence)
 {
 	struct list_head *head;
@@ -40,7 +40,7 @@ static struct pending_entry *request_lookup(struct isr_connection *conn,
 	head=hash_get(conn->pending_replies, msg_match, sequence, &sequence);
 	if (head == NULL)
 		return NULL;
-	return list_entry(head, struct pending_entry, lh_pending);
+	return list_entry(head, struct pending_reply, lh_pending);
 }
 
 static int validate_request(struct ISRMessage *request, int fromServer,
@@ -103,26 +103,26 @@ static int _send_request_async(struct isr_connection *conn,
 			struct ISRMessage *msg, reply_callback_fn *callback,
 			void *data)
 {
-	struct pending_entry *entry;
+	struct pending_reply *pending;
 	int ret;
 	
 	if (callback != NULL) {
-		entry=malloc(sizeof(*entry));
-		if (entry == NULL)
+		pending=malloc(sizeof(*pending));
+		if (pending == NULL)
 			return -ENOMEM;
-		INIT_LIST_HEAD(&entry->lh_pending);
-		entry->request=msg;
-		entry->callback=callback;
-		entry->data=data;
+		INIT_LIST_HEAD(&pending->lh_pending);
+		pending->request=msg;
+		pending->callback=callback;
+		pending->data=data;
 		pthread_mutex_lock(&conn->pending_replies_lock);
-		hash_add(conn->pending_replies, &entry->lh_pending);
+		hash_add(conn->pending_replies, &pending->lh_pending);
 	}
 	/* XXX check lock ordering */
 	ret=send_message(conn, msg);
 	if (ret && callback != NULL) {
-		hash_remove(conn->pending_replies, &entry->lh_pending);
+		hash_remove(conn->pending_replies, &pending->lh_pending);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
-		free(entry);
+		free(pending);
 	}
 	return ret;
 }
@@ -198,7 +198,7 @@ int send_reply(struct isr_connection *conn, struct ISRMessage *request,
 void process_incoming_message(struct isr_connection *conn,
 			struct ISRMessage *msg)
 {
-	struct pending_entry *entry;
+	struct pending_reply *pending;
 	int last;
 	
 	if (msg->direction == MessageDirection_request) {
@@ -209,21 +209,23 @@ void process_incoming_message(struct isr_connection *conn,
 	} else {
 		last=(msg->direction == MessageDirection_last_response);
 		pthread_mutex_lock(&conn->pending_replies_lock);
-		entry=request_lookup(conn, msg->sequence);
-		if (last && entry != NULL)
-			hash_remove(conn->pending_replies, &entry->lh_pending);
+		pending=request_lookup(conn, msg->sequence);
+		if (last && pending != NULL)
+			hash_remove(conn->pending_replies,
+						&pending->lh_pending);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
-		if (entry == NULL || validate_response(entry->request, msg)) {
+		if (pending == NULL || validate_response(pending->request,
+					msg)) {
 			free_message(msg);
-			if (last && entry != NULL) {
-				free_message(entry->request);
-				free(entry);
+			if (last && pending != NULL) {
+				free_message(pending->request);
+				free(pending);
 			}
 			return;
 		}
-		entry->callback(conn, conn->data, entry->request, msg,
-					entry->data);
+		pending->callback(conn, conn->data, pending->request, msg,
+					pending->data);
 		if (last)
-			free(entry);
+			free(pending);
 	}
 }
