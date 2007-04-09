@@ -147,7 +147,7 @@ ISRMessageBody ::= CHOICE {
 	...
 }
 
-MessageType ::= ENUMERATED {
+MessageDirection ::= ENUMERATED {
 	request,
 	response,
 	last-response
@@ -155,7 +155,7 @@ MessageType ::= ENUMERATED {
 
 ISRMessage ::= SEQUENCE {
 	sequence INTEGER (0..MAX),
-	type MessageType,
+	direction MessageDirection,
 	body ISRMessageBody
 }
 
