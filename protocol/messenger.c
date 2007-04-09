@@ -6,6 +6,8 @@
 #include "list.h"
 #include "errno.h"
 
+#define POLLEVENTS (EPOLLIN|EPOLLERR|EPOLLHUP)
+
 static int epoll_fd;
 
 static struct {
@@ -20,6 +22,7 @@ struct connection {
 	char *send_buf;
 	unsigned send_offset;
 	unsigned send_length;
+	pthread_mutex_t send_msgs_lock;
 	struct list_head *send_msgs;
 	char *recv_buf;
 	unsigned recv_offset;
@@ -42,6 +45,16 @@ static int conn_match(struct list_head *entry, void *data)
 	struct connection *conn=list_entry(entry, struct connection, lh_hash);
 	int fd=(int)data;
 	return (fd == conn->fd);
+}
+
+static struct connection *conn_lookup(int fd)
+{
+	struct list_head *head;
+	
+	head=hash_get(conn_set.table, conn_match, fd, (void*)fd);
+	if (head == NULL)
+		return NULL;
+	return list_entry(head, struct connection, lh_hash);
 }
 
 static int set_nonblock(int fd)
@@ -71,6 +84,7 @@ int add_fd(int fd)
 	memset(conn, 0, sizeof(*conn));
 	INIT_LIST_HEAD(&conn->lh_hash);
 	INIT_LIST_HEAD(&conn->send_msgs);
+	pthread_mutex_init(&conn->send_msgs_lock);
 	conn->fd=fd;
 	conn->send_buf=malloc(conn_set.buflen);
 	if (conn->send_buf == NULL) {
@@ -83,8 +97,8 @@ int add_fd(int fd)
 		free(conn);
 		return -ENOMEM;
 	}
-	event->events=EPOLLIN|EPOLLERR|EPOLLHUP;
-	event->data.ptr=conn;
+	event.events=POLLEVENTS;
+	event.data.ptr=conn;
 	if (epoll_ctl(epoll_fd, EPOLL_CTL_ADD, fd, &event)) {
 		ret=-errno;
 		free(conn->recv_buf);
@@ -104,7 +118,7 @@ int remove_fd(int fd)
 	
 	/* XXX data already in buffer? */
 	pthread_mutex_lock(&conn_set->lock);
-	conn=hash_get(conn_set.table, conn_match, fd, (void*)fd);
+	conn=conn_lookup(fd);
 	if (conn == NULL) {
 		pthread_mutex_unlock(&conn_set->lock);
 		return -EINVAL;
@@ -115,6 +129,17 @@ int remove_fd(int fd)
 	free(conn->send_buf);
 	free(conn);
 	return 0;
+}
+
+static int need_writable(struct connection *conn, int writable)
+{
+	struct epoll_event event;
+	
+	event.data.ptr=conn;
+	event.events=POLLEVENTS;
+	if (writable)
+		event.events |= EPOLLOUT;
+	return epoll_ctl(epoll_fd, EPOLL_CTL_MOD, conn->fd, &event);
 }
 
 static void conn_kill(struct connection *conn)
@@ -133,7 +158,7 @@ static int process_buffer(struct connection *conn, unsigned *start)
 	case RC_OK:
 		if (asn_check_constraints(&asn_DEF_ISRMessage, conn->recv_msg,
 					NULL, NULL)) {
-			ASN_STRUCT_FREE(&asn_DEF_ISRMessage, conn->recv_msg);
+			free_message(conn->recv_msg);
 			conn->recv_msg=NULL;
 			ret=-EINVAL;
 			break;
@@ -145,7 +170,7 @@ static int process_buffer(struct connection *conn, unsigned *start)
 		ret=-EAGAIN;
 		break;
 	case RC_FAIL:
-		ASN_STRUCT_FREE(&asn_DEF_ISRMessage, conn->recv_msg);
+		free_message(conn->recv_msg);
 		conn->recv_msg=NULL;
 		ret=-EINVAL;
 		break;
@@ -200,11 +225,15 @@ static int form_buffer(struct connection *conn)
 	asn_enc_rval_t rval;
 	struct message msg;
 	
-	/* XXX race with queueing new messages? */
-	if (list_is_empty(&conn->send_msgs))
+	pthread_mutex_lock(&conn->send_msgs_lock);
+	if (list_is_empty(&conn->send_msgs)) {
+		need_writable(conn, 0);
+		pthread_mutex_unlock(&conn->send_msgs_lock);
 		return -EAGAIN;
+	}
 	msg=list_entry(conn->send_msgs.next, struct message, lh_msgs);
 	list_del_init(&msg->lh_msgs);
+	pthread_mutex_unlock(&conn->send_msgs_lock);
 	
 	rval=der_encode_to_buffer(&asn_DEF_ISRMessage, msg->msg,
 				conn->recv_buf, conn_set.buflen);
@@ -215,8 +244,6 @@ static int form_buffer(struct connection *conn)
 	return 0;
 }
 
-/* XXX need to enable and disable writable bit in epoll depending on whether
-   we have anything to write or not */
 static void try_write_conn(struct connection *conn)
 {
 	ssize_t count;
@@ -266,6 +293,29 @@ void listener(int maxevents)
 				try_read_conn(events[i].data.ptr);
 		}
 	}
+}
+
+int send_message(struct connection *conn, struct ISRMessage *msg)
+{
+	struct message *mstruct;
+	int ret;
+	
+	mstruct=malloc(sizeof(*mstruct));
+	if (mstruct == NULL)
+		return -ENOMEM;
+	INIT_LIST_HEAD(&mstruct->lh_msgs);
+	mstruct->msg=msg;
+	pthread_mutex_lock(&conn->send_msgs_lock);
+	/* XXX extra syscall even when we don't need it */
+	ret=need_writable(conn, 1);
+	if (ret) {
+		free(mstruct);
+		pthread_mutex_unlock(&conn->send_msgs_lock);
+		return ret;
+	}
+	list_add_tail(&mstruct->lh_msgs, &conn->send_msgs);
+	pthread_mutex_unlock(&conn->send_msgs_lock);
+	return 0;
 }
 
 int messenger_init(int fds, unsigned buckets, unsigned buflen)
