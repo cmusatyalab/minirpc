@@ -59,12 +59,6 @@ static struct pending_entry *request_lookup(int fd, int sequence)
 	return list_entry(head, struct pending_entry, lh_hash);
 }
 
-static void noreply_callback(struct ISRMessage *request,
-			struct ISRMessage *reply, void *data)
-{
-	return;
-}
-
 static void sync_callback(struct ISRMessage *request,
 			struct ISRMessage *reply, void *data)
 {
@@ -103,6 +97,8 @@ void free_message(struct ISRMessage *msg)
 	ASN_STRUCT_FREE(&asn_DEF_ISRMessage, msg);
 }
 
+/* XXX do we want to fail if there are no possible replies?  the callback
+   can never be called */
 int send_request_async(struct ISRMessage *msg, reply_callback_t callback,
 			void *data)
 {
@@ -111,6 +107,8 @@ int send_request_async(struct ISRMessage *msg, reply_callback_t callback,
 	return 0;
 }
 
+/* XXX if validate struct says there are no possible replies, return
+   immediately */
 int send_request(struct ISRMessage *request, struct ISRMessage **reply)
 {
 	pthread_cond_t cond=PTHREAD_COND_INITIALIZER;
@@ -126,11 +124,6 @@ int send_request(struct ISRMessage *request, struct ISRMessage **reply)
 	pthread_cond_wait(&cond, &pending.lock);
 	pthread_mutex_unlock(&pending.lock);
 	return 0;
-}
-
-int send_request_dropreply(struct ISRMessage *request)
-{
-	return send_request_async(request, noreply_callback, NULL);
 }
 
 /* XXX need to stop using "response" instead of "reply" */
@@ -176,7 +169,7 @@ void process_incoming_message(struct ISRMessage *msg)
 }
 
 static int validate_request(struct ISRMessage *request, int fromClient,
-			int async)
+			int async, int *willReply)
 {
 	const struct flow_params *params;
 	
@@ -191,22 +184,26 @@ static int validate_request(struct ISRMessage *request, int fromClient,
 		return -EINVAL;
 	if (params->multi && !async)
 		return -EINVAL;
+	if (willReply != NULL)
+		*willReply = params->nr_response_types ? 1 : 0;
 	return 0;
 }
 
+/* XXX this isn't safe if genflow processed multiple choice types, since
+   the enum definitions may overlap */
 static int validate_response(struct ISRMessage *request,
 			struct ISRMessage *response)
 {
 	const struct flow_params *params;
-	int *rtype;
+	int i;
 	
 	params=ISRMessageBody_get_flow(request->body.present);
 	if (params == NULL)
 		return -EINVAL;
-	for (rtype=params->response_types; *rtype; rtype++)
-		if (response->body.present == *rtype)
+	for (i=0; i<params->nr_response_types; i++)
+		if (response->body.present == params->response_types[i])
 			break;
-	if (*rtype == 0)
+	if (i == params->nr_response_types)
 		return -EINVAL;
 	if (response->direction != MessageDirection_last_response &&
 				!(params->multi && response->direction ==

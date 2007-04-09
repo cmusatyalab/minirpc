@@ -196,6 +196,7 @@ print HF <<EOF;
 struct flow_params {
 	int multi;
 	unsigned initiators;
+	int nr_response_types;
 	int response_types[];
 };
 
@@ -205,6 +206,7 @@ my $multi;
 my $initiator;
 my $initiators;
 my $responses;
+my $nr_responses;
 my $rtype;
 my $emitted;
 my $typevar;
@@ -213,18 +215,26 @@ my $typevar;
 while (($type, $attrs) = each %types) {
 	next if $attrs->{"Define"} ne "request";
 	$multi = ($attrs->{"Response"} eq "multi") ? "1" : "0";
-	$initiators = "0";
+	$initiators = undef;
 	foreach $initiator (split(/[\t ]+/, $attrs->{"Initiators"})) {
-		$initiators .= "|" . uc "INITIATOR_$initiator";
+		$initiators .= "|"
+			if $initiators;
+		$initiators .= uc "INITIATOR_$initiator";
 	}
+	$initiators = "0"
+		if !$initiators;
 	$responses = "";
+	$nr_responses = 0;
 	foreach $rtype (split(/[\t ]+/, $attrs->{"Responses"})) {
 		$emitted = 0;
 		while (($choiceName, $curchoicemap) = each %choicemap) {
 			if (defined($curchoicemap->{$rtype})) {
 				$typevar = $curchoicemap->{$rtype};
-				$responses .= "${choiceName}_PR_$typevar, ";
+				$responses .= ", "
+					if $responses;
+				$responses .= "${choiceName}_PR_$typevar";
 				$emitted = 1;
+				$nr_responses++;
 			}
 		}
 		if (!$emitted) {
@@ -234,7 +244,7 @@ while (($type, $attrs) = each %types) {
 		}
 	}
 	print CF "static const struct flow_params flow_$type =\n";
-	print CF "{$multi, $initiators, {${responses}0}};\n\n";
+	print CF "{$multi, $initiators, $nr_responses, {${responses}}};\n\n";
 }
 
 # Produce *_get_flow() functions
