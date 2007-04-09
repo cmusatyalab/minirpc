@@ -2,11 +2,9 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
-#include "protocol.h"
-#include "list.h"
+#include <errno.h>
 #define LIBPROTOCOL
 #include "internal.h"
-#include "errno.h"
 
 #define POLLEVENTS (EPOLLIN|EPOLLERR|EPOLLHUP)
 

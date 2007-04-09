@@ -5,8 +5,9 @@
 #ifndef INTERNAL_H
 #define INTERNAL_H
 
-typedef (void)(struct isr_connection *conn, void *conn_private,
-			struct ISRMessage *msg) new_request_fn;
+#include "protocol.h"
+#include "list.h"
+#include "hash.h"
 
 struct isr_conn_set {
 	pthread_mutex_t lock;

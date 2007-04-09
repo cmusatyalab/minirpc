@@ -1,11 +1,6 @@
-#include "protocol.h"
-#include "hash.h"
+#include <pthread.h>
 #define LIBPROTOCOL
 #include "internal.h"
-
-typedef (void)(struct isr_connection *conn, void *conn_data,
-			struct ISRMessage *request, struct ISRMessage *reply,
-			void *msg_data) reply_callback_fn;
 
 struct pending_entry {
 	struct list_head lh_hash;
