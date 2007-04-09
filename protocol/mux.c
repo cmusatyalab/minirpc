@@ -140,7 +140,7 @@ int send_request_async(struct isr_connection *conn, struct ISRMessage *msg,
 	int ret;
 	int willReply;
 	
-	ret=validate_request(msg, conn->set->server, 1, &willReply);
+	ret=validate_request(msg, conn->set->is_server, 1, &willReply);
 	if (ret)
 		return ret;
 	if (!willReply) {
@@ -162,7 +162,7 @@ int send_request(struct isr_connection *conn, struct ISRMessage *request,
 	int ret;
 	int willReply;
 	
-	ret=validate_request(request, conn->set->server, 0, &willReply);
+	ret=validate_request(request, conn->set->is_server, 0, &willReply);
 	if (ret)
 		return ret;
 	if (willReply) {
@@ -202,7 +202,7 @@ void process_incoming_message(struct isr_connection *conn,
 	int last;
 	
 	if (msg->direction == MessageDirection_request) {
-		if (validate_request(msg, !conn->set->server, 1, NULL)) {
+		if (validate_request(msg, !conn->set->is_server, 1, NULL)) {
 			/*XXX*/;
 		}
 		conn->set->request_fn(conn, conn->data, msg);

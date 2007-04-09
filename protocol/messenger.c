@@ -16,14 +16,14 @@ struct message {
 static unsigned conn_hash(struct list_head *entry, unsigned buckets)
 {
 	struct isr_connection *conn=list_entry(entry, struct isr_connection,
-				lh_hash);
+				lh_conns);
 	return conn->fd % buckets;
 }
 
 static int conn_match(struct list_head *entry, void *data)
 {
 	struct isr_connection *conn=list_entry(entry, struct isr_connection,
-				lh_hash);
+				lh_conns);
 	int *fd=data;
 	return (*fd == conn->fd);
 }
@@ -32,10 +32,10 @@ static struct isr_connection *conn_lookup(struct isr_conn_set *set, int fd)
 {
 	struct list_head *head;
 	
-	head=hash_get(set->table, conn_match, fd, &fd);
+	head=hash_get(set->conns, conn_match, fd, &fd);
 	if (head == NULL)
 		return NULL;
-	return list_entry(head, struct isr_connection, lh_hash);
+	return list_entry(head, struct isr_connection, lh_conns);
 }
 
 static int set_nonblock(int fd)
@@ -64,7 +64,7 @@ int add_conn(struct isr_connection **new_conn, struct isr_conn_set *set,
 	if (conn == NULL)
 		return -ENOMEM;
 	memset(conn, 0, sizeof(*conn));
-	INIT_LIST_HEAD(&conn->lh_hash);
+	INIT_LIST_HEAD(&conn->lh_conns);
 	INIT_LIST_HEAD(&conn->send_msgs);
 	pthread_mutex_init(&conn->send_msgs_lock);
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
@@ -100,7 +100,7 @@ int add_conn(struct isr_connection **new_conn, struct isr_conn_set *set,
 		return ret;
 	}
 	pthread_mutex_lock(&set->lock);
-	hash_add(set->table, &conn->lh_hash);
+	hash_add(set->conns, &conn->lh_conns);
 	pthread_mutex_unlock(&set->lock);
 	*new_conn=conn;
 	return 0;
@@ -112,8 +112,9 @@ void remove_conn(struct isr_connection *conn)
 	
 	/* XXX data already in buffer? */
 	pthread_mutex_lock(&set->lock);
-	hash_remove(set->table, &conn->lh_hash);
+	hash_remove(set->conns, &conn->lh_conns);
 	pthread_mutex_unlock(&set->lock);
+	hash_free(conn->pending_replies);
 	free(conn->recv_buf);
 	free(conn->send_buf);
 	free(conn);
@@ -308,7 +309,7 @@ int send_message(struct isr_connection *conn, struct ISRMessage *msg)
 }
 
 int set_alloc(struct isr_conn_set **new_set, int fds, unsigned conn_buckets,
-			unsigned msg_buckets, unsigned buflen, int server,
+			unsigned msg_buckets, unsigned buflen, int is_server,
 			new_request_fn *func)
 {
 	struct isr_conn_set *set;
@@ -317,18 +318,18 @@ int set_alloc(struct isr_conn_set **new_set, int fds, unsigned conn_buckets,
 	if (set == NULL)
 		return -ENOMEM;
 	pthread_mutex_init(&set->lock, NULL);
-	set->table=hash_alloc(conn_buckets, conn_hash);
-	if (set->table == NULL) {
+	set->conns=hash_alloc(conn_buckets, conn_hash);
+	if (set->conns == NULL) {
 		free(set);
 		return -ENOMEM;
 	}
 	set->buflen=buflen;
-	set->server=server;
+	set->is_server=is_server;
 	set->request_fn=func;
 	set->msg_buckets=msg_buckets;
 	set->epoll_fd=epoll_create(fds);
 	if (set->epoll_fd < 0) {
-		free(set->table);
+		hash_free(set->conns);
 		free(set);
 		return -errno;
 	}
@@ -339,6 +340,6 @@ int set_alloc(struct isr_conn_set **new_set, int fds, unsigned conn_buckets,
 void set_free(struct isr_conn_set *set)
 {
 	close(set->epoll_fd);
-	free(set->table);
+	hash_free(set->conns);
 	free(set);
 }

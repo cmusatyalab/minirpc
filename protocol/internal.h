@@ -11,23 +11,23 @@
 
 struct isr_conn_set {
 	pthread_mutex_t lock;
-	struct htable *table;
+	struct htable *conns;
 	unsigned buflen;
 	int epoll_fd;
-	int server;
+	int is_server;
 	new_request_fn *request_fn;
 	unsigned msg_buckets;
 };
 
 struct isr_connection {
-	struct list_head lh_hash;
+	struct list_head lh_conns;
 	struct isr_conn_set *set;
 	int fd;
 	char *send_buf;
 	unsigned send_offset;
 	unsigned send_length;
-	pthread_mutex_t send_msgs_lock;
 	struct list_head send_msgs;
+	pthread_mutex_t send_msgs_lock;
 	char *recv_buf;
 	unsigned recv_offset;
 	struct ISRMessage *recv_msg;
