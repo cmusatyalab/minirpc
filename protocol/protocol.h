@@ -3,11 +3,14 @@
 
 #include "ISRMessage.h"
 
-typedef (void)(struct isr_connection *conn, void *conn_private,
-			struct ISRMessage *msg) new_request_fn;
+struct isr_conn_set;
+struct isr_connection;
 
-typedef (void)(struct isr_connection *conn, void *conn_data,
+typedef void (new_request_fn)(struct isr_connection *conn, void *conn_data,
+			struct ISRMessage *msg);
+
+typedef void (reply_callback_fn)(struct isr_connection *conn, void *conn_data,
 			struct ISRMessage *request, struct ISRMessage *reply,
-			void *msg_data) reply_callback_fn;
+			void *msg_data);
 
 #endif

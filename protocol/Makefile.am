@@ -4,12 +4,12 @@ AM_CPPFLAGS = -Iclasses -Isupport
 ASNFILES = protocol.asn
 
 include stamp
-stamp: $(ASNFILES)
-	./compile.pl $^
+stamp: $(ASNFILES) compile.pl
+	./compile.pl $(filter-out %.pl,$^)
 MAINTAINERCLEANFILES = stamp
 
-flow.c flow.h: $(ASNFILES)
-	./genflow.pl -o flow $^
+flow.c flow.h: $(ASNFILES) genflow.pl
+	./genflow.pl -o flow $(filter-out %.pl,$^)
 BUILT_SOURCES = flow.h
 
 SUBDIRS = support classes

@@ -6,7 +6,7 @@
 struct list_head {
 	struct list_head *prev;
 	struct list_head *next;
-}
+};
 
 static inline void INIT_LIST_HEAD(struct list_head *head)
 {
@@ -14,7 +14,7 @@ static inline void INIT_LIST_HEAD(struct list_head *head)
 	head->next=head;
 }
 
-static inline void list_is_empty(struct list_head *head)
+static inline int list_is_empty(struct list_head *head)
 {
 	return (head == head->prev && head == head->next);
 }
@@ -45,18 +45,18 @@ static inline void list_del_init(struct list_head *head)
 
 #define list_entry(head, type, field) (((void*)head) - offsetof(type, field))
 #define list_for_each(cur, head) \
-	for (cur=head->next; cur != head; cur=cur->next)
+	for (cur=(head)->next; cur != (head); cur=cur->next)
 #define list_for_each_safe(cur, next, head) \
-	for (cur=head->next, next=cur->next; cur != head; \
+	for (cur=(head)->next, next=cur->next; cur != (head); \
 			cur=next, next=cur->next)
 #define list_for_each_entry(cur, head, field) \
-	for (cur=list_entry(head->next, typeof(cur), field); \
-			&cur->field != head; \
+	for (cur=list_entry((head)->next, typeof(cur), field); \
+			&cur->field != (head); \
 			cur=list_entry(cur->field.next, typeof(cur), field))
 #define list_for_each_entry_safe(cur, next, head, field) \
-	for (cur=list_entry(head->next, typeof(cur), field), \
+	for (cur=list_entry((head)->next, typeof(cur), field), \
 			next=list_entry(cur->field.next, typeof(cur), field); \
-			&cur->field != head; cur=next, \
+			&cur->field != (head); cur=next, \
 			next=list_entry(cur->field.next, typeof(cur), field))
 
 #endif

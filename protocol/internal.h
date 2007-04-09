@@ -20,19 +20,20 @@ struct isr_conn_set {
 };
 
 struct isr_connection {
-	struct list_head *lh_hash;
+	struct list_head lh_hash;
 	struct isr_conn_set *set;
 	int fd;
 	char *send_buf;
 	unsigned send_offset;
 	unsigned send_length;
 	pthread_mutex_t send_msgs_lock;
-	struct list_head *send_msgs;
+	struct list_head send_msgs;
 	char *recv_buf;
 	unsigned recv_offset;
 	struct ISRMessage *recv_msg;
 	struct htable *pending_replies;
 	pthread_mutex_t pending_replies_lock;
+	void *data;
 };
 
 #endif

@@ -9,31 +9,33 @@
 #define POLLEVENTS (EPOLLIN|EPOLLERR|EPOLLHUP)
 
 struct message {
-	struct list_head *lh_msgs;
+	struct list_head lh_msgs;
 	struct ISRMessage *msg;	
 };
 
 static unsigned conn_hash(struct list_head *entry, unsigned buckets)
 {
-	struct connection *conn=list_entry(entry, struct connection, lh_hash);
+	struct isr_connection *conn=list_entry(entry, struct isr_connection,
+				lh_hash);
 	return conn->fd % buckets;
 }
 
 static int conn_match(struct list_head *entry, void *data)
 {
-	struct connection *conn=list_entry(entry, struct connection, lh_hash);
+	struct isr_connection *conn=list_entry(entry, struct isr_connection,
+				lh_hash);
 	int *fd=data;
 	return (*fd == conn->fd);
 }
 
-static struct connection *conn_lookup(struct isr_conn_set *set, int fd)
+static struct isr_connection *conn_lookup(struct isr_conn_set *set, int fd)
 {
 	struct list_head *head;
 	
 	head=hash_get(set->table, conn_match, fd, &fd);
 	if (head == NULL)
 		return NULL;
-	return list_entry(head, struct connection, lh_hash);
+	return list_entry(head, struct isr_connection, lh_hash);
 }
 
 static int set_nonblock(int fd)
@@ -48,8 +50,8 @@ static int set_nonblock(int fd)
 	return 0;
 }
 
-int add_conn(struct isr_connection **ret, struct isr_conn_set *set, int fd,
-			void *private)
+int add_conn(struct isr_connection **new_conn, struct isr_conn_set *set,
+			int fd, void *data)
 {
 	struct isr_connection *conn;
 	struct epoll_event event;
@@ -68,6 +70,7 @@ int add_conn(struct isr_connection **ret, struct isr_conn_set *set, int fd,
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
 	conn->set=set;
 	conn->fd=fd;
+	conn->data=data;
 	conn->send_buf=malloc(set->buflen);
 	if (conn->send_buf == NULL) {
 		free(conn);
@@ -79,11 +82,11 @@ int add_conn(struct isr_connection **ret, struct isr_conn_set *set, int fd,
 		free(conn);
 		return -ENOMEM;
 	}
-	conn->pending_replies=hash_alloc(set->msg_buckets, mux_hash);
+	conn->pending_replies=hash_alloc(set->msg_buckets, conn_hash);
 	if (conn->pending_replies == NULL) {
 		free(conn->recv_buf);
 		free(conn->send_buf);
-		free(con);
+		free(conn);
 		return -ENOMEM;
 	}
 	event.events=POLLEVENTS;
@@ -93,13 +96,13 @@ int add_conn(struct isr_connection **ret, struct isr_conn_set *set, int fd,
 		hash_free(conn->pending_replies);
 		free(conn->recv_buf);
 		free(conn->send_buf);
-		free(con);
+		free(conn);
 		return ret;
 	}
 	pthread_mutex_lock(&set->lock);
 	hash_add(set->table, &conn->lh_hash);
 	pthread_mutex_unlock(&set->lock);
-	*ret=conn;
+	*new_conn=conn;
 	return 0;
 }
 
@@ -114,10 +117,9 @@ void remove_conn(struct isr_connection *conn)
 	free(conn->recv_buf);
 	free(conn->send_buf);
 	free(conn);
-	return 0;
 }
 
-static int need_writable(struct connection *conn, int writable)
+static int need_writable(struct isr_connection *conn, int writable)
 {
 	struct epoll_event event;
 	
@@ -128,18 +130,19 @@ static int need_writable(struct connection *conn, int writable)
 	return epoll_ctl(conn->set->epoll_fd, EPOLL_CTL_MOD, conn->fd, &event);
 }
 
-static void conn_kill(struct connection *conn)
+static void conn_kill(struct isr_connection *conn)
 {
 	/* XXX */
 }
 
-static int process_buffer(struct connection *conn, unsigned *start)
+static int process_buffer(struct isr_connection *conn, unsigned *start)
 {
 	asn_dec_rval_t rval;
 	int ret=0;
 	
-	rval=ber_decode(NULL, &asn_DEF_ISRMessage, &conn->recv_msg,
-				buf + *start, len);
+	rval=ber_decode(NULL, &asn_DEF_ISRMessage, (void**)&conn->recv_msg,
+				conn->recv_buf + *start,
+				conn->recv_offset - *start);
 	switch (rval.code) {
 	case RC_OK:
 		if (asn_check_constraints(&asn_DEF_ISRMessage, conn->recv_msg,
@@ -165,7 +168,7 @@ static int process_buffer(struct connection *conn, unsigned *start)
 	return ret;
 }
 
-static void try_read_conn(struct connection *conn)
+static void try_read_conn(struct isr_connection *conn)
 {
 	ssize_t count;
 	unsigned start;
@@ -206,10 +209,10 @@ static void try_read_conn(struct connection *conn)
 	}
 }
 
-static int form_buffer(struct connection *conn)
+static int form_buffer(struct isr_connection *conn)
 {
 	asn_enc_rval_t rval;
-	struct message msg;
+	struct message *msg;
 	
 	pthread_mutex_lock(&conn->send_msgs_lock);
 	if (list_is_empty(&conn->send_msgs)) {
@@ -230,7 +233,7 @@ static int form_buffer(struct connection *conn)
 	return 0;
 }
 
-static void try_write_conn(struct connection *conn)
+static void try_write_conn(struct isr_connection *conn)
 {
 	ssize_t count;
 	int ret;
@@ -262,12 +265,12 @@ static void try_write_conn(struct connection *conn)
 
 void listener(struct isr_conn_set *set, int maxevents)
 {
-	struct epoll_events events[maxevents];
+	struct epoll_event events[maxevents];
 	int count;
 	int i;
 	
 	while (1) {
-		count=epoll_wait(set->epoll_fd, &events, maxevents, -1);
+		count=epoll_wait(set->epoll_fd, events, maxevents, -1);
 		for (i=0; i<count; i++) {
 			if (events[i].events & (EPOLLERR | EPOLLHUP)) {
 				conn_kill(events[i].data.ptr);
@@ -281,7 +284,7 @@ void listener(struct isr_conn_set *set, int maxevents)
 	}
 }
 
-int send_message(struct connection *conn, struct ISRMessage *msg)
+int send_message(struct isr_connection *conn, struct ISRMessage *msg)
 {
 	struct message *mstruct;
 	int ret;
@@ -304,7 +307,7 @@ int send_message(struct connection *conn, struct ISRMessage *msg)
 	return 0;
 }
 
-int set_alloc(struct isr_conn_set **ret, int fds, unsigned conn_buckets,
+int set_alloc(struct isr_conn_set **new_set, int fds, unsigned conn_buckets,
 			unsigned msg_buckets, unsigned buflen, int server,
 			new_request_fn *func)
 {
@@ -329,7 +332,7 @@ int set_alloc(struct isr_conn_set **ret, int fds, unsigned conn_buckets,
 		free(set);
 		return -errno;
 	}
-	*ret=set;
+	*new_set=set;
 	return 0;
 }
 

@@ -1,18 +1,19 @@
 #include <pthread.h>
 #define LIBPROTOCOL
 #include "internal.h"
+#include "flow.h"
 
 struct pending_entry {
 	struct list_head lh_hash;
 	struct ISRMessage *request;
-	reply_callback_fn callback;
+	reply_callback_fn *callback;
 	void *data;
 };
 
 struct sync_data {
 	pthread_cond_t *cond;
 	struct ISRMessage **reply;
-}
+};
 
 /* XXX deal with sequence number wraparound */
 
@@ -55,7 +56,7 @@ static void sync_callback(struct isr_connection *conn, void *conn_data,
 /* If callback != NULL, returns with pending_replies_lock held, except on
    error */
 static int _send_request_async(struct isr_connection *conn,
-			struct ISRMessage *msg, reply_callback_t callback,
+			struct ISRMessage *msg, reply_callback_fn *callback,
 			void *data)
 {
 	struct pending_entry *entry;
@@ -86,11 +87,11 @@ void free_message(struct ISRMessage *msg)
 {
 	if (msg == NULL)
 		return;
-	ASN_STRUCT_FREE(&asn_DEF_ISRMessage, msg);
+	ASN_STRUCT_FREE(asn_DEF_ISRMessage, msg);
 }
 
 int send_request_async(struct isr_connection *conn, struct ISRMessage *msg,
-			reply_callback_t callback, void *data)
+			reply_callback_fn *callback, void *data)
 {
 	int ret;
 	int willReply;
@@ -117,7 +118,7 @@ int send_request(struct isr_connection *conn, struct ISRMessage *request,
 	int ret;
 	int willReply;
 	
-	ret=validate_request(msg, conn->set->server, 0, &willReply);
+	ret=validate_request(request, conn->set->server, 0, &willReply);
 	if (ret)
 		return ret;
 	if (willReply) {
@@ -128,7 +129,7 @@ int send_request(struct isr_connection *conn, struct ISRMessage *request,
 		if (ret)
 			return ret;
 		pthread_cond_wait(&cond, &conn->pending_replies_lock);
-		pthread_mutex_unlock(&pending.lock);
+		pthread_mutex_unlock(&conn->pending_replies_lock);
 		return 0;
 	} else {
 		*reply=NULL;
@@ -153,21 +154,22 @@ int send_reply(struct isr_connection *conn, struct ISRMessage *request,
 void process_incoming_message(struct isr_connection *conn,
 			struct ISRMessage *msg)
 {
+	struct pending_entry *entry;
+	int last;
+	
 	if (msg->direction == MessageDirection_request) {
-		if (validate_request(msg, fromClient, async)) {
-			XXX;
+		if (validate_request(msg, fromServer, async, NULL)) {
+			/*XXX*/;
 		}
-		conn->set->request_fn(conn, conn->private, msg);
+		conn->set->request_fn(conn, conn->data, msg);
 	} else {
-		struct pending_entry *entry;
-		int last = (msg->direction == MessageDirection_last_response);
-		
-		pthread_mutex_lock(&pending.lock);
-		entry=request_lookup(conn, sequence);
+		last=(msg->direction == MessageDirection_last_response);
+		pthread_mutex_lock(&conn->pending_replies_lock);
+		entry=request_lookup(conn, msg->sequence);
 		if (last && entry != NULL)
-			hash_remove(pending.hash, &entry->lh_hash);
-		pthread_mutex_unlock(&pending.lock);
-		if (entry == NULL || validate_response(request, msg)) {
+			hash_remove(conn->pending_replies, &entry->lh_hash);
+		pthread_mutex_unlock(&conn->pending_replies_lock);
+		if (entry == NULL || validate_response(entry->request, msg)) {
 			free_message(msg);
 			if (last && entry != NULL) {
 				free_message(entry->request);
@@ -175,7 +177,8 @@ void process_incoming_message(struct isr_connection *conn,
 			}
 			return;
 		}
-		entry->callback(entry->request, msg, entry->data);
+		entry->callback(conn, conn->data, entry->request, msg,
+					entry->data);
 		if (last)
 			free(entry);
 	}

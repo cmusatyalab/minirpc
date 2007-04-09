@@ -1,17 +1,18 @@
 #ifndef HASH_H
 #define HASH_H
 
+#include <errno.h>
 #include "list.h"
 
-typedef (unsigned)(struct list_head *entry, unsigned buckets) hash_fn;
-typedef (int)(struct list_head *entry, void *data) hash_match_fn;
+typedef unsigned (hash_fn)(struct list_head *entry, unsigned buckets);
+typedef int (hash_match_fn)(struct list_head *entry, void *data);
 
 struct htable {
-	hash_fn hfunc;
+	hash_fn *hfunc;
 	struct list_head *hash;
 	unsigned buckets;
 	unsigned count;
-}
+};
 
 static inline struct htable *hash_alloc(unsigned buckets, hash_fn hfunc)
 {
@@ -56,7 +57,7 @@ static inline struct list_head *hash_get(struct htable *table,
 {
 	struct list_head *cur;
 	
-	list_for_each(cur, &table->hash[bucket % table->buckets])
+	list_for_each(cur, &table->hash[bucketkey % table->buckets])
 		if (match(cur, data))
 			return cur;
 	return NULL;
