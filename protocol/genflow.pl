@@ -1,8 +1,8 @@
 #!/usr/bin/perl
 
 # Define: {request|choice}
-# Response: {single|multi}
-# Responses: Status Foo
+# Replies: Status Foo
+# Multireply: {yes|no}
 # Initiators: {client|server}+
 
 use strict;
@@ -47,16 +47,16 @@ sub validateAttr {
 		$value =~ /^request|choice$/
 			or parseErr($type, $attr, "Invalid definition");
 	}
-	if ($attr eq "Response") {
-		$value =~ /^single|multi$/
-			or parseErr($type, $attr, "Invalid response type");
-	}
-	if ($attr eq "Responses") {
+	if ($attr eq "Replies") {
 		foreach $rtype (split(/[\t ]+/, $value)) {
 			grep(/^$rtype$/, @alltypes)
 				or parseErr($type, $attr, "Invalid type " .
 						"reference name $rtype");
 		}
+	}
+	if ($attr eq "Multireply") {
+		$value =~ /^no|yes$/
+			or parseErr($type, $attr, "Invalid multireply setting");
 	}
 	if ($attr eq "Initiators") {
 		@vl = split(/[\t ]+/, $value);
@@ -77,7 +77,7 @@ sub validateHash {
 					. "attributes are");
 	}
 	if ($attrs->{"Define"} eq "request") {
-		@attrlist = ("Response", "Responses", "Initiators");
+		@attrlist = ("Replies", "Multireply", "Initiators");
 	} elsif ($attrs->{"Define"} eq "choice") {
 		@attrlist = ()
 	}
@@ -196,8 +196,8 @@ print HF <<EOF;
 struct flow_params {
 	int multi;
 	unsigned initiators;
-	int nr_response_types;
-	int response_types[];
+	int nr_reply_types;
+	int reply_types[];
 };
 
 EOF
@@ -205,8 +205,8 @@ EOF
 my $multi;
 my $initiator;
 my $initiators;
-my $responses;
-my $nr_responses;
+my $replies;
+my $nr_replies;
 my $rtype;
 my $emitted;
 my $typevar;
@@ -214,7 +214,27 @@ my $typevar;
 # Produce flow_params structure declarations
 while (($type, $attrs) = each %types) {
 	next if $attrs->{"Define"} ne "request";
-	$multi = ($attrs->{"Response"} eq "multi") ? "1" : "0";
+	$replies = "";
+	$nr_replies = 0;
+	foreach $rtype (split(/[\t ]+/, $attrs->{"Replies"})) {
+		$emitted = 0;
+		while (($choiceName, $curchoicemap) = each %choicemap) {
+			if (defined($curchoicemap->{$rtype})) {
+				$typevar = $curchoicemap->{$rtype};
+				$replies .= ", "
+					if $replies;
+				$replies .= "${choiceName}_PR_$typevar";
+				$emitted = 1;
+				$nr_replies++;
+			}
+		}
+		if (!$emitted) {
+			parseErr($type, "Replies", "No CHOICE " .
+					"representation available for reply " .
+					$rtype);
+		}
+	}
+	$multi = ($attrs->{"Multireply"} eq "yes") ? "1" : "0";
 	$initiators = undef;
 	foreach $initiator (split(/[\t ]+/, $attrs->{"Initiators"})) {
 		$initiators .= "|"
@@ -223,28 +243,8 @@ while (($type, $attrs) = each %types) {
 	}
 	$initiators = "0"
 		if !$initiators;
-	$responses = "";
-	$nr_responses = 0;
-	foreach $rtype (split(/[\t ]+/, $attrs->{"Responses"})) {
-		$emitted = 0;
-		while (($choiceName, $curchoicemap) = each %choicemap) {
-			if (defined($curchoicemap->{$rtype})) {
-				$typevar = $curchoicemap->{$rtype};
-				$responses .= ", "
-					if $responses;
-				$responses .= "${choiceName}_PR_$typevar";
-				$emitted = 1;
-				$nr_responses++;
-			}
-		}
-		if (!$emitted) {
-			parseErr($type, "Responses", "No CHOICE " .
-					"representation available for " .
-					"response $rtype");
-		}
-	}
 	print CF "static const struct flow_params flow_$type =\n";
-	print CF "{$multi, $initiators, $nr_responses, {${responses}}};\n\n";
+	print CF "{$multi, $initiators, $nr_replies, {${replies}}};\n\n";
 }
 
 # Produce *_get_flow() functions

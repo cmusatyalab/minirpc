@@ -57,8 +57,8 @@ Status ::= ENUMERATED {
 -- need a way to force password change
 
 -- Define    : request
--- Response  : single
--- Responses : Status
+-- Replies   : Status
+-- Multireply: no
 -- Initiators: client
 AcquireLock ::= SEQUENCE {
 	parcel String,
@@ -68,8 +68,8 @@ AcquireLock ::= SEQUENCE {
 }
 
 -- Define    : request
--- Response  : single
--- Responses : Status
+-- Replies   : Status
+-- Multireply: no
 -- Initiators: client
 ReleaseLock ::= SEQUENCE {
 	parcel String,
@@ -95,14 +95,14 @@ ParcelRecord ::= SEQUENCE {
 	...
 }
 
-ListParcelResponse ::= SEQUENCE OF ParcelRecord
+ListParcelReply ::= SEQUENCE OF ParcelRecord
 
 -- can use this to ask what chunks are needed for upload?  we need to provide
 -- a mechanism to lock chunks from GCing if we're about to upload them.
 -- what if we upload the keyring first?
 -- Define    : request
--- Response  : multi
--- Responses : ChunkResponse
+-- Replies   : ChunkReply
+-- Multireply: yes
 -- Initiators: client server
 ChunkRequest ::= SEQUENCE {
 	key CHOICE {
@@ -113,15 +113,15 @@ ChunkRequest ::= SEQUENCE {
 	...
 }
 
-ChunkResponse ::= SEQUENCE {
+ChunkReply ::= SEQUENCE {
 	status Status DEFAULT ok,  -- XXX may be encoded if specified, in violation of DER
 	keyrec EncryptedKeyRecord OPTIONAL,
 	data OCTET STRING (SIZE (1..131072)) OPTIONAL
 }
 
--- should chunkrequest/chunkresponse be bidirectional?  (it'd be chunkprovide
--- or something rather than chunkresponse.)  has a nice symmetry to it.  but
--- then we'd need support for putting the tag in the response, for unsolicited
+-- should chunkrequest/chunkreply be bidirectional?  (it'd be chunkprovide
+-- or something rather than chunkreply.)  has a nice symmetry to it.  but
+-- then we'd need support for putting the tag in the reply, for unsolicited
 -- uploads.
 
 -- we may want a SET OF keyrecs.
@@ -140,7 +140,7 @@ ISRMessageBody ::= CHOICE {
 	serverhello ServerHello,
 	clienthello ClientHello,
 	chunkrequest ChunkRequest,
-	data ChunkResponse,
+	data ChunkReply,
 	acquire AcquireLock,
 	release ReleaseLock,
 	starttls NULL,
@@ -149,8 +149,8 @@ ISRMessageBody ::= CHOICE {
 
 MessageDirection ::= ENUMERATED {
 	request,
-	response,
-	last-response
+	reply,
+	last-reply
 }
 
 ISRMessage ::= SEQUENCE {

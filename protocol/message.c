@@ -60,14 +60,13 @@ static int validate_request(struct ISRMessage *request, int fromServer,
 	if (params->multi && !async)
 		return -EINVAL;
 	if (willReply != NULL)
-		*willReply = params->nr_response_types ? 1 : 0;
+		*willReply = params->nr_reply_types ? 1 : 0;
 	return 0;
 }
 
 /* XXX this isn't safe if genflow processed multiple choice types, since
    the enum definitions may overlap */
-static int validate_response(struct ISRMessage *request,
-			struct ISRMessage *response)
+static int validate_reply(struct ISRMessage *request, struct ISRMessage *reply)
 {
 	const struct flow_params *params;
 	int i;
@@ -75,14 +74,13 @@ static int validate_response(struct ISRMessage *request,
 	params=ISRMessageBody_get_flow(request->body.present);
 	if (params == NULL)
 		return -EINVAL;
-	for (i=0; i<params->nr_response_types; i++)
-		if (response->body.present == params->response_types[i])
+	for (i=0; i<params->nr_reply_types; i++)
+		if (reply->body.present == params->reply_types[i])
 			break;
-	if (i == params->nr_response_types)
+	if (i == params->nr_reply_types)
 		return -EINVAL;
-	if (response->direction != MessageDirection_last_response &&
-				!(params->multi && response->direction ==
-				MessageDirection_response))
+	if (reply->direction != MessageDirection_last_reply && !(params->multi
+				&& reply->direction == MessageDirection_reply))
 		return -EINVAL;
 	return 0;
 }
@@ -182,13 +180,12 @@ int send_request(struct isr_connection *conn, struct ISRMessage *request,
 	}
 }
 
-/* XXX need to stop using "response" instead of "reply" */
 int send_reply(struct isr_connection *conn, struct ISRMessage *request,
 			struct ISRMessage *reply)
 {
 	int ret;
 	
-	ret=validate_response(request, reply);
+	ret=validate_reply(request, reply);
 	if (ret)
 		return ret;
 	return send_message(conn, reply);
@@ -207,15 +204,14 @@ void process_incoming_message(struct isr_connection *conn,
 		}
 		conn->set->request_fn(conn, conn->data, msg);
 	} else {
-		last=(msg->direction == MessageDirection_last_response);
+		last=(msg->direction == MessageDirection_last_reply);
 		pthread_mutex_lock(&conn->pending_replies_lock);
 		pending=request_lookup(conn, msg->sequence);
 		if (last && pending != NULL)
 			hash_remove(conn->pending_replies,
 						&pending->lh_pending);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
-		if (pending == NULL || validate_response(pending->request,
-					msg)) {
+		if (pending == NULL || validate_reply(pending->request, msg)) {
 			free_message(msg);
 			if (last && pending != NULL) {
 				free_message(pending->request);
