@@ -43,6 +43,50 @@ static struct pending_entry *request_lookup(struct isr_connection *conn,
 	return list_entry(head, struct pending_entry, lh_hash);
 }
 
+static int validate_request(struct ISRMessage *request, int fromServer,
+			int async, int *willReply)
+{
+	const struct flow_params *params;
+	
+	params=ISRMessageBody_get_flow(request->body.present);
+	if (params == NULL)
+		return -EINVAL;
+	if (request->direction != MessageDirection_request)
+		return -EINVAL;  /* XXX necessary? */
+	if (!fromServer && !(params->initiators & INITIATOR_CLIENT))
+		return -EINVAL;
+	if (fromServer && !(params->initiators & INITIATOR_SERVER))
+		return -EINVAL;
+	if (params->multi && !async)
+		return -EINVAL;
+	if (willReply != NULL)
+		*willReply = params->nr_response_types ? 1 : 0;
+	return 0;
+}
+
+/* XXX this isn't safe if genflow processed multiple choice types, since
+   the enum definitions may overlap */
+static int validate_response(struct ISRMessage *request,
+			struct ISRMessage *response)
+{
+	const struct flow_params *params;
+	int i;
+	
+	params=ISRMessageBody_get_flow(request->body.present);
+	if (params == NULL)
+		return -EINVAL;
+	for (i=0; i<params->nr_response_types; i++)
+		if (response->body.present == params->response_types[i])
+			break;
+	if (i == params->nr_response_types)
+		return -EINVAL;
+	if (response->direction != MessageDirection_last_response &&
+				!(params->multi && response->direction ==
+				MessageDirection_response))
+		return -EINVAL;
+	return 0;
+}
+
 static void sync_callback(struct isr_connection *conn, void *conn_data,
 			struct ISRMessage *request, struct ISRMessage *reply,
 			void *msg_data)
@@ -158,7 +202,7 @@ void process_incoming_message(struct isr_connection *conn,
 	int last;
 	
 	if (msg->direction == MessageDirection_request) {
-		if (validate_request(msg, fromServer, async, NULL)) {
+		if (validate_request(msg, !conn->set->server, 1, NULL)) {
 			/*XXX*/;
 		}
 		conn->set->request_fn(conn, conn->data, msg);
@@ -182,48 +226,4 @@ void process_incoming_message(struct isr_connection *conn,
 		if (last)
 			free(entry);
 	}
-}
-
-static int validate_request(struct ISRMessage *request, int fromServer,
-			int async, int *willReply)
-{
-	const struct flow_params *params;
-	
-	params=ISRMessageBody_get_flow(request->body.present);
-	if (params == NULL)
-		return -EINVAL;
-	if (request->direction != MessageDirection_request)
-		return -EINVAL;  /* XXX necessary? */
-	if (!fromServer && !(params->initiators & INITIATOR_CLIENT))
-		return -EINVAL;
-	if (fromServer && !(params->initiators & INITIATOR_SERVER))
-		return -EINVAL;
-	if (params->multi && !async)
-		return -EINVAL;
-	if (willReply != NULL)
-		*willReply = params->nr_response_types ? 1 : 0;
-	return 0;
-}
-
-/* XXX this isn't safe if genflow processed multiple choice types, since
-   the enum definitions may overlap */
-static int validate_response(struct ISRMessage *request,
-			struct ISRMessage *response)
-{
-	const struct flow_params *params;
-	int i;
-	
-	params=ISRMessageBody_get_flow(request->body.present);
-	if (params == NULL)
-		return -EINVAL;
-	for (i=0; i<params->nr_response_types; i++)
-		if (response->body.present == params->response_types[i])
-			break;
-	if (i == params->nr_response_types)
-		return -EINVAL;
-	if (response->direction != MessageDirection_last_response &&
-				!(params->multi && response->direction ==
-				MessageDirection_response))
-		return -EINVAL;
-	return 0;
 }
