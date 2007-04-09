@@ -8,7 +8,7 @@
 
 #define POLLEVENTS (EPOLLIN|EPOLLERR|EPOLLHUP)
 
-struct message {
+struct queued_message {
 	struct list_head lh_msgs;
 	struct ISRMessage *msg;	
 };
@@ -213,7 +213,7 @@ static void try_read_conn(struct isr_connection *conn)
 static int form_buffer(struct isr_connection *conn)
 {
 	asn_enc_rval_t rval;
-	struct message *msg;
+	struct queued_message *queued;
 	
 	pthread_mutex_lock(&conn->send_msgs_lock);
 	if (list_is_empty(&conn->send_msgs)) {
@@ -221,11 +221,11 @@ static int form_buffer(struct isr_connection *conn)
 		pthread_mutex_unlock(&conn->send_msgs_lock);
 		return -EAGAIN;
 	}
-	msg=list_entry(conn->send_msgs.next, struct message, lh_msgs);
-	list_del_init(&msg->lh_msgs);
+	queued=list_entry(conn->send_msgs.next, struct queued_message, lh_msgs);
+	list_del_init(&queued->lh_msgs);
 	pthread_mutex_unlock(&conn->send_msgs_lock);
 	
-	rval=der_encode_to_buffer(&asn_DEF_ISRMessage, msg->msg,
+	rval=der_encode_to_buffer(&asn_DEF_ISRMessage, queued->msg,
 				conn->recv_buf, conn->set->buflen);
 	if (rval.encoded == -1)
 		return -EINVAL;
@@ -287,23 +287,23 @@ void listener(struct isr_conn_set *set, int maxevents)
 
 int send_message(struct isr_connection *conn, struct ISRMessage *msg)
 {
-	struct message *mstruct;
+	struct queued_message *queued;
 	int ret;
 	
-	mstruct=malloc(sizeof(*mstruct));
-	if (mstruct == NULL)
+	queued=malloc(sizeof(*queued));
+	if (queued == NULL)
 		return -ENOMEM;
-	INIT_LIST_HEAD(&mstruct->lh_msgs);
-	mstruct->msg=msg;
+	INIT_LIST_HEAD(&queued->lh_msgs);
+	queued->msg=msg;
 	pthread_mutex_lock(&conn->send_msgs_lock);
 	/* XXX extra syscall even when we don't need it */
 	ret=need_writable(conn, 1);
 	if (ret) {
-		free(mstruct);
+		free(queued);
 		pthread_mutex_unlock(&conn->send_msgs_lock);
 		return ret;
 	}
-	list_add_tail(&mstruct->lh_msgs, &conn->send_msgs);
+	list_add_tail(&queued->lh_msgs, &conn->send_msgs);
 	pthread_mutex_unlock(&conn->send_msgs_lock);
 	return 0;
 }

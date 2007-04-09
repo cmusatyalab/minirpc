@@ -4,7 +4,7 @@
 #include "flow.h"
 
 struct pending_entry {
-	struct list_head lh_hash;
+	struct list_head lh_pending;
 	struct ISRMessage *request;
 	reply_callback_fn *callback;
 	void *data;
@@ -17,17 +17,17 @@ struct sync_data {
 
 /* XXX deal with sequence number wraparound */
 
-static unsigned mux_hash(struct list_head *head, unsigned buckets)
+static unsigned msg_hash(struct list_head *head, unsigned buckets)
 {
 	struct pending_entry *entry=list_entry(head, struct pending_entry,
-				lh_hash);
+				lh_pending);
 	return entry->request->sequence % buckets;
 }
 
-static int mux_match(struct list_head *head, void *data)
+static int msg_match(struct list_head *head, void *data)
 {
 	struct pending_entry *entry=list_entry(head, struct pending_entry,
-				lh_hash);
+				lh_pending);
 	int *sequence=data;
 	return (*sequence == entry->request->sequence);
 }
@@ -37,10 +37,10 @@ static struct pending_entry *request_lookup(struct isr_connection *conn,
 {
 	struct list_head *head;
 	
-	head=hash_get(conn->pending_replies, mux_match, sequence, &sequence);
+	head=hash_get(conn->pending_replies, msg_match, sequence, &sequence);
 	if (head == NULL)
 		return NULL;
-	return list_entry(head, struct pending_entry, lh_hash);
+	return list_entry(head, struct pending_entry, lh_pending);
 }
 
 static int validate_request(struct ISRMessage *request, int fromServer,
@@ -110,17 +110,17 @@ static int _send_request_async(struct isr_connection *conn,
 		entry=malloc(sizeof(*entry));
 		if (entry == NULL)
 			return -ENOMEM;
-		INIT_LIST_HEAD(&entry->lh_hash);
+		INIT_LIST_HEAD(&entry->lh_pending);
 		entry->request=msg;
 		entry->callback=callback;
 		entry->data=data;
 		pthread_mutex_lock(&conn->pending_replies_lock);
-		hash_add(conn->pending_replies, &entry->lh_hash);
+		hash_add(conn->pending_replies, &entry->lh_pending);
 	}
 	/* XXX check lock ordering */
 	ret=send_message(conn, msg);
 	if (ret && callback != NULL) {
-		hash_remove(conn->pending_replies, &entry->lh_hash);
+		hash_remove(conn->pending_replies, &entry->lh_pending);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
 		free(entry);
 	}
@@ -211,7 +211,7 @@ void process_incoming_message(struct isr_connection *conn,
 		pthread_mutex_lock(&conn->pending_replies_lock);
 		entry=request_lookup(conn, msg->sequence);
 		if (last && entry != NULL)
-			hash_remove(conn->pending_replies, &entry->lh_hash);
+			hash_remove(conn->pending_replies, &entry->lh_pending);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
 		if (entry == NULL || validate_response(entry->request, msg)) {
 			free_message(msg);
