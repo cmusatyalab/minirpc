@@ -36,6 +36,11 @@ struct isr_connection {
 	void *data;
 };
 
+/* connection.c */
+int send_message(struct isr_connection *conn, struct ISRMessage *msg);
+
+/* message.c */
 unsigned request_hash(struct list_head *head, unsigned buckets);
+void process_incoming_message(struct isr_connection *conn);
 
 #endif

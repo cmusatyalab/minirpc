@@ -194,9 +194,9 @@ int isr_send_reply(struct isr_connection *conn, struct ISRMessage *request,
 }
 
 /* XXX what happens if we get a bad reply?  close the connection? */
-void process_incoming_message(struct isr_connection *conn,
-			struct ISRMessage *msg)
+void process_incoming_message(struct isr_connection *conn)
 {
+	struct ISRMessage *msg=conn->recv_msg;
 	struct pending_reply *pending;
 	int last;
 	

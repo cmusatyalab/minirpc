@@ -153,7 +153,7 @@ static int process_buffer(struct isr_connection *conn, unsigned *start)
 			ret=-EINVAL;
 			break;
 		}
-		process_incoming_message(conn->recv_msg);
+		process_incoming_message(conn);
 		conn->recv_msg=NULL;
 		break;
 	case RC_WMORE:
@@ -264,7 +264,7 @@ static void try_write_conn(struct isr_connection *conn)
 	}
 }
 
-void listener(struct isr_conn_set *set, int maxevents)
+static void listener(struct isr_conn_set *set, int maxevents)
 {
 	struct epoll_event events[maxevents];
 	int count;
