@@ -266,15 +266,19 @@ static void try_write_conn(struct isr_connection *conn)
 	}
 }
 
-static void listener(struct isr_conn_set *set, int maxevents)
+/* XXX signal handling */
+static void *listener(void *data)
 {
-	struct epoll_event events[maxevents];
+	struct isr_conn_set *set=data;
+	struct epoll_event events[set->expected_fds];
 	int count;
 	int i;
 	
 	while (1) {
-		count=epoll_wait(set->epoll_fd, events, maxevents, -1);
+		count=epoll_wait(set->epoll_fd, events, set->expected_fds, -1);
 		for (i=0; i<count; i++) {
+			if (events[i].data.ptr == set)
+				return NULL;
 			if (events[i].events & (EPOLLERR | EPOLLHUP)) {
 				conn_kill(events[i].data.ptr);
 				continue;
@@ -316,32 +320,64 @@ int isr_conn_set_alloc(struct isr_conn_set **new_set, int is_server,
 			unsigned msg_buf_len)
 {
 	struct isr_conn_set *set;
+	struct epoll_event event;
+	int ret=-ENOMEM;
 	
 	set=malloc(sizeof(*set));
 	if (set == NULL)
-		return -ENOMEM;
+		goto bad_alloc;
 	pthread_mutex_init(&set->lock, NULL);
 	set->conns=hash_alloc(conn_buckets, conn_hash);
-	if (set->conns == NULL) {
-		free(set);
-		return -ENOMEM;
-	}
+	if (set->conns == NULL)
+		goto bad_conns;
 	set->buflen=msg_buf_len;
 	set->is_server=is_server;
 	set->request=func;
 	set->msg_buckets=msg_buckets;
+	set->expected_fds=expected_fds;
+	if (pipe(set->signal_pipe)) {
+		ret=-errno;
+		goto bad_pipe;
+	}
 	set->epoll_fd=epoll_create(expected_fds);
 	if (set->epoll_fd < 0) {
-		hash_free(set->conns);
-		free(set);
-		return -errno;
+		ret=-errno;
+		goto bad_epoll;
+	}
+	event.events=EPOLLIN;
+	event.data.ptr=set;
+	if (epoll_ctl(set->epoll_fd, EPOLL_CTL_ADD, set->signal_pipe[0],
+				&event)) {
+		ret=-errno;
+		goto bad_epoll_pipe;
+	}
+	ret=pthread_create(&set->thread, NULL, listener, set);
+	if (ret) {
+		ret=-ret;
+		goto bad_pthread;
 	}
 	*new_set=set;
 	return 0;
+
+bad_pthread:
+bad_epoll_pipe:
+	close(set->epoll_fd);
+bad_epoll:
+	close(set->signal_pipe[0]);
+	close(set->signal_pipe[1]);
+bad_pipe:
+	hash_free(set->conns);
+bad_conns:
+	free(set);
+bad_alloc:
+	return ret;
 }
 
+/* XXX drops lots of stuff on the floor */
 void isr_conn_set_free(struct isr_conn_set *set)
 {
+	write(set->signal_pipe[1], "s", 1);
+	pthread_join(set->thread, NULL);
 	close(set->epoll_fd);
 	hash_free(set->conns);
 	free(set);

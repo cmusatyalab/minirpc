@@ -13,10 +13,13 @@ struct isr_conn_set {
 	pthread_mutex_t lock;
 	struct htable *conns;
 	unsigned buflen;
+	unsigned expected_fds;
 	int epoll_fd;
 	int is_server;
 	request_fn *request;
 	unsigned msg_buckets;
+	int signal_pipe[2];
+	pthread_t thread;
 };
 
 struct isr_connection {
