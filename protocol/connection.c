@@ -10,7 +10,7 @@
 
 struct queued_message {
 	struct list_head lh_msgs;
-	struct ISRMessage *msg;	
+	struct ISRMessage *msg;
 };
 
 static unsigned conn_hash(struct list_head *entry, unsigned buckets)
@@ -50,7 +50,7 @@ static int set_nonblock(int fd)
 	return 0;
 }
 
-int add_conn(struct isr_connection **new_conn, struct isr_conn_set *set,
+int isr_conn_add(struct isr_connection **new_conn, struct isr_conn_set *set,
 			int fd, void *data)
 {
 	struct isr_connection *conn;
@@ -82,7 +82,7 @@ int add_conn(struct isr_connection **new_conn, struct isr_conn_set *set,
 		free(conn);
 		return -ENOMEM;
 	}
-	conn->pending_replies=hash_alloc(set->msg_buckets, conn_hash);
+	conn->pending_replies=hash_alloc(set->msg_buckets, request_hash);
 	if (conn->pending_replies == NULL) {
 		free(conn->recv_buf);
 		free(conn->send_buf);
@@ -106,7 +106,7 @@ int add_conn(struct isr_connection **new_conn, struct isr_conn_set *set,
 	return 0;
 }
 
-void remove_conn(struct isr_connection *conn)
+void isr_conn_remove(struct isr_connection *conn)
 {
 	struct isr_conn_set *set=conn->set;
 	
@@ -308,9 +308,10 @@ int send_message(struct isr_connection *conn, struct ISRMessage *msg)
 	return 0;
 }
 
-int set_alloc(struct isr_conn_set **new_set, int fds, unsigned conn_buckets,
-			unsigned msg_buckets, unsigned buflen, int is_server,
-			new_request_fn *func)
+int isr_conn_set_alloc(struct isr_conn_set **new_set, int is_server,
+			request_fn *func, int expected_fds,
+			unsigned conn_buckets, unsigned msg_buckets,
+			unsigned msg_buf_len)
 {
 	struct isr_conn_set *set;
 	
@@ -323,11 +324,11 @@ int set_alloc(struct isr_conn_set **new_set, int fds, unsigned conn_buckets,
 		free(set);
 		return -ENOMEM;
 	}
-	set->buflen=buflen;
+	set->buflen=msg_buf_len;
 	set->is_server=is_server;
-	set->request_fn=func;
+	set->request=func;
 	set->msg_buckets=msg_buckets;
-	set->epoll_fd=epoll_create(fds);
+	set->epoll_fd=epoll_create(expected_fds);
 	if (set->epoll_fd < 0) {
 		hash_free(set->conns);
 		free(set);
@@ -337,7 +338,7 @@ int set_alloc(struct isr_conn_set **new_set, int fds, unsigned conn_buckets,
 	return 0;
 }
 
-void set_free(struct isr_conn_set *set)
+void isr_conn_set_free(struct isr_conn_set *set)
 {
 	close(set->epoll_fd);
 	hash_free(set->conns);

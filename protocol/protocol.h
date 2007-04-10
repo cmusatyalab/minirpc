@@ -6,7 +6,7 @@
 struct isr_conn_set;
 struct isr_connection;
 
-typedef void (new_request_fn)(struct isr_connection *conn, void *conn_data,
+typedef void (request_fn)(struct isr_connection *conn, void *conn_data,
 			struct ISRMessage *msg);
 
 typedef void (reply_callback_fn)(struct isr_connection *conn, void *conn_data,

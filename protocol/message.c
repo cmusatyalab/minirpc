@@ -17,14 +17,22 @@ struct sync_data {
 
 /* XXX deal with sequence number wraparound */
 
-static unsigned msg_hash(struct list_head *head, unsigned buckets)
+void isr_free_message(struct ISRMessage *msg)
+{
+	if (msg == NULL)
+		return;
+	ASN_STRUCT_FREE(asn_DEF_ISRMessage, msg);
+}
+
+/* XXX It would be nice to be able to make this static */
+unsigned request_hash(struct list_head *head, unsigned buckets)
 {
 	struct pending_reply *pending=list_entry(head, struct pending_reply,
 				lh_pending);
 	return pending->request->sequence % buckets;
 }
 
-static int msg_match(struct list_head *head, void *data)
+static int request_match(struct list_head *head, void *data)
 {
 	struct pending_reply *pending=list_entry(head, struct pending_reply,
 				lh_pending);
@@ -37,7 +45,8 @@ static struct pending_reply *request_lookup(struct isr_connection *conn,
 {
 	struct list_head *head;
 	
-	head=hash_get(conn->pending_replies, msg_match, sequence, &sequence);
+	head=hash_get(conn->pending_replies, request_match, sequence,
+				&sequence);
 	if (head == NULL)
 		return NULL;
 	return list_entry(head, struct pending_reply, lh_pending);
@@ -85,16 +94,6 @@ static int validate_reply(struct ISRMessage *request, struct ISRMessage *reply)
 	return 0;
 }
 
-static void sync_callback(struct isr_connection *conn, void *conn_data,
-			struct ISRMessage *request, struct ISRMessage *reply,
-			void *msg_data)
-{
-	struct sync_data *sdata=msg_data;
-	
-	*sdata->reply=reply;
-	pthread_cond_signal(sdata->cond);
-}
-
 /* If callback != NULL, returns with pending_replies_lock held, except on
    error */
 static int _send_request_async(struct isr_connection *conn,
@@ -125,14 +124,7 @@ static int _send_request_async(struct isr_connection *conn,
 	return ret;
 }
 
-void free_message(struct ISRMessage *msg)
-{
-	if (msg == NULL)
-		return;
-	ASN_STRUCT_FREE(asn_DEF_ISRMessage, msg);
-}
-
-int send_request_async(struct isr_connection *conn, struct ISRMessage *msg,
+int isr_send_request_async(struct isr_connection *conn, struct ISRMessage *msg,
 			reply_callback_fn *callback, void *data)
 {
 	int ret;
@@ -152,7 +144,17 @@ int send_request_async(struct isr_connection *conn, struct ISRMessage *msg,
 	pthread_mutex_unlock(&conn->pending_replies_lock);
 }
 
-int send_request(struct isr_connection *conn, struct ISRMessage *request,
+static void sync_callback(struct isr_connection *conn, void *conn_data,
+			struct ISRMessage *request, struct ISRMessage *reply,
+			void *msg_data)
+{
+	struct sync_data *sdata=msg_data;
+	
+	*sdata->reply=reply;
+	pthread_cond_signal(sdata->cond);
+}
+
+int isr_send_request(struct isr_connection *conn, struct ISRMessage *request,
 			struct ISRMessage **reply)
 {
 	pthread_cond_t cond=PTHREAD_COND_INITIALIZER;
@@ -180,7 +182,7 @@ int send_request(struct isr_connection *conn, struct ISRMessage *request,
 	}
 }
 
-int send_reply(struct isr_connection *conn, struct ISRMessage *request,
+int isr_send_reply(struct isr_connection *conn, struct ISRMessage *request,
 			struct ISRMessage *reply)
 {
 	int ret;
@@ -202,7 +204,7 @@ void process_incoming_message(struct isr_connection *conn,
 		if (validate_request(msg, !conn->set->is_server, 1, NULL)) {
 			/*XXX*/;
 		}
-		conn->set->request_fn(conn, conn->data, msg);
+		conn->set->request(conn, conn->data, msg);
 	} else {
 		last=(msg->direction == MessageDirection_last_reply);
 		pthread_mutex_lock(&conn->pending_replies_lock);

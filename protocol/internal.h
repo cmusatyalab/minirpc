@@ -15,7 +15,7 @@ struct isr_conn_set {
 	unsigned buflen;
 	int epoll_fd;
 	int is_server;
-	new_request_fn *request_fn;
+	request_fn *request;
 	unsigned msg_buckets;
 };
 
@@ -35,5 +35,7 @@ struct isr_connection {
 	pthread_mutex_t pending_replies_lock;
 	void *data;
 };
+
+unsigned request_hash(struct list_head *head, unsigned buckets);
 
 #endif
