@@ -3,6 +3,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
+#include <pthread.h>
 #define LIBPROTOCOL
 #include "internal.h"
 
@@ -28,6 +29,7 @@ static int conn_match(struct list_head *entry, void *data)
 	return (*fd == conn->fd);
 }
 
+/* XXX unused since epoll provides a data pointer */
 static struct isr_connection *conn_lookup(struct isr_conn_set *set, int fd)
 {
 	struct list_head *head;
@@ -66,7 +68,7 @@ int isr_conn_add(struct isr_connection **new_conn, struct isr_conn_set *set,
 	memset(conn, 0, sizeof(*conn));
 	INIT_LIST_HEAD(&conn->lh_conns);
 	INIT_LIST_HEAD(&conn->send_msgs);
-	pthread_mutex_init(&conn->send_msgs_lock);
+	pthread_mutex_init(&conn->send_msgs_lock, NULL);
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
 	conn->set=set;
 	conn->fd=fd;
@@ -148,7 +150,7 @@ static int process_buffer(struct isr_connection *conn, unsigned *start)
 	case RC_OK:
 		if (asn_check_constraints(&asn_DEF_ISRMessage, conn->recv_msg,
 					NULL, NULL)) {
-			free_message(conn->recv_msg);
+			isr_free_message(conn->recv_msg);
 			conn->recv_msg=NULL;
 			ret=-EINVAL;
 			break;
@@ -160,7 +162,7 @@ static int process_buffer(struct isr_connection *conn, unsigned *start)
 		ret=-EAGAIN;
 		break;
 	case RC_FAIL:
-		free_message(conn->recv_msg);
+		isr_free_message(conn->recv_msg);
 		conn->recv_msg=NULL;
 		ret=-EINVAL;
 		break;

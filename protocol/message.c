@@ -100,7 +100,7 @@ static int _send_request_async(struct isr_connection *conn,
 			struct ISRMessage *msg, reply_callback_fn *callback,
 			void *data)
 {
-	struct pending_reply *pending;
+	struct pending_reply *pending=NULL;  /* make gcc happy */
 	int ret;
 	
 	if (callback != NULL) {
@@ -142,6 +142,7 @@ int isr_send_request_async(struct isr_connection *conn, struct ISRMessage *msg,
 	if (ret)
 		return ret;
 	pthread_mutex_unlock(&conn->pending_replies_lock);
+	return 0;
 }
 
 static void sync_callback(struct isr_connection *conn, void *conn_data,
@@ -214,9 +215,9 @@ void process_incoming_message(struct isr_connection *conn)
 						&pending->lh_pending);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
 		if (pending == NULL || validate_reply(pending->request, msg)) {
-			free_message(msg);
+			isr_free_message(msg);
 			if (last && pending != NULL) {
-				free_message(pending->request);
+				isr_free_message(pending->request);
 				free(pending);
 			}
 			return;

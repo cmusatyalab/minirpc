@@ -1,4 +1,5 @@
 AM_CPPFLAGS = -Iclasses -Isupport
+AM_CFLAGS = -Wall -Wstrict-prototypes -Wmissing-prototypes
 
 # autogen.sh reads this
 ASNFILES = protocol.asn
