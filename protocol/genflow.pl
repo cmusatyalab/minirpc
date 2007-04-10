@@ -8,7 +8,6 @@
 use strict;
 use warnings;
 use Getopt::Std;
-use File::Compare;
 
 our $filename;
 our @alltypes;
@@ -268,9 +267,5 @@ while (($choiceName, $curchoicemap) = each %choicemap) {
 print HF "\n#endif\n";
 close CF;
 close HF;
-if (compare("$opt_o.c", "$opt_o.c.$$")) {
-	rename("$opt_o.c.$$", "$opt_o.c") || die "Couldn't write $opt_o.c";
-}
-if (compare("$opt_o.h", "$opt_o.h.$$")) {
-	rename("$opt_o.h.$$", "$opt_o.h") || die "Couldn't write $opt_o.h";
-}
+rename("$opt_o.c.$$", "$opt_o.c") || die "Couldn't write $opt_o.c";
+rename("$opt_o.h.$$", "$opt_o.h") || die "Couldn't write $opt_o.h";
