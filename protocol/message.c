@@ -17,6 +17,11 @@ struct sync_data {
 
 /* XXX deal with sequence number wraparound */
 
+struct ISRMessage *isr_alloc_message(void)
+{
+	return malloc(sizeof(struct ISRMessage));
+}
+
 void isr_free_message(struct ISRMessage *msg)
 {
 	if (msg == NULL)

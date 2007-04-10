@@ -33,6 +33,7 @@ int isr_send_reply(struct isr_connection *conn,
 int isr_send_partial_reply(struct isr_connection *conn,
 			struct ISRMessage *request, struct ISRMessage *reply);
 
+struct ISRMessage *isr_alloc_message(void);
 void isr_free_message(struct ISRMessage *msg);
 
 #endif
