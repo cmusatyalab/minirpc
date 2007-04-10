@@ -97,25 +97,29 @@ static int validate_reply(struct ISRMessage *request, struct ISRMessage *reply)
 /* If callback != NULL, returns with pending_replies_lock held, except on
    error */
 static int _send_request_async(struct isr_connection *conn,
-			struct ISRMessage *msg, reply_callback_fn *callback,
-			void *data)
+			struct ISRMessage *request,
+			reply_callback_fn *callback, void *data)
 {
 	struct pending_reply *pending=NULL;  /* make gcc happy */
 	int ret;
+	
+	pthread_mutex_lock(&conn->next_sequence_lock);
+	request->sequence=conn->next_sequence++;
+	pthread_mutex_unlock(&conn->next_sequence_lock);
 	
 	if (callback != NULL) {
 		pending=malloc(sizeof(*pending));
 		if (pending == NULL)
 			return -ENOMEM;
 		INIT_LIST_HEAD(&pending->lh_pending);
-		pending->request=msg;
+		pending->request=request;
 		pending->callback=callback;
 		pending->data=data;
 		pthread_mutex_lock(&conn->pending_replies_lock);
 		hash_add(conn->pending_replies, &pending->lh_pending);
 	}
-	/* XXX check lock ordering */
-	ret=send_message(conn, msg);
+	
+	ret=send_message(conn, request);
 	if (ret && callback != NULL) {
 		hash_remove(conn->pending_replies, &pending->lh_pending);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
@@ -124,13 +128,15 @@ static int _send_request_async(struct isr_connection *conn,
 	return ret;
 }
 
-int isr_send_request_async(struct isr_connection *conn, struct ISRMessage *msg,
+int isr_send_request_async(struct isr_connection *conn,
+			struct ISRMessage *request,
 			reply_callback_fn *callback, void *data)
 {
 	int ret;
 	int willReply;
 	
-	ret=validate_request(msg, conn->set->is_server, 1, &willReply);
+	request->direction=MessageDirection_request;
+	ret=validate_request(request, conn->set->is_server, 1, &willReply);
 	if (ret)
 		return ret;
 	if (!willReply) {
@@ -138,7 +144,7 @@ int isr_send_request_async(struct isr_connection *conn, struct ISRMessage *msg,
 		return -EINVAL;
 	}
 	/* Locks pending_replies_lock except on error */
-	ret=_send_request_async(conn, msg, callback, data);
+	ret=_send_request_async(conn, request, callback, data);
 	if (ret)
 		return ret;
 	pthread_mutex_unlock(&conn->pending_replies_lock);
@@ -163,6 +169,7 @@ int isr_send_request(struct isr_connection *conn, struct ISRMessage *request,
 	int ret;
 	int willReply;
 	
+	request->direction=MessageDirection_request;
 	ret=validate_request(request, conn->set->is_server, 0, &willReply);
 	if (ret)
 		return ret;
@@ -183,15 +190,30 @@ int isr_send_request(struct isr_connection *conn, struct ISRMessage *request,
 	}
 }
 
-int isr_send_reply(struct isr_connection *conn, struct ISRMessage *request,
-			struct ISRMessage *reply)
+static int _send_reply(struct isr_connection *conn,
+			struct ISRMessage *request, struct ISRMessage *reply)
 {
 	int ret;
 	
+	reply->sequence=request->sequence;
 	ret=validate_reply(request, reply);
 	if (ret)
 		return ret;
 	return send_message(conn, reply);
+}
+
+int isr_send_partial_reply(struct isr_connection *conn,
+			struct ISRMessage *request, struct ISRMessage *reply)
+{
+	reply->direction=MessageDirection_reply;
+	return _send_reply(conn, request, reply);
+}
+
+int isr_send_reply(struct isr_connection *conn,
+			struct ISRMessage *request, struct ISRMessage *reply)
+{
+	reply->direction=MessageDirection_last_reply;
+	return _send_reply(conn, request, reply);
 }
 
 /* XXX what happens if we get a bad reply?  close the connection? */

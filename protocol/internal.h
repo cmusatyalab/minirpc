@@ -26,17 +26,23 @@ struct isr_connection {
 	struct list_head lh_conns;
 	struct isr_conn_set *set;
 	int fd;
+	void *data;
+	
 	char *send_buf;
 	unsigned send_offset;
 	unsigned send_length;
 	struct list_head send_msgs;
 	pthread_mutex_t send_msgs_lock;
+	
 	char *recv_buf;
 	unsigned recv_offset;
 	struct ISRMessage *recv_msg;
+	
 	struct htable *pending_replies;
 	pthread_mutex_t pending_replies_lock;
-	void *data;
+	
+	int next_sequence;
+	pthread_mutex_t next_sequence_lock;
 };
 
 /* connection.c */

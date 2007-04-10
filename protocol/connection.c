@@ -68,6 +68,7 @@ int isr_conn_add(struct isr_connection **new_conn, struct isr_conn_set *set,
 	memset(conn, 0, sizeof(*conn));
 	INIT_LIST_HEAD(&conn->lh_conns);
 	INIT_LIST_HEAD(&conn->send_msgs);
+	pthread_mutex_init(&conn->next_sequence_lock, NULL);
 	pthread_mutex_init(&conn->send_msgs_lock, NULL);
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
 	conn->set=set;
@@ -267,6 +268,7 @@ static void try_write_conn(struct isr_connection *conn)
 }
 
 /* XXX signal handling */
+/* XXX need provisions for connection timeout */
 static void *listener(void *data)
 {
 	struct isr_conn_set *set=data;

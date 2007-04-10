@@ -25,10 +25,13 @@ void isr_conn_remove(struct isr_connection *conn);
 
 int isr_send_request(struct isr_connection *conn, struct ISRMessage *request,
 			struct ISRMessage **reply);
-int isr_send_request_async(struct isr_connection *conn, struct ISRMessage *msg,
+int isr_send_request_async(struct isr_connection *conn,
+			struct ISRMessage *request,
 			reply_callback_fn *callback, void *data);
-int isr_send_reply(struct isr_connection *conn, struct ISRMessage *request,
-			struct ISRMessage *reply);
+int isr_send_reply(struct isr_connection *conn,
+			struct ISRMessage *request, struct ISRMessage *reply);
+int isr_send_partial_reply(struct isr_connection *conn,
+			struct ISRMessage *request, struct ISRMessage *reply);
 
 void isr_free_message(struct ISRMessage *msg);
 
