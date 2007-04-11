@@ -7,7 +7,12 @@ ChunkID ::= INTEGER (0..MAX)
 ParcelVer ::= INTEGER (0..MAX)
 Hash ::= OCTET STRING (SIZE (16..64))
 EncryptedKeyRecord ::= OCTET STRING
-String ::= UTF8String (SIZE (1..80))
+String ::= UTF8String
+
+DateRange ::= SEQUENCE {
+	start GeneralizedTime,
+	stop GeneralizedTime
+}
 
 KeyRecord ::= SEQUENCE {
 	key Hash,
@@ -46,16 +51,19 @@ ServerHello ::= SEQUENCE {
 Status ::= ENUMERATED {
 	ok,
 	message-unknown,
-	no-chunk,
-	parcel-locked,
-	no-such-version,
 	tls-required,
+	parcel-locked,
+	no-such-parcel,
+	no-such-version,
+	no-such-chunk,
 	...
 }
 
--- need a way to change password
--- need a way to force password change
+/* XXX need a way to change password */
+/* XXX need a way to force password change */
 
+/* @force can be declined if an open connection currently exists which holds
+   the lock? */
 -- Define    : request
 -- Replies   : Status
 -- Multireply: no
@@ -63,6 +71,7 @@ Status ::= ENUMERATED {
 AcquireLock ::= SEQUENCE {
 	parcel String,
 	version ParcelVer,
+	nonce INTEGER OPTIONAL,
 	force BOOLEAN,
 	...
 }
@@ -77,25 +86,69 @@ ReleaseLock ::= SEQUENCE {
 	...
 }
 
+
+
+-- Define    : request
+-- Replies   : ListParcelsReply
+-- Multireply: no
+-- Initiators: client
 ListParcels ::= SEQUENCE {
 	name String OPTIONAL,
-	versions INTEGER (-1..MAX),  -- -1 == all
+	history DateRange OPTIONAL,
 	...
 }
 
-ParcelRecord ::= SEQUENCE {
+ListParcelsReply ::= SEQUENCE OF ParcelInfo
+
+ParcelInfo ::= SEQUENCE {
 	name String,
-	size INTEGER (0..MAX), -- unique chunks
-	version ParcelVer,
-	checkin GeneralizedTime,
-	acquired SEQUENCE {
-		by String,
-		at GeneralizedTime
-	} OPTIONAL,
+	comment String OPTIONAL,
+	current ParcelVersionInfo,
+	acquired ParcelLockInfo OPTIONAL,
+	history SEQUENCE OF ParcelVersionInfo,
 	...
 }
 
-ListParcelReply ::= SEQUENCE OF ParcelRecord
+ParcelVersionInfo ::= SEQUENCE {
+	version ParcelVer,
+	comment String OPTIONAL,
+	checkin GeneralizedTime,
+	chunks INTEGER (0..MAX),		/* unique chunks */
+	...
+}
+
+ParcelLockInfo ::= SEQUENCE {
+	version ParcelVersionInfo,
+	by String,
+	at GeneralizedTime,
+	comment String OPTIONAL,
+	...
+}
+
+
+-- Define    : request
+-- Replies   : Status
+-- Multireply: no
+-- Initiators: client
+ParcelCheckout ::= SEQUENCE {
+	name String,
+	version ParcelVer,
+	owner String,
+	comment String OPTIONAL,
+	...
+}
+
+
+AddParcel ::= SEQUENCE {
+	name String,
+	comment String OPTIONAL,
+	...
+}
+
+RemoveParcel ::= SEQUENCE {
+	name String,
+	version ParcelVer
+}
 
 -- can use this to ask what chunks are needed for upload?  we need to provide
 -- a mechanism to lock chunks from GCing if we're about to upload them.
