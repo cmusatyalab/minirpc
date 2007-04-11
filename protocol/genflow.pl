@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-# Define: {request|choice}
+# Define: {request|parent}
 # Replies: Status Foo
 # Multireply: {yes|no}
 # Initiators: {client|server}+
@@ -43,7 +43,7 @@ sub validateAttr {
 	my @vl;
 	
 	if ($attr eq "Define") {
-		$value =~ /^request|choice$/
+		$value =~ /^request|parent$/
 			or parseErr($type, $attr, "Invalid definition");
 	}
 	if ($attr eq "Replies") {
@@ -77,7 +77,7 @@ sub validateHash {
 	}
 	if ($attrs->{"Define"} eq "request") {
 		@attrlist = ("Replies", "Multireply", "Initiators");
-	} elsif ($attrs->{"Define"} eq "choice") {
+	} elsif ($attrs->{"Define"} eq "parent") {
 		@attrlist = ()
 	}
 	
@@ -119,9 +119,9 @@ die "No output file specified"
 # Stage 1: read input files and parse types and attributes
 my $attrs = {};
 my %types;
-my %choicemap;
-my $curchoicemap = ();
-my $choiceName = undef;
+my %parentmap;
+my $parentName = undef;
+my $inParent = 0;
 for $filename (@ARGV) {
 	open(FH, "<", $filename)
 		or die "Can't open $filename";
@@ -131,9 +131,20 @@ for $filename (@ARGV) {
 			setline($1, "decl");
 			push @alltypes, $1;
 			if (%$attrs) {
-				$choiceName = $1
-					if (defined($attrs->{"Define"}) and
-						$attrs->{"Define"} eq "choice");
+				if (defined($attrs->{"Define"}) and
+						$attrs->{"Define"} eq
+						"parent") {
+					if ($parentName) {
+						parseErr($1, "Define",
+							"There can only be " .
+							"one message parent " .
+							"(\"$parentName\" " .
+							"already chosen)");
+					} else {
+						$parentName = $1;
+						$inParent = 1;
+					}
+				}
 				$types{$1} = $attrs;
 				$attrs = {};
 			}
@@ -146,23 +157,24 @@ for $filename (@ARGV) {
 				if (defined($attrs->{$1}));
 			$attrs->{$1} = $2;
 		}
-		if ($choiceName) {
+		if ($inParent) {
 			if (/SEQUENCE|SET|CHOICE|{/) {
-				parseErr($choiceName, "decl", "Nested " .
+				parseErr($parentName, "decl", "Nested " .
 						"definitions not supported " .
-						"in choices with \"Define: " .
-						"choice\" set");
+						"in message parent");
 			}
 			if (/^[\t ]*([a-zA-Z0-9-]+)[\t ]+([a-zA-Z0-9-]+),/) {
 				# Choice member
-				setline($choiceName, $1);
-				$curchoicemap->{$2} = $1;
+				setline($parentName, $1);
+				parseErr($parentName, $1, "Multiple fields " .
+						"with the same message type " .
+						"in message parent")
+					if defined($parentmap{$2});
+				$parentmap{$2} = $1;
 			}
 			if (/}/) {
-				# End of choice
-				$choicemap{$choiceName} = $curchoicemap;
-				$curchoicemap = ();
-				$choiceName = undef;
+				# End of parent choice
+				$inParent = 0;
 			}
 		}
 	}
@@ -171,6 +183,9 @@ for $filename (@ARGV) {
 
 # Stage 2: validate input
 my $type;
+
+die "No message parent found"
+	if !$parentName;
 while (($type, $attrs) = each %types) {
 	validateHash($type, $attrs);
 }
@@ -207,30 +222,25 @@ my $initiators;
 my $replies;
 my $nr_replies;
 my $rtype;
-my $emitted;
 my $typevar;
 
 # Produce flow_params structure declarations
 while (($type, $attrs) = each %types) {
 	next if $attrs->{"Define"} ne "request";
+	parseErr($type, "decl", "Request $type not defined in message parent")
+		if !defined($parentmap{$type});
 	$replies = "";
 	$nr_replies = 0;
 	foreach $rtype (split(/[\t ]+/, $attrs->{"Replies"})) {
-		$emitted = 0;
-		while (($choiceName, $curchoicemap) = each %choicemap) {
-			if (defined($curchoicemap->{$rtype})) {
-				$typevar = $curchoicemap->{$rtype};
-				$replies .= ", "
-					if $replies;
-				$replies .= "${choiceName}_PR_$typevar";
-				$emitted = 1;
-				$nr_replies++;
-			}
-		}
-		if (!$emitted) {
-			parseErr($type, "Replies", "No CHOICE " .
-					"representation available for reply " .
-					$rtype);
+		if (defined($parentmap{$rtype})) {
+			$typevar = $parentmap{$rtype};
+			$replies .= ", "
+				if $replies;
+			$replies .= "${parentName}_PR_$typevar";
+			$nr_replies++;
+		} else {
+			parseErr($type, "Replies", "Reply $rtype not defined" .
+					" in message parent");
 		}
 	}
 	$multi = ($attrs->{"Multireply"} eq "yes") ? "1" : "0";
@@ -247,22 +257,20 @@ while (($type, $attrs) = each %types) {
 }
 
 # Produce *_get_flow() functions
-while (($choiceName, $curchoicemap) = each %choicemap) {
-	print HF "const struct flow_params *${choiceName}_get_flow";
-	print HF "(enum ${choiceName}_PR key);\n";
-	print CF "const struct flow_params *${choiceName}_get_flow";
-	print CF "(enum ${choiceName}_PR key)\n{\n";
-	print CF "\tswitch (key) {\n";
-	while (($type, $typevar) = each %$curchoicemap) {
-		next if !defined($types{$type});
-		$attrs = $types{$type};
-		print CF "\tcase ${choiceName}_PR_$typevar:\n";
-		print CF "\t\treturn &flow_$type;\n";
-	}
-	print CF "\tdefault:\n";
-	print CF "\t\treturn NULL;\n";
-	print CF "\t}\n}\n\n";
+print HF "const struct flow_params *${parentName}_get_flow";
+print HF "(enum ${parentName}_PR key);\n";
+print CF "const struct flow_params *${parentName}_get_flow";
+print CF "(enum ${parentName}_PR key)\n{\n";
+print CF "\tswitch (key) {\n";
+while (($type, $typevar) = each %parentmap) {
+	next if (!defined($types{$type}) or
+				$types{$type}->{"Define"} ne "request");
+	print CF "\tcase ${parentName}_PR_$typevar:\n";
+	print CF "\t\treturn &flow_$type;\n";
 }
+print CF "\tdefault:\n";
+print CF "\t\treturn NULL;\n";
+print CF "\t}\n}\n\n";
 
 print HF "\n#endif\n";
 close CF;
