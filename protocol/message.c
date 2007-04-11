@@ -62,7 +62,7 @@ static int validate_request(struct ISRMessage *request, int fromServer,
 {
 	const struct flow_params *params;
 	
-	params=ISRMessageBody_get_flow(request->body.present);
+	params=MessageBody_get_flow(request->body.present);
 	if (params == NULL)
 		return -EINVAL;
 	if (request->direction != MessageDirection_request)
@@ -85,7 +85,7 @@ static int validate_reply(struct ISRMessage *request, struct ISRMessage *reply)
 	const struct flow_params *params;
 	int i;
 	
-	params=ISRMessageBody_get_flow(request->body.present);
+	params=MessageBody_get_flow(request->body.present);
 	if (params == NULL)
 		return -EINVAL;
 	for (i=0; i<params->nr_reply_types; i++)
