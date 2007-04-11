@@ -1,23 +1,25 @@
-OPENISR -- { XXXoid }
+OPENISR /* XXX need OID */
 DEFINITIONS
 AUTOMATIC TAGS ::=
 BEGIN
 
-ChunkID ::= INTEGER (0..MAX)
-ParcelVer ::= INTEGER (0..MAX)
-Hash ::= OCTET STRING (SIZE (16..64))
-EncryptedKeyRecord ::= OCTET STRING
-String ::= UTF8String
+/*** Generic types ***********************************************************/
+
+ChunkID			::= INTEGER (0..MAX)
+ParcelVer		::= INTEGER (0..MAX)
+Hash			::= OCTET STRING (SIZE (16..64))
+EncryptedKeyRecord	::= OCTET STRING
+String			::= UTF8String
 
 DateRange ::= SEQUENCE {
-	start GeneralizedTime,
-	stop GeneralizedTime
+	start		GeneralizedTime,
+	stop		GeneralizedTime
 }
 
 KeyRecord ::= SEQUENCE {
-	key Hash,
-	compress Compression,
-	encrypt Encryption
+	key		Hash,
+	compress	Compression,
+	encrypt		Encryption
 }
 
 Compression ::= ENUMERATED {
@@ -31,21 +33,9 @@ Encryption ::= ENUMERATED {
 	none-sha1
 }
 
-Want ::= BIT STRING {
+WantChunkInfo ::= BIT STRING {
 	key (0),
 	data (1)
-}
-
-ClientHello ::= SEQUENCE {
-	software String,
-	version String,
-	...
-}
-
-ServerHello ::= SEQUENCE {
-	software String,
-	version String,
-	...
 }
 
 Status ::= ENUMERATED {
@@ -56,120 +46,139 @@ Status ::= ENUMERATED {
 	no-such-parcel,
 	no-such-version,
 	no-such-chunk,
+	need-data,
+	...
+}
+
+/*** Trivial messages ********************************************************/
+
+ClientHello ::= SEQUENCE {
+	software	String,
+	version		String,
+	...
+}
+
+ServerHello ::= SEQUENCE {
+	software	String,
+	version		String,
 	...
 }
 
 /* XXX need a way to change password */
 /* XXX need a way to force password change */
 
+
+/*** Parcel operations *******************************************************/
+
 /* @force can be declined if an open connection currently exists which holds
    the lock? */
--- Define    : request
--- Replies   : Status
--- Multireply: no
--- Initiators: client
+-- Define:	request
+-- Replies:	Status
+-- Multireply:	no
+-- Initiators:	client
 AcquireLock ::= SEQUENCE {
-	parcel String,
-	version ParcelVer,
-	nonce INTEGER OPTIONAL,
-	force BOOLEAN,
+	parcel		String,
+	version		ParcelVer,
+	nonce		INTEGER OPTIONAL,
+	force		BOOLEAN,
 	...
 }
 
--- Define    : request
--- Replies   : Status
--- Multireply: no
--- Initiators: client
+-- Define:	request
+-- Replies:	Status
+-- Multireply:	no
+-- Initiators:	client
 ReleaseLock ::= SEQUENCE {
 	parcel String,
 	nonce INTEGER,
 	...
 }
 
+-- Define:	request
+-- Replies:	Status
+-- Multireply:	no
+-- Initiators:	client
+ParcelCheckout ::= SEQUENCE {
+	name		String,
+	version		ParcelVer,
+	owner		String,
+	comment		String OPTIONAL,
+	...
+}
 
 
--- Define    : request
--- Replies   : ListParcelsReply
--- Multireply: no
--- Initiators: client
+AddParcel ::= SEQUENCE {
+	name		String,
+	comment		String OPTIONAL,
+	...
+}
+
+RemoveParcel ::= SEQUENCE {
+	name		String,
+	version		ParcelVer
+}
+
+/*** ListParcels *************************************************************/
+
+-- Define:	request
+-- Replies:	ListParcelsReply
+-- Multireply:	no
+-- Initiators:	client
 ListParcels ::= SEQUENCE {
-	name String OPTIONAL,
-	history DateRange OPTIONAL,
+	name		String OPTIONAL,
+	history		DateRange OPTIONAL,
 	...
 }
 
 ListParcelsReply ::= SEQUENCE OF ParcelInfo
 
 ParcelInfo ::= SEQUENCE {
-	name String,
-	comment String OPTIONAL,
-	current ParcelVersionInfo,
-	acquired ParcelLockInfo OPTIONAL,
-	history SEQUENCE OF ParcelVersionInfo,
+	name		String,
+	comment		String OPTIONAL,
+	current		ParcelVersionInfo,
+	acquired	ParcelLockInfo OPTIONAL,
+	history		SEQUENCE OF ParcelVersionInfo,
 	...
 }
 
 ParcelVersionInfo ::= SEQUENCE {
-	version ParcelVer,
-	comment String OPTIONAL,
-	checkin GeneralizedTime,
-	chunks INTEGER (0..MAX),		/* unique chunks */
+	version		ParcelVer,
+	comment		String OPTIONAL,
+	checkin		GeneralizedTime,
+	chunks		INTEGER (0..MAX),		/* unique chunks */
 	...
 }
 
 ParcelLockInfo ::= SEQUENCE {
-	version ParcelVersionInfo,
-	by String,
-	at GeneralizedTime,
-	comment String OPTIONAL,
+	version		ParcelVersionInfo,
+	by		String,
+	at		GeneralizedTime,
+	comment		String OPTIONAL,
 	...
 }
 
-
--- Define    : request
--- Replies   : Status
--- Multireply: no
--- Initiators: client
-ParcelCheckout ::= SEQUENCE {
-	name String,
-	version ParcelVer,
-	owner String,
-	comment String OPTIONAL,
-	...
-}
-
-
-AddParcel ::= SEQUENCE {
-	name String,
-	comment String OPTIONAL,
-	...
-}
-
-RemoveParcel ::= SEQUENCE {
-	name String,
-	version ParcelVer
-}
+/*** Chunk operations ********************************************************/
 
 -- can use this to ask what chunks are needed for upload?  we need to provide
 -- a mechanism to lock chunks from GCing if we're about to upload them.
 -- what if we upload the keyring first?
--- Define    : request
--- Replies   : ChunkReply
--- Multireply: yes
--- Initiators: client server
+-- Define:	request
+-- Replies:	ChunkReply
+-- Multireply:	yes
+-- Initiators:	client server
 ChunkRequest ::= SEQUENCE {
-	key CHOICE {
-		cid ChunkID,
-		tag Hash
+	by CHOICE {
+		cid	ChunkID,
+		tag	Hash
 	},
-	want Want,
+	want		WantChunkInfo,
 	...
 }
 
 ChunkReply ::= SEQUENCE {
-	status Status DEFAULT ok,  -- XXX may be encoded if specified, in violation of DER
-	keyrec EncryptedKeyRecord OPTIONAL,
-	data OCTET STRING (SIZE (1..131072)) OPTIONAL
+	status		Status DEFAULT ok,
+	keyrec		EncryptedKeyRecord OPTIONAL,
+	data		OCTET STRING (SIZE (1..131072)) OPTIONAL
 }
 
 -- should chunkrequest/chunkreply be bidirectional?  (it'd be chunkprovide
@@ -183,20 +192,46 @@ ChunkReply ::= SEQUENCE {
 -- should keyring and data upload be separate?  the former requires some way
 -- to mark a keyring as in-progress.  or, we could just have temporary keyrings
 -- which can be committed.  after we commit to them they're immutable
-ChunkUpload ::= SEQUENCE {
-	
+
+-- Define:	request
+-- Replies:	Status
+-- Multireply:	no
+-- Initiators:	client
+KeyUpdate ::= SEQUENCE {
+	keyrec		EncryptedKeyRecord
 }
 
--- Define: choice
-ISRMessageBody ::= CHOICE {
-	status Status,
-	serverhello ServerHello,
-	clienthello ClientHello,
-	chunkrequest ChunkRequest,
-	data ChunkReply,
-	acquire AcquireLock,
-	release ReleaseLock,
-	starttls NULL,
+ChunkUpload ::= SEQUENCE {
+	tag		Hash,
+	data		OCTET STRING (SIZE (1..131072))
+}
+
+CommitVersion ::= SEQUENCE {
+
+}
+
+-- Define:	request
+-- Replies:	Status
+-- Multireply:	no
+-- Initiators:	client
+StartTLS ::= NULL
+
+/*** Top-level message *******************************************************/
+
+-- Define: parent
+MessageBody ::= CHOICE {
+	status		Status,
+	serverhello	ServerHello,
+	clienthello	ClientHello,
+	chunkrequest	ChunkRequest,
+	data		ChunkReply,
+	acquire		AcquireLock,
+	release		ReleaseLock,
+	checkout	ParcelCheckout,
+	list		ListParcels,
+	listreply	ListParcelsReply,
+	keyupdate	KeyUpdate,
+	starttls	StartTLS,
 	...
 }
 
@@ -207,9 +242,9 @@ MessageDirection ::= ENUMERATED {
 }
 
 ISRMessage ::= SEQUENCE {
-	sequence INTEGER (0..MAX),
-	direction MessageDirection,
-	body ISRMessageBody
+	sequence	INTEGER (0..MAX),
+	direction	MessageDirection,
+	body		MessageBody
 }
 
 END
