@@ -74,7 +74,6 @@ ServerHello ::= SEQUENCE {
    the lock? */
 -- Define:	request
 -- Replies:	Status
--- Multireply:	no
 -- Initiators:	client
 AcquireLock ::= SEQUENCE {
 	parcel		String,
@@ -86,7 +85,6 @@ AcquireLock ::= SEQUENCE {
 
 -- Define:	request
 -- Replies:	Status
--- Multireply:	no
 -- Initiators:	client
 ReleaseLock ::= SEQUENCE {
 	parcel String,
@@ -96,7 +94,6 @@ ReleaseLock ::= SEQUENCE {
 
 -- Define:	request
 -- Replies:	Status
--- Multireply:	no
 -- Initiators:	client
 ParcelCheckout ::= SEQUENCE {
 	name		String,
@@ -122,7 +119,6 @@ RemoveParcel ::= SEQUENCE {
 
 -- Define:	request
 -- Replies:	ListParcelsReply
--- Multireply:	no
 -- Initiators:	client
 ListParcels ::= SEQUENCE {
 	name		String OPTIONAL,
@@ -164,7 +160,6 @@ ParcelLockInfo ::= SEQUENCE {
 -- what if we upload the keyring first?
 -- Define:	request
 -- Replies:	ChunkReply
--- Multireply:	yes
 -- Initiators:	client server
 ChunkRequest ::= SEQUENCE {
 	by CHOICE {
@@ -195,7 +190,6 @@ ChunkReply ::= SEQUENCE {
 
 -- Define:	request
 -- Replies:	Status
--- Multireply:	no
 -- Initiators:	client
 KeyUpdate ::= SEQUENCE {
 	keyrec		EncryptedKeyRecord
@@ -212,7 +206,6 @@ CommitVersion ::= SEQUENCE {
 
 -- Define:	request
 -- Replies:	Status
--- Multireply:	no
 -- Initiators:	client
 StartTLS ::= NULL
 
@@ -235,15 +228,9 @@ MessageBody ::= CHOICE {
 	...
 }
 
-MessageDirection ::= ENUMERATED {
-	request,
-	reply,
-	last-reply
-}
-
 ISRMessage ::= SEQUENCE {
 	sequence	INTEGER (0..MAX),
-	direction	MessageDirection,
+	isReply		BOOLEAN,
 	body		MessageBody
 }
 

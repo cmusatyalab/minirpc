@@ -2,7 +2,6 @@
 
 # Define: {request|parent}
 # Replies: Status Foo
-# Multireply: {yes|no}
 # Initiators: {client|server}+
 
 use strict;
@@ -53,10 +52,6 @@ sub validateAttr {
 						"reference name $rtype");
 		}
 	}
-	if ($attr eq "Multireply") {
-		$value =~ /^no|yes$/
-			or parseErr($type, $attr, "Invalid multireply setting");
-	}
 	if ($attr eq "Initiators") {
 		@vl = split(/[\t ]+/, $value);
 		grep(/^client|server$/, @vl) == @vl
@@ -76,7 +71,7 @@ sub validateHash {
 					. "attributes are");
 	}
 	if ($attrs->{"Define"} eq "request") {
-		@attrlist = ("Replies", "Multireply", "Initiators");
+		@attrlist = ("Replies", "Initiators");
 	} elsif ($attrs->{"Define"} eq "parent") {
 		@attrlist = ()
 	}
@@ -208,7 +203,6 @@ print HF <<EOF;
 #define INITIATOR_SERVER 0x2
 
 struct flow_params {
-	int multi;
 	unsigned initiators;
 	int nr_reply_types;
 	int reply_types[];
@@ -216,7 +210,6 @@ struct flow_params {
 
 EOF
 
-my $multi;
 my $initiator;
 my $initiators;
 my $replies;
@@ -243,7 +236,6 @@ while (($type, $attrs) = each %types) {
 					" in message parent");
 		}
 	}
-	$multi = ($attrs->{"Multireply"} eq "yes") ? "1" : "0";
 	$initiators = undef;
 	foreach $initiator (split(/[\t ]+/, $attrs->{"Initiators"})) {
 		$initiators .= "|"
@@ -253,7 +245,7 @@ while (($type, $attrs) = each %types) {
 	$initiators = "0"
 		if !$initiators;
 	print CF "static const struct flow_params flow_$type =\n";
-	print CF "{$multi, $initiators, $nr_replies, {${replies}}};\n\n";
+	print CF "{$initiators, $nr_replies, {${replies}}};\n\n";
 }
 
 # Produce *_get_flow() functions

@@ -58,28 +58,22 @@ static struct pending_reply *request_lookup(struct isr_connection *conn,
 }
 
 static int validate_request(struct ISRMessage *request, int fromServer,
-			int async, int *willReply)
+			int *willReply)
 {
 	const struct flow_params *params;
 	
 	params=MessageBody_get_flow(request->body.present);
 	if (params == NULL)
 		return -EINVAL;
-	if (request->direction != MessageDirection_request)
-		return -EINVAL;  /* XXX necessary? */
 	if (!fromServer && !(params->initiators & INITIATOR_CLIENT))
 		return -EINVAL;
 	if (fromServer && !(params->initiators & INITIATOR_SERVER))
-		return -EINVAL;
-	if (params->multi && !async)
 		return -EINVAL;
 	if (willReply != NULL)
 		*willReply = params->nr_reply_types ? 1 : 0;
 	return 0;
 }
 
-/* XXX this isn't safe if genflow processed multiple choice types, since
-   the enum definitions may overlap */
 static int validate_reply(struct ISRMessage *request, struct ISRMessage *reply)
 {
 	const struct flow_params *params;
@@ -92,9 +86,6 @@ static int validate_reply(struct ISRMessage *request, struct ISRMessage *reply)
 		if (reply->body.present == params->reply_types[i])
 			break;
 	if (i == params->nr_reply_types)
-		return -EINVAL;
-	if (reply->direction != MessageDirection_last_reply && !(params->multi
-				&& reply->direction == MessageDirection_reply))
 		return -EINVAL;
 	return 0;
 }
@@ -111,6 +102,7 @@ static int _send_request_async(struct isr_connection *conn,
 	pthread_mutex_lock(&conn->next_sequence_lock);
 	request->sequence=conn->next_sequence++;
 	pthread_mutex_unlock(&conn->next_sequence_lock);
+	request->isReply=0;
 	
 	if (callback != NULL) {
 		pending=malloc(sizeof(*pending));
@@ -140,8 +132,7 @@ int isr_send_request_async(struct isr_connection *conn,
 	int ret;
 	int willReply;
 	
-	request->direction=MessageDirection_request;
-	ret=validate_request(request, conn->set->is_server, 1, &willReply);
+	ret=validate_request(request, conn->set->is_server, &willReply);
 	if (ret)
 		return ret;
 	if (!willReply) {
@@ -174,8 +165,7 @@ int isr_send_request(struct isr_connection *conn, struct ISRMessage *request,
 	int ret;
 	int willReply;
 	
-	request->direction=MessageDirection_request;
-	ret=validate_request(request, conn->set->is_server, 0, &willReply);
+	ret=validate_request(request, conn->set->is_server, &willReply);
 	if (ret)
 		return ret;
 	if (willReply) {
@@ -195,30 +185,17 @@ int isr_send_request(struct isr_connection *conn, struct ISRMessage *request,
 	}
 }
 
-static int _send_reply(struct isr_connection *conn,
+int isr_send_reply(struct isr_connection *conn,
 			struct ISRMessage *request, struct ISRMessage *reply)
 {
 	int ret;
 	
 	reply->sequence=request->sequence;
+	reply->isReply=1;
 	ret=validate_reply(request, reply);
 	if (ret)
 		return ret;
 	return send_message(conn, reply);
-}
-
-int isr_send_partial_reply(struct isr_connection *conn,
-			struct ISRMessage *request, struct ISRMessage *reply)
-{
-	reply->direction=MessageDirection_reply;
-	return _send_reply(conn, request, reply);
-}
-
-int isr_send_reply(struct isr_connection *conn,
-			struct ISRMessage *request, struct ISRMessage *reply)
-{
-	reply->direction=MessageDirection_last_reply;
-	return _send_reply(conn, request, reply);
 }
 
 /* XXX what happens if we get a bad reply?  close the connection? */
@@ -226,24 +203,22 @@ void process_incoming_message(struct isr_connection *conn)
 {
 	struct ISRMessage *msg=conn->recv_msg;
 	struct pending_reply *pending;
-	int last;
 	
-	if (msg->direction == MessageDirection_request) {
-		if (validate_request(msg, !conn->set->is_server, 1, NULL)) {
+	if (!msg->isReply) {
+		if (validate_request(msg, !conn->set->is_server, NULL)) {
 			/*XXX*/;
 		}
 		conn->set->request(conn, conn->data, msg);
 	} else {
-		last=(msg->direction == MessageDirection_last_reply);
 		pthread_mutex_lock(&conn->pending_replies_lock);
 		pending=request_lookup(conn, msg->sequence);
-		if (last && pending != NULL)
+		if (pending != NULL)
 			hash_remove(conn->pending_replies,
 						&pending->lh_pending);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
 		if (pending == NULL || validate_reply(pending->request, msg)) {
 			isr_free_message(msg);
-			if (last && pending != NULL) {
+			if (pending != NULL) {
 				isr_free_message(pending->request);
 				free(pending);
 			}
@@ -251,7 +226,6 @@ void process_incoming_message(struct isr_connection *conn)
 		}
 		pending->callback(conn, conn->data, pending->request, msg,
 					pending->data);
-		if (last)
-			free(pending);
+		free(pending);
 	}
 }

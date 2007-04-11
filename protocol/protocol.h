@@ -30,8 +30,6 @@ int isr_send_request_async(struct isr_connection *conn,
 			reply_callback_fn *callback, void *data);
 int isr_send_reply(struct isr_connection *conn,
 			struct ISRMessage *request, struct ISRMessage *reply);
-int isr_send_partial_reply(struct isr_connection *conn,
-			struct ISRMessage *request, struct ISRMessage *reply);
 
 struct ISRMessage *isr_alloc_message(void);
 void isr_free_message(struct ISRMessage *msg);
