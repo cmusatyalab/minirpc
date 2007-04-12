@@ -93,8 +93,8 @@ sub validateHash {
 	if (!defined($parentmap{$type}) &&
 				($attrs->{"Define"} eq "request" ||
 				$attrs->{"Define"} eq "reply")) {
-		parseErr($type, "decl", "Message not defined in message " .
-					"parent");
+		parseErr($type, "decl", "Message $type not defined in " .
+					"message parent");
 	}
 }
 
@@ -194,7 +194,8 @@ foreach $type (keys %parentmap) {
 	if (!defined($types{$type}) ||
 				($types{$type}->{"Define"} ne "request" &&
 				$types{$type}->{"Define"} ne "reply")) {
-		parseErr($parentName, $type, "Unknown type in message parent");
+		parseErr($parentName, $type, "Unknown type $type in message
+					parent");
 	}
 }
 
