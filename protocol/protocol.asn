@@ -42,6 +42,7 @@ Status ::= ENUMERATED {
 	ok,
 	message-unknown,
 	tls-required,
+	auth-failed,
 	parcel-locked,
 	no-such-parcel,
 	no-such-version,
@@ -50,23 +51,56 @@ Status ::= ENUMERATED {
 	...
 }
 
-/*** Trivial messages ********************************************************/
+/*** Startup and authentication messages *************************************/
+
+-- Define:	request
+-- Replies:	ClientHello
+-- Initiators:	server
+ServerHello ::= SEQUENCE {
+	software	String,
+	version		String,
+	banner		String,
+	protocolSupport	SupportedProtocolVersions,
+	tlsSupported	BOOLEAN,
+	tlsRequired	BOOLEAN,
+	authTypes	String			/* space-separated */ /* XXX */
+}
+
+SupportedProtocolVersions ::= BIT STRING {
+	v0 (0)
+}
 
 ClientHello ::= SEQUENCE {
 	software	String,
 	version		String,
-	...
+	protocolChosen	INTEGER
 }
 
-ServerHello ::= SEQUENCE {
-	software	String,
-	version		String,
-	...
+-- Define:	request
+-- Replies:	Status
+-- Initiators:	client
+StartTLS ::= NULL
+
+-- Define:	request
+-- Replies:	AuthReply
+-- Initiators:	client
+Authenticate ::= SEQUENCE {
+	method		String,
+	data		OCTET STRING
 }
 
-/* XXX need a way to change password */
-/* XXX need a way to force password change */
+-- Define:	request
+-- Replies:	AuthReply
+-- Initiators:	client
+AuthStep ::= OCTET STRING
 
+AuthReply ::= SEQUENCE {
+	status		Status,
+	message		String OPTIONAL,
+	data		OCTET STRING
+}
+
+/* XXX should password changing be part of the protocol? */
 
 /*** Parcel operations *******************************************************/
 
@@ -204,11 +238,6 @@ CommitVersion ::= SEQUENCE {
 
 }
 
--- Define:	request
--- Replies:	Status
--- Initiators:	client
-StartTLS ::= NULL
-
 /*** Top-level message *******************************************************/
 
 -- Define: parent
@@ -216,6 +245,9 @@ MessageBody ::= CHOICE {
 	status		Status,
 	serverhello	ServerHello,
 	clienthello	ClientHello,
+	auth		Authenticate,
+	authstep	AuthStep,
+	authreply	AuthReply,
 	chunkrequest	ChunkRequest,
 	data		ChunkReply,
 	acquire		AcquireLock,
