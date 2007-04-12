@@ -193,9 +193,9 @@ ParcelLockInfo ::= SEQUENCE {
 
 /*** Chunk operations ********************************************************/
 
--- can use this to ask what chunks are needed for upload?  we need to provide
--- a mechanism to lock chunks from GCing if we're about to upload them.
--- what if we upload the keyring first?
+/* can use this to ask what chunks are needed for upload?  we need to provide
+   a mechanism to lock chunks from GCing if we're about to upload them.
+   what if we upload the keyring first? */
 -- Define:	request
 -- Replies:	ChunkReply
 -- Initiators:	client server
@@ -215,17 +215,17 @@ ChunkReply ::= SEQUENCE {
 	data		OCTET STRING (SIZE (1..131072)) OPTIONAL
 }
 
--- should chunkrequest/chunkreply be bidirectional?  (it'd be chunkprovide
--- or something rather than chunkreply.)  has a nice symmetry to it.  but
--- then we'd need support for putting the tag in the reply, for unsolicited
--- uploads.
+/* should chunkrequest/chunkreply be bidirectional?  (it'd be chunkprovide
+   or something rather than chunkreply.)  has a nice symmetry to it.  but
+   then we'd need support for putting the tag in the reply, for unsolicited
+   uploads. */
 
--- we may want a SET OF keyrecs.
+/* we may want a SET OF keyrecs. */
 
--- should we upload the keyring entries along with the associated chunk, or
--- should keyring and data upload be separate?  the former requires some way
--- to mark a keyring as in-progress.  or, we could just have temporary keyrings
--- which can be committed.  after we commit to them they're immutable
+/* should we upload the keyring entries along with the associated chunk, or
+   should keyring and data upload be separate?  the former requires some way
+   to mark a keyring as in-progress.  or, we could just have temporary keyrings
+   which can be committed.  after we commit to them they're immutable */
 
 -- Define:	request
 -- Replies:	Status
