@@ -25,30 +25,32 @@ KeyRecord ::= SEQUENCE {
 Compression ::= ENUMERATED {
 	none,
 	zlib,
-	lzf
+	lzf,
+	...
 }
 
 Encryption ::= ENUMERATED {
+	none-sha1,
 	blowfish-sha1,
-	none-sha1
-}
-
-WantChunkInfo ::= BIT STRING {
-	key (0),
-	data (1)
+	aes-sha1,
+	...
 }
 
 -- Define:	reply
 Status ::= ENUMERATED {
 	ok,
+	continue,		/* authentication incomplete */
 	message-unknown,
+	not-supported,
 	tls-required,
+	not-authenticated,
 	auth-failed,
 	parcel-locked,
 	no-such-parcel,
 	no-such-version,
-	no-such-chunk,
-	need-data,
+	no-such-record,
+	no-data,
+	quota-exceeded,
 	...
 }
 
@@ -110,46 +112,73 @@ AuthReply ::= SEQUENCE {
 /* @force can be declined if an open connection currently exists which holds
    the lock? */
 -- Define:	request
--- Replies:	Status
+-- Replies:	NewCookie Status
 -- Initiators:	client
 AcquireLock ::= SEQUENCE {
 	parcel		String,
 	version		ParcelVer,
-	nonce		INTEGER OPTIONAL,
+	owner		String,
+	comment		String OPTIONAL,
+	cookie		INTEGER OPTIONAL,
 	force		BOOLEAN,
 	...
 }
+
+-- Define:	reply
+NewCookie ::= INTEGER
 
 -- Define:	request
 -- Replies:	Status
 -- Initiators:	client
 ReleaseLock ::= SEQUENCE {
-	parcel String,
-	nonce INTEGER,
+	parcel		String,
+	cookie		INTEGER,
+	...
+}
+
+/* On checkout, a temporary area for keyring updates is (logically) created
+   and is based on the keyring version that was checked out.  Keyring updates
+   may then be sent, and may supersede previous keyring updates.  Chunk uploads
+   may be made against the keys in the temporary keyring.  Commit will not
+   be allowed until every new key has the corresponding chunk data. */
+
+-- Define:	request
+-- Replies:	Status NeedTags
+-- Initiators:	client
+ParcelCommit ::= SEQUENCE {
+	parcel		String,
+	comment		String,
+	...
+}
+
+-- Define:	reply
+NeedTags ::= SEQUENCE OF Hash
+
+-- Define:	request
+-- Replies:	Status
+-- Initiators:	client
+AddParcel ::= SEQUENCE {
+	parcel		String,
+	comment		String OPTIONAL,
+	chunks		INTEGER (0..MAX),
 	...
 }
 
 -- Define:	request
 -- Replies:	Status
 -- Initiators:	client
-ParcelCheckout ::= SEQUENCE {
-	name		String,
-	version		ParcelVer,
-	owner		String,
+UpdateParcel ::= SEQUENCE {
+	parcel 		String,
 	comment		String OPTIONAL,
 	...
 }
 
-
-AddParcel ::= SEQUENCE {
-	name		String,
-	comment		String OPTIONAL,
-	...
-}
-
+-- Define:	request
+-- Replies:	Status
+-- Initiators:	client
 RemoveParcel ::= SEQUENCE {
-	name		String,
-	version		ParcelVer
+	parcel		String,
+	version		ParcelVer OPTIONAL
 }
 
 /*** ListParcels *************************************************************/
@@ -197,71 +226,90 @@ ParcelLockInfo ::= SEQUENCE {
    a mechanism to lock chunks from GCing if we're about to upload them.
    what if we upload the keyring first? */
 -- Define:	request
--- Replies:	ChunkReply
--- Initiators:	client server
+-- Replies:	ChunkReply Status
+-- Initiators:	client
 ChunkRequest ::= SEQUENCE {
-	by CHOICE {
-		cid	ChunkID,
-		tag	Hash
-	},
+	by		ChunkLookupKey,
 	want		WantChunkInfo,
 	...
 }
 
--- Define:	reply
-ChunkReply ::= SEQUENCE {
-	status		Status DEFAULT ok,
-	keyrec		EncryptedKeyRecord OPTIONAL,
-	data		OCTET STRING (SIZE (1..131072)) OPTIONAL
+ChunkLookupKey ::= CHOICE {
+	chunk		ChunkID,
+	tag		Hash
 }
 
-/* should chunkrequest/chunkreply be bidirectional?  (it'd be chunkprovide
-   or something rather than chunkreply.)  has a nice symmetry to it.  but
-   then we'd need support for putting the tag in the reply, for unsolicited
-   uploads. */
+WantChunkInfo ::= BIT STRING {
+	chunks (0),
+	key (1),
+	data (2)
+}
 
-/* we may want a SET OF keyrecs. */
-
-/* should we upload the keyring entries along with the associated chunk, or
-   should keyring and data upload be separate?  the former requires some way
-   to mark a keyring as in-progress.  or, we could just have temporary keyrings
-   which can be committed.  after we commit to them they're immutable */
+-- Define:	reply
+ChunkReply ::= SEQUENCE {
+	chunks		SET OF ChunkID OPTIONAL,
+	keyrec		EncryptedKeyRecord OPTIONAL,
+	data		OCTET STRING (SIZE (1..131072)) OPTIONAL,
+	...
+}
 
 -- Define:	request
 -- Replies:	Status
 -- Initiators:	client
 KeyUpdate ::= SEQUENCE {
-	keyrec		EncryptedKeyRecord
+	chunks		SET OF ChunkID,
+	tag		Hash,
+	keyrec		EncryptedKeyRecord,
+	...
 }
 
+-- Define:	request
+-- Replies:	Status
+-- Initiators:	client
 ChunkUpload ::= SEQUENCE {
 	tag		Hash,
 	data		OCTET STRING (SIZE (1..131072))
 }
 
-CommitVersion ::= SEQUENCE {
+/*** Miscellaneous messages **************************************************/
 
-}
+-- Define:	request
+-- Replies:	Status
+-- Initiators:	client server
+Ping ::= NULL
 
 /*** Top-level message *******************************************************/
 
--- Define: parent
+-- Define:	parent
 MessageBody ::= CHOICE {
 	status		Status,
+	ping		Ping,
+	
 	serverhello	ServerHello,
 	clienthello	ClientHello,
+	
+	starttls	StartTLS,
 	auth		Authenticate,
 	authstep	AuthStep,
 	authreply	AuthReply,
-	chunkrequest	ChunkRequest,
-	data		ChunkReply,
+	
 	acquire		AcquireLock,
+	cookie		NewCookie,
 	release		ReleaseLock,
-	checkout	ParcelCheckout,
+	add		AddParcel,
+	update		UpdateParcel,
+	remove		RemoveParcel,
+	commit		ParcelCommit,
+	needtags	NeedTags,
+	
 	list		ListParcels,
 	listreply	ListParcelsReply,
+	
+	chunkrequest	ChunkRequest,
+	data		ChunkReply,
 	keyupdate	KeyUpdate,
-	starttls	StartTLS,
+	upload		ChunkUpload,
+	
 	...
 }
 
