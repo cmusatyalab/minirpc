@@ -1,6 +1,7 @@
 #!/usr/bin/perl
 
-our $cflags = "-Werror -fskeletons-copy -funnamed-unions -fnative-types";
+our $cflags = "-Werror -fskeletons-copy -funnamed-unions -fnative-types " .
+			"-fcompound-names";
 
 use strict;
 use warnings;
