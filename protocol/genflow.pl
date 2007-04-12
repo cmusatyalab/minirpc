@@ -1,6 +1,6 @@
 #!/usr/bin/perl
 
-# Define: {request|parent}
+# Define: {request|reply|parent}
 # Replies: Status Foo
 # Initiators: {client|server}+
 
@@ -9,7 +9,9 @@ use warnings;
 use Getopt::Std;
 
 our $filename;
-our @alltypes;
+our %types;
+our %parentmap;
+our $parentName = undef;
 our %line;
 our $opt_o;
 
@@ -42,14 +44,15 @@ sub validateAttr {
 	my @vl;
 	
 	if ($attr eq "Define") {
-		$value =~ /^request|parent$/
+		$value =~ /^request|reply|parent$/
 			or parseErr($type, $attr, "Invalid definition");
 	}
 	if ($attr eq "Replies") {
 		foreach $rtype (split(/[\t ]+/, $value)) {
-			grep(/^$rtype$/, @alltypes)
-				or parseErr($type, $attr, "Invalid type " .
-						"reference name $rtype");
+			parseErr($type, $attr, "Unknown reply type $rtype")
+				if (!defined($types{$rtype}) ||
+					!defined($types{$rtype}->{"Define"}) ||
+					$types{$rtype}->{"Define"} ne "reply");
 		}
 	}
 	if ($attr eq "Initiators") {
@@ -72,7 +75,7 @@ sub validateHash {
 	}
 	if ($attrs->{"Define"} eq "request") {
 		@attrlist = ("Replies", "Initiators");
-	} elsif ($attrs->{"Define"} eq "parent") {
+	} else {
 		@attrlist = ()
 	}
 	
@@ -85,6 +88,13 @@ sub validateHash {
 		parseErr($type, "decl", "$attr attribute not specified")
 			if (!defined($attrs->{$attr}));
 		validateAttr($type, $attr, $attrs->{$attr});
+	}
+	
+	if (!defined($parentmap{$type}) &&
+				($attrs->{"Define"} eq "request" ||
+				$attrs->{"Define"} eq "reply")) {
+		parseErr($type, "decl", "Message not defined in message " .
+					"parent");
 	}
 }
 
@@ -113,9 +123,6 @@ die "No output file specified"
 
 # Stage 1: read input files and parse types and attributes
 my $attrs = {};
-my %types;
-my %parentmap;
-my $parentName = undef;
 my $inParent = 0;
 for $filename (@ARGV) {
 	open(FH, "<", $filename)
@@ -124,7 +131,6 @@ for $filename (@ARGV) {
 		if (/^[\t ]*([a-zA-Z0-9]+)[\t ]+::=/) {
 			# Type reference name definition
 			setline($1, "decl");
-			push @alltypes, $1;
 			if (%$attrs) {
 				if (defined($attrs->{"Define"}) and
 						$attrs->{"Define"} eq
@@ -160,8 +166,8 @@ for $filename (@ARGV) {
 			}
 			if (/^[\t ]*([a-zA-Z0-9-]+)[\t ]+([a-zA-Z0-9-]+),/) {
 				# Choice member
-				setline($parentName, $1);
-				parseErr($parentName, $1, "Multiple fields " .
+				setline($parentName, $2);
+				parseErr($parentName, $2, "Multiple fields " .
 						"with the same message type " .
 						"in message parent")
 					if defined($parentmap{$2});
@@ -183,6 +189,13 @@ die "No message parent found"
 	if !$parentName;
 while (($type, $attrs) = each %types) {
 	validateHash($type, $attrs);
+}
+foreach $type (keys %parentmap) {
+	if (!defined($types{$type}) ||
+				($types{$type}->{"Define"} ne "request" &&
+				$types{$type}->{"Define"} ne "reply")) {
+		parseErr($parentName, $type, "Unknown type in message parent");
+	}
 }
 
 # Stage 3: produce output
@@ -220,21 +233,14 @@ my $typevar;
 # Produce flow_params structure declarations
 while (($type, $attrs) = each %types) {
 	next if $attrs->{"Define"} ne "request";
-	parseErr($type, "decl", "Request $type not defined in message parent")
-		if !defined($parentmap{$type});
 	$replies = "";
 	$nr_replies = 0;
 	foreach $rtype (split(/[\t ]+/, $attrs->{"Replies"})) {
-		if (defined($parentmap{$rtype})) {
-			$typevar = $parentmap{$rtype};
-			$replies .= ", "
-				if $replies;
-			$replies .= "${parentName}_PR_$typevar";
-			$nr_replies++;
-		} else {
-			parseErr($type, "Replies", "Reply $rtype not defined" .
-					" in message parent");
-		}
+		$typevar = $parentmap{$rtype};
+		$replies .= ", "
+			if $replies;
+		$replies .= "${parentName}_PR_$typevar";
+		$nr_replies++;
 	}
 	$initiators = undef;
 	foreach $initiator (split(/[\t ]+/, $attrs->{"Initiators"})) {

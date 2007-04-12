@@ -38,6 +38,7 @@ WantChunkInfo ::= BIT STRING {
 	data (1)
 }
 
+-- Define:	reply
 Status ::= ENUMERATED {
 	ok,
 	message-unknown,
@@ -70,6 +71,7 @@ SupportedProtocolVersions ::= BIT STRING {
 	v0 (0)
 }
 
+-- Define:	reply
 ClientHello ::= SEQUENCE {
 	software	String,
 	version		String,
@@ -94,6 +96,7 @@ Authenticate ::= SEQUENCE {
 -- Initiators:	client
 AuthStep ::= OCTET STRING
 
+-- Define:	reply
 AuthReply ::= SEQUENCE {
 	status		Status,
 	message		String OPTIONAL,
@@ -160,6 +163,7 @@ ListParcels ::= SEQUENCE {
 	...
 }
 
+-- Define:	reply
 ListParcelsReply ::= SEQUENCE OF ParcelInfo
 
 ParcelInfo ::= SEQUENCE {
@@ -204,6 +208,7 @@ ChunkRequest ::= SEQUENCE {
 	...
 }
 
+-- Define:	reply
 ChunkReply ::= SEQUENCE {
 	status		Status DEFAULT ok,
 	keyrec		EncryptedKeyRecord OPTIONAL,
