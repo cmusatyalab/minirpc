@@ -79,7 +79,7 @@ Status ::= ENUMERATED {
 ServerHello ::= SEQUENCE {
 	software	String,
 	version		String,
-	banner		String,
+	banner		String OPTIONAL,
 	protocolSupport	SupportedProtocolVersions,
 	tlsSupported	BOOLEAN,
 	tlsRequired	BOOLEAN,
