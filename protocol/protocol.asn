@@ -5,11 +5,22 @@ BEGIN
 
 /*** Generic types ***********************************************************/
 
-ChunkID			::= INTEGER (0..MAX)
 ParcelVer		::= INTEGER (0..MAX)
 Hash			::= OCTET STRING (SIZE (16..64))
 EncryptedKeyRecord	::= OCTET STRING
+EncryptedKeyRootRecord	::= OCTET STRING
 String			::= UTF8String
+
+ChunkID	::= SEQUENCE {
+	cid		INTEGER (0..MAX),
+	plane		ChunkPlane
+}
+
+ChunkPlane ::= ENUMERATED {
+	disk,
+	memory,
+	...
+}
 
 DateRange ::= SEQUENCE {
 	start		GeneralizedTime,
@@ -20,6 +31,10 @@ KeyRecord ::= SEQUENCE {
 	key		Hash,
 	compress	Compression,
 	encrypt		Encryption
+}
+
+KeyRootRecord ::= SEQUENCE {
+	key		OCTET STRING
 }
 
 Compression ::= ENUMERATED {
@@ -41,6 +56,7 @@ Status ::= ENUMERATED {
 	ok,
 	continue,		/* authentication incomplete */
 	message-unknown,
+	message-too-large,
 	not-supported,
 	tls-required,
 	not-authenticated,
@@ -50,6 +66,7 @@ Status ::= ENUMERATED {
 	no-such-version,
 	no-such-record,
 	no-data,
+	data-incomplete,	/* XXX redundant? */
 	quota-exceeded,
 	...
 }
@@ -105,7 +122,8 @@ AuthReply ::= SEQUENCE {
 	data		OCTET STRING
 }
 
-/* XXX should password changing be part of the protocol? */
+/* XXX should password changing be part of the protocol?  could provide a
+   "get password change URL" message for user experience. */
 
 /*** Parcel operations *******************************************************/
 
@@ -143,16 +161,13 @@ ReleaseLock ::= SEQUENCE {
    be allowed until every new key has the corresponding chunk data. */
 
 -- Define:	request
--- Replies:	Status NeedTags
+-- Replies:	Status
 -- Initiators:	client
 ParcelCommit ::= SEQUENCE {
 	parcel		String,
 	comment		String,
 	...
 }
-
--- Define:	reply
-NeedTags ::= SEQUENCE OF Hash
 
 -- Define:	request
 -- Replies:	Status
@@ -161,6 +176,7 @@ AddParcel ::= SEQUENCE {
 	parcel		String,
 	comment		String OPTIONAL,
 	chunks		INTEGER (0..MAX),
+	root		EncryptedKeyRootRecord,
 	...
 }
 
@@ -170,6 +186,14 @@ AddParcel ::= SEQUENCE {
 UpdateParcel ::= SEQUENCE {
 	parcel 		String,
 	comment		String OPTIONAL,
+	...
+}
+
+-- Define:	request
+-- Replies:	Status
+-- Initiators:	client
+UpdateKeyRoot ::= SEQUENCE {
+	root		EncryptedKeyRootRecord,
 	...
 }
 
@@ -222,9 +246,6 @@ ParcelLockInfo ::= SEQUENCE {
 
 /*** Chunk operations ********************************************************/
 
-/* can use this to ask what chunks are needed for upload?  we need to provide
-   a mechanism to lock chunks from GCing if we're about to upload them.
-   what if we upload the keyring first? */
 -- Define:	request
 -- Replies:	ChunkReply Status
 -- Initiators:	client
@@ -268,8 +289,22 @@ KeyUpdate ::= SEQUENCE {
 -- Initiators:	client
 ChunkUpload ::= SEQUENCE {
 	tag		Hash,
-	data		OCTET STRING (SIZE (1..131072))
+	data		OCTET STRING (SIZE (1..131072)),
+	...
 }
+
+-- Define:	request
+-- Replies:	NeedTags Status
+-- Initiators:	client
+GetMissingData ::= SEQUENCE {
+	parcel		String,
+	startIndex	INTEGER (0..MAX),	/* message size limit applies */
+	stopIndex	INTEGER (0..MAX) OPTIONAL,
+	...
+}
+
+-- Define:	reply
+NeedTags ::= SEQUENCE OF Hash
 
 /*** Miscellaneous messages **************************************************/
 
@@ -298,9 +333,9 @@ MessageBody ::= CHOICE {
 	release		ReleaseLock,
 	add		AddParcel,
 	update		UpdateParcel,
+	rootupdate	UpdateKeyRoot,
 	remove		RemoveParcel,
 	commit		ParcelCommit,
-	needtags	NeedTags,
 	
 	list		ListParcels,
 	listreply	ListParcelsReply,
@@ -309,6 +344,8 @@ MessageBody ::= CHOICE {
 	data		ChunkReply,
 	keyupdate	KeyUpdate,
 	upload		ChunkUpload,
+	getmissing	GetMissingData,
+	needtags	NeedTags,
 	
 	...
 }
