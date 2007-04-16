@@ -41,6 +41,7 @@ static struct ISRMessage *alloc_listreply(void)
 	char **name;
 	time_t curtime;
 	
+	sleep(2);
 	ret=isr_alloc_message();
 	if (ret == NULL)
 		return ret;
@@ -48,6 +49,7 @@ static struct ISRMessage *alloc_listreply(void)
 	ret->body.present=MessageBody_PR_listreply;
 	for (name=names; *name != 0; name++) {
 		cur=malloc(sizeof(*cur));
+		memset(cur, 0, sizeof(*cur));
 		if (cur == NULL)
 			die("Malloc failure");
 		OCTET_STRING_fromString(&cur->name, *name);
@@ -65,6 +67,7 @@ static void request(struct isr_connection *conn, void *data,
 {
 	struct ISRMessage *reply;
 	
+	warn("Received request");
 	reply=malloc(sizeof(*reply));
 	if (reply == NULL)
 		die("malloc failed");
@@ -77,6 +80,7 @@ static void request(struct isr_connection *conn, void *data,
 		reply->body.status=Status_message_unknown;
 		break;
 	}
+	warn("Sending response");
 	if (isr_send_reply(conn, msg, reply))
 		warn("Couldn't send reply");
 }
@@ -111,11 +115,13 @@ int main(int argc, char **argv)
 			continue;
 		}
 		setsockoptval(fd, SOL_SOCKET, SO_KEEPALIVE, 1);
+		warn("Accepted connection");
 		if (isr_conn_add(&conn, set, fd, NULL)) {
 			warn("Error adding connection");
 			close(fd);
 			continue;
 		}
+		warn("Added connection");
 	}
 	return 0;
 }

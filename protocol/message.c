@@ -19,7 +19,11 @@ struct sync_data {
 
 struct ISRMessage *isr_alloc_message(void)
 {
-	return malloc(sizeof(struct ISRMessage));
+	struct ISRMessage *ret=malloc(sizeof(struct ISRMessage));
+	if (ret == NULL)
+		return ret;
+	memset(ret, 0, sizeof(struct ISRMessage));
+	return ret;
 }
 
 void isr_free_message(struct ISRMessage *msg)

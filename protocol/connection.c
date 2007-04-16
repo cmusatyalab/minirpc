@@ -136,6 +136,7 @@ static int need_writable(struct isr_connection *conn, int writable)
 
 static void conn_kill(struct isr_connection *conn)
 {
+	close(conn->fd);
 	/* XXX */
 }
 
@@ -149,6 +150,7 @@ static int process_buffer(struct isr_connection *conn, unsigned *start)
 				conn->recv_offset - *start);
 	switch (rval.code) {
 	case RC_OK:
+		printf("Received full buffer\n");
 		if (asn_check_constraints(&asn_DEF_ISRMessage, conn->recv_msg,
 					NULL, NULL)) {
 			isr_free_message(conn->recv_msg);
@@ -160,9 +162,11 @@ static int process_buffer(struct isr_connection *conn, unsigned *start)
 		conn->recv_msg=NULL;
 		break;
 	case RC_WMORE:
+		printf("Received partial buffer\n");
 		ret=-EAGAIN;
 		break;
 	case RC_FAIL:
+		printf("Failed to decode\n");
 		isr_free_message(conn->recv_msg);
 		conn->recv_msg=NULL;
 		ret=-EINVAL;
@@ -178,7 +182,10 @@ static void try_read_conn(struct isr_connection *conn)
 	unsigned start;
 	int ret;
 	
+	printf("try_read_conn\n");
 	while (1) {
+		printf("Read, start %d, count %d\n", conn->recv_offset,
+					conn->set->buflen - conn->recv_offset);
 		count=read(conn->fd, conn->recv_buf + conn->recv_offset,
 					conn->set->buflen - conn->recv_offset);
 		if (count == -1 && errno == EINTR) {
@@ -193,6 +200,8 @@ static void try_read_conn(struct isr_connection *conn)
 		
 		start=0;
 		while (1) {
+			printf("Processing buffer, %d bytes from %d\n",
+						count - start, start);
 			ret=process_buffer(conn, &start);
 			if (ret == -EINVAL) {
 				conn_kill(conn);
@@ -229,7 +238,8 @@ static int form_buffer(struct isr_connection *conn)
 	pthread_mutex_unlock(&conn->send_msgs_lock);
 	
 	rval=der_encode_to_buffer(&asn_DEF_ISRMessage, queued->msg,
-				conn->recv_buf, conn->set->buflen);
+				conn->send_buf, conn->set->buflen);
+	printf("Encoded %d bytes\n", rval.encoded);
 	if (rval.encoded == -1)
 		return -EINVAL;
 	conn->send_offset=0;
@@ -242,6 +252,7 @@ static void try_write_conn(struct isr_connection *conn)
 	ssize_t count;
 	int ret;
 	
+	printf("try_write_conn\n");
 	while (1) {
 		if (conn->send_offset == conn->send_length) {
 			ret=form_buffer(conn);

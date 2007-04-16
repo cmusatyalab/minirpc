@@ -37,6 +37,7 @@ void list_parcels(struct isr_connection *conn)
 		die("Couldn't allocate message");
 	request->body.present=MessageBody_PR_list;
 	isr_send_request(conn, request, &reply);
+	warn("Received response");
 	if (reply == NULL)
 		die("Received invalid reply");
 	for (i=0; i<reply->body.listreply.list.count; i++) {
@@ -74,6 +75,7 @@ int main(int argc, char **argv)
 	freeaddrinfo(info);
 	
 	isr_conn_add(&conn, set, fd, NULL);
+	warn("Sending message");
 	list_parcels(conn);
 	return 0;
 }
