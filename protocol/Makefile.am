@@ -13,7 +13,7 @@ flow.c flow.h: $(ASNFILES) genflow.pl
 	./genflow.pl -o flow $(filter-out %.pl,$^)
 BUILT_SOURCES = flow.h
 
-SUBDIRS = support classes
+SUBDIRS = support classes test
 
 noinst_LTLIBRARIES = libisrproto.la
 libisrproto_la_SOURCES = connection.c message.c
