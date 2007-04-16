@@ -4,6 +4,7 @@
 #include <netinet/tcp.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <unistd.h>
 #include <string.h>
 #include <errno.h>
 #include <netdb.h>
@@ -20,11 +21,16 @@ static void request(struct isr_connection *conn, void *conn_data,
 	die("Received request from server");
 }
 
-static void callback(struct isr_connection *conn, void *conn_data,
+static void getchunk_callback(struct isr_connection *conn, void *conn_data,
 			struct ISRMessage *request, struct ISRMessage *reply,
 			void *msg_data)
 {
-	
+	if (reply->body.present == MessageBody_PR_status) {
+		warn("Received error status from server");
+		return;
+	}
+	warn("==== Received reply to request for chunk %ld",
+				request->body.chunkrequest.by.chunk.cid);
 }
 
 void list_parcels(struct isr_connection *conn)
@@ -41,8 +47,30 @@ void list_parcels(struct isr_connection *conn)
 	if (reply == NULL)
 		die("Received invalid reply");
 	for (i=0; i<reply->body.listreply.list.count; i++) {
-		warn("%.*s", reply->body.listreply.list.array[i]->name.size,
+		warn("== %.*s", reply->body.listreply.list.array[i]->name.size,
 				reply->body.listreply.list.array[i]->name.buf);
+	}
+}
+
+void request_chunks(struct isr_connection *conn)
+{
+	struct ISRMessage *request;
+	int i;
+	
+	for (i=0; i<5; i++) {
+		request=isr_alloc_message();
+		if (request == NULL)
+			die("Couldn't allocate message");
+		
+		request->body.present=MessageBody_PR_chunkrequest;
+		request->body.chunkrequest.by.present=ChunkLookupKey_PR_chunk;
+		request->body.chunkrequest.by.chunk.cid=i;
+		request->body.chunkrequest.by.chunk.plane=ChunkPlane_disk;
+		request->body.chunkrequest.want.buf=malloc(1);
+		memset(request->body.chunkrequest.want.buf, 0, 1);
+		request->body.chunkrequest.want.size=1;
+		request->body.chunkrequest.want.bits_unused=8;
+		isr_send_request_async(conn, request, getchunk_callback, NULL);
 	}
 }
 
@@ -77,5 +105,7 @@ int main(int argc, char **argv)
 	isr_conn_add(&conn, set, fd, NULL);
 	warn("Sending message");
 	list_parcels(conn);
+	request_chunks(conn);
+	pause();
 	return 0;
 }
