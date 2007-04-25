@@ -31,5 +31,6 @@ AC_CONFIG_FILES([Makefile
 		protocol/Makefile
 		protocol/classes/Makefile
 		protocol/support/Makefile
-		protocol/test/Makefile])
+		protocol/test/Makefile
+		rpclib/Makefile])
 AC_OUTPUT
