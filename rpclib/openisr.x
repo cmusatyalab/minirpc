@@ -72,45 +72,30 @@ enum SupportedProtocolVersions {
 	VER_V0 = 0
 };
 
-/** Define:	request **/
-/** Replies:	ClientHello **/
-/** Initiators:	server **/
+struct ClientHello {
+	String		software;
+	String		ver;
+	unsigned	protocolSupportBitmap;
+};
+
 struct ServerHello {
+	Status		status;
 	String		software;
 	String		ver;
 	String		*banner;
-	unsigned	protocolSupportBitmap;
+	SupportedProtocolVersions	protocolChosen;
 	bool		tlsSupported;
 	bool		tlsRequired;
 	String		authTypes;		/* space-separated */ /* XXX */
 };
 
-/** Define:	reply **/
-struct ClientHello {
-	String		software;
-	String		ver;
-	SupportedProtocolVersions	protocolChosen;
-};
-
-/** Define:	request **/
-/** Replies:	Status **/
-/** Initiators:	client **/
-/* StartTLS */
-
-/** Define:	request **/
-/** Replies:	AuthReply **/
-/** Initiators:	client **/
 struct Authenticate {
 	String		method;
 	ChunkData	data;
 };
 
-/** Define:	request **/
-/** Replies:	AuthReply **/
-/** Initiators:	client **/
 typedef opaque AuthStep<>;
 
-/** Define:	reply **/
 struct AuthReply {
 	Status		status;
 	String		*message;
@@ -124,9 +109,6 @@ struct AuthReply {
 
 /* @force can be declined if an open connection currently exists which holds
    the lock? */
-/** Define:	request **/
-/** Replies:	NewCookie Status **/
-/** Initiators:	client **/
 struct AcquireLock {
 	String		parcel;
 	ParcelVer	ver;
@@ -136,12 +118,11 @@ struct AcquireLock {
 	bool		force;
 };
 
-/** Define:	reply **/
-typedef unsigned NewCookie;
+struct LockResult {
+	Status		status;
+	unsigned	*cookie;
+};
 
-/** Define:	request **/
-/** Replies:	Status **/
-/** Initiators:	client **/
 struct ReleaseLock {
 	String		parcel;
 	unsigned	cookie;
@@ -153,17 +134,11 @@ struct ReleaseLock {
    may be made against the keys in the temporary keyring.  Commit will not
    be allowed until every new key has the corresponding chunk data. */
 
-/** Define:	request **/
-/** Replies:	Status **/
-/** Initiators:	client **/
 struct ParcelCommit {
 	String		parcel;
 	String		comment;
 };
 
-/** Define:	request **/
-/** Replies:	Status **/
-/** Initiators:	client **/
 struct AddParcel {
 	String		parcel;
 	String		*comment;
@@ -171,24 +146,15 @@ struct AddParcel {
 	EncryptedKeyRootRecord root;
 };
 
-/** Define:	request **/
-/** Replies:	Status **/
-/** Initiators:	client **/
 struct UpdateParcel {
 	String		parcel;
 	String		*comment;
 };
 
-/** Define:	request **/
-/** Replies:	Status **/
-/** Initiators:	client **/
 struct UpdateKeyRoot {
 	EncryptedKeyRootRecord root;
 };
 
-/** Define:	request **/
-/** Replies:	Status **/
-/** Initiators:	client **/
 struct RemoveParcel {
 	String		parcel;
 	ParcelVer	*ver;
@@ -196,9 +162,6 @@ struct RemoveParcel {
 
 /*** ListParcels *************************************************************/
 
-/** Define:	request **/
-/** Replies:	ListParcelsReply **/
-/** Initiators:	client **/
 struct ListParcels {
 	String		*name;
 	DateRange	*history;
@@ -226,8 +189,10 @@ struct ParcelInfo {
 	ParcelVersionInfo	history<>;
 };
 
-/** Define:	reply **/
-typedef ParcelInfo ListParcelsReply<>;
+struct ListParcelsReply {
+	Status		status;
+	ParcelInfo	info<>;
+};
 
 /*** Chunk operations ********************************************************/
 
@@ -249,150 +214,63 @@ enum WantChunkInfo {
 	WANT_DATA = 2
 };
 
-/** Define:	request **/
-/** Replies:	ChunkReply Status **/
-/** Initiators:	client **/
 struct ChunkRequest {
 	ChunkLookupKey	by;
 	unsigned	WantChunkInfoBits;
 };
 
-/** Define:	reply **/
 struct ChunkReply {
+	Status		status;
 	ChunkArray	*chunks;
 	EncryptedKeyRecord *keyrec;
 	ChunkData	*data;
 };
 
-/** Define:	request **/
-/** Replies:	Status **/
-/** Initiators:	client **/
 struct KeyUpdate {
 	ChunkArray	chunks;
 	Hash		tag;
 	EncryptedKeyRecord keyrec;
 };
 
-/** Define:	request **/
-/** Replies:	Status **/
-/** Initiators:	client **/
 struct ChunkUpload {
 	Hash		tag;
 	ChunkData	data;
 };
 
-/** Define:	request **/
-/** Replies:	NeedTags Status **/
-/** Initiators:	client **/
 struct GetMissingData {
 	String		parcel;
 	unsigned	startIndex;	/* message size limit applies */
 	unsigned	*stopIndex;
 };
 
-/** Define:	reply **/
-typedef Hash NeedTags<>;
-
-/*** Miscellaneous messages **************************************************/
-
-/** Define:	request **/
-/** Replies:	Status **/
-/** Initiators:	client server **/
-/* Ping */
-
-/*** Top-level message *******************************************************/
-
-enum MessageType {
-	MTYPE_Status,
-	MTYPE_Ping,
-	
-	MTYPE_ServerHello,
-	MTYPE_ClientHello,
-	
-	MTYPE_StartTLS,
-	MTYPE_Authenticate,
-	MTYPE_AuthStep,
-	MTYPE_AuthReply,
-	
-	MTYPE_AcquireLock,
-	MTYPE_NewCookie,
-	MTYPE_ReleaseLock,
-	MTYPE_AddParcel,
-	MTYPE_UpdateParcel,
-	MTYPE_UpdateKeyRoot,
-	MTYPE_RemoveParcel,
-	MTYPE_ParcelCommit,
-	
-	MTYPE_ListParcels,
-	MTYPE_ListParcelsReply,
-	
-	MTYPE_ChunkRequest,
-	MTYPE_ChunkReply,
-	MTYPE_KeyUpdate,
-	MTYPE_ChunkUpload,
-	MTYPE_GetMissingData,
-	MTYPE_NeedTags
-};
-
-/** Define:	parent **/
-union MessageBody switch (MessageType type) {
-case MTYPE_Status:
+struct NeedTags {
 	Status		status;
-case MTYPE_Ping:
-	void;
-	
-case MTYPE_ServerHello:
-	ServerHello	serverhello;
-case MTYPE_ClientHello:
-	ClientHello	clienthello;
-	
-case MTYPE_StartTLS:
-	void;
-case MTYPE_Authenticate:
-	Authenticate	authenticate;
-case MTYPE_AuthStep:
-	AuthStep	authstep;
-case MTYPE_AuthReply:
-	AuthReply	authreply;
-	
-case MTYPE_AcquireLock:
-	AcquireLock	acquirelock;
-case MTYPE_NewCookie:
-	NewCookie	newcookie;
-case MTYPE_ReleaseLock:
-	ReleaseLock	releaselock;
-case MTYPE_AddParcel:
-	AddParcel	addparcel;
-case MTYPE_UpdateParcel:
-	UpdateParcel	updateparcel;
-case MTYPE_UpdateKeyRoot:
-	UpdateKeyRoot	updatekeyroot;
-case MTYPE_RemoveParcel:
-	RemoveParcel	removeparcel;
-case MTYPE_ParcelCommit:
-	ParcelCommit	parcelcommit;
-	
-case MTYPE_ListParcels:
-	ListParcels	listparcels;
-case MTYPE_ListParcelsReply:
-	ListParcelsReply listparcelsreply;
-	
-case MTYPE_ChunkRequest:
-	ChunkRequest	chunkrequest;
-case MTYPE_ChunkReply:
-	ChunkReply	chunkreply;
-case MTYPE_KeyUpdate:
-	KeyUpdate	keyupdate;
-case MTYPE_ChunkUpload:
-	ChunkUpload	chunkupload;
-case MTYPE_GetMissingData:
-	GetMissingData	getmissingdata;
-case MTYPE_NeedTags:
-	NeedTags	needtags;
+	Hash		need<>;
 };
 
-struct ISRMessage {
-	unsigned	sequence;
-	bool		isReply;
-	MessageBody	body;
-};
+/*** Program *****************************************************************/
+
+program OPENISR {
+	version V0 {
+		ServerHello hello(ClientHello) = 1;
+		void start_tls() = 2;
+		AuthReply start_auth(Authenticate) = 3;
+		AuthReply auth_step(AuthStep) = 4;
+		
+		LockResult acquire_lock(AcquireLock) = 5;
+		Status release_lock(ReleaseLock) = 6;
+		Status parcel_commit(ParcelCommit) = 7;
+		Status add_parcel(AddParcel) = 8;
+		Status update_parcel(UpdateParcel) = 9;
+		Status update_key_root(UpdateKeyRoot) = 10;
+		Status remove_parcel(RemoveParcel) = 11;
+		ListParcelsReply list_parcels(ListParcels) = 12;
+		
+		ChunkReply chunk_request(ChunkRequest) = 13;
+		Status key_update(KeyUpdate) = 14;
+		Status chunk_upload(ChunkUpload) = 15;
+		NeedTags get_missing_data(GetMissingData) = 16;
+		
+		Status ping() = 17;
+	} = 0;
+} = 23456789;
