@@ -51,8 +51,6 @@ struct KeyRootRecord {
 enum Status {
 	STATUS_OK,
 	STATUS_CONTINUE,		/* authentication incomplete */
-	STATUS_MESSAGE_UNKNOWN,
-	STATUS_MESSAGE_TOO_LARGE,
 	STATUS_NOT_SUPPORTED,
 	STATUS_TLS_REQUIRED,
 	STATUS_NOT_AUTHENTICATED,
@@ -79,7 +77,6 @@ struct ClientHello {
 };
 
 struct ServerHello {
-	Status		status;
 	String		software;
 	String		ver;
 	String		*banner;
@@ -119,8 +116,7 @@ struct AcquireLock {
 };
 
 struct LockResult {
-	Status		status;
-	unsigned	*cookie;
+	unsigned	cookie;
 };
 
 struct ReleaseLock {
@@ -190,7 +186,6 @@ struct ParcelInfo {
 };
 
 struct ListParcelsReply {
-	Status		status;
 	ParcelInfo	info<>;
 };
 
@@ -220,7 +215,6 @@ struct ChunkRequest {
 };
 
 struct ChunkReply {
-	Status		status;
 	ChunkArray	*chunks;
 	EncryptedKeyRecord *keyrec;
 	ChunkData	*data;
@@ -244,7 +238,6 @@ struct GetMissingData {
 };
 
 struct NeedTags {
-	Status		status;
 	Hash		need<>;
 };
 
