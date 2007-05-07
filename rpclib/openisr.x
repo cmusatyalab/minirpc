@@ -86,17 +86,17 @@ struct ServerHello {
 	String		authTypes;		/* space-separated */ /* XXX */
 };
 
+typedef opaque AuthData<>;
+
 struct Authenticate {
 	String		method;
-	ChunkData	data;
+	AuthData	data;
 };
-
-typedef opaque AuthStep<>;
 
 struct AuthReply {
 	Status		status;
 	String		*message;
-	ChunkData	data;
+	AuthData	data;
 };
 
 /* XXX should password changing be part of the protocol?  could provide a
@@ -180,14 +180,12 @@ struct ParcelLockInfo {
 struct ParcelInfo {
 	String		name;
 	String		*comment;
-	ParcelVersionInfo	current;
+	ParcelVersionInfo current;
 	ParcelLockInfo	*acquired;
-	ParcelVersionInfo	history<>;
+	ParcelVersionInfo history<>;
 };
 
-struct ListParcelsReply {
-	ParcelInfo	info<>;
-};
+typedef ParcelInfo ListParcelsReply<>;
 
 /*** Chunk operations ********************************************************/
 
@@ -237,9 +235,7 @@ struct GetMissingData {
 	unsigned	*stopIndex;
 };
 
-struct NeedTags {
-	Hash		need<>;
-};
+typedef Hash NeedTags<>;
 
 /*** Program *****************************************************************/
 
