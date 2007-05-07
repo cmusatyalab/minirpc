@@ -8,17 +8,16 @@ BUILT_SOURCES = $(GEN_H)
 
 %_xdr.c: %.x
 	rm -f $@
-	rpcgen -M -N -DRPCGEN -c $^ | \
+	rpcgen -M -N -c $^ | \
 		sed -e 's/"$(^:%.x=%\.h)"/"$(^:%.x=%_xdr.h)"/g' > $@ || \
 		(rm $@ && false)
 
 %_xdr.h: %.x
 	rm -f $@
-	rpcgen -M -N -DRPCGEN -h -o $@ $^
+	rpcgen -M -N -h -o $@ $^
 
-
-#flow.c flow.h: $(ASNFILES) genflow.pl
-#	./genflow.pl -o flow $(filter-out %.pl,$^)
+%.x: %.mx stubgen.pl
+	./stubgen.pl -o $(@:%.x=%) $(filter-out %.pl,$^)
 
 SUBDIRS = test
 

@@ -239,29 +239,29 @@ typedef Hash NeedTags<>;
 
 /*** Program *****************************************************************/
 
-#ifndef RPCGEN
-program OPENISR {
-	version V0 {
-		ServerHello hello(ClientHello) = 1;
-		void start_tls() = 2;
-		AuthReply start_auth(Authenticate) = 3;
-		AuthReply auth_step(AuthStep) = 4;
-		
-		LockResult acquire_lock(AcquireLock) = 5;
-		Status release_lock(ReleaseLock) = 6;
-		Status parcel_commit(ParcelCommit) = 7;
-		Status add_parcel(AddParcel) = 8;
-		Status update_parcel(UpdateParcel) = 9;
-		Status update_key_root(UpdateKeyRoot) = 10;
-		Status remove_parcel(RemoveParcel) = 11;
-		ListParcelsReply list_parcels(ListParcels) = 12;
-		
-		ChunkReply chunk_request(ChunkRequest) = 13;
-		Status key_update(KeyUpdate) = 14;
-		Status chunk_upload(ChunkUpload) = 15;
-		NeedTags get_missing_data(GetMissingData) = 16;
-		
-		Status ping() = 17;
-	} = 0;
-} = 23456789;
-#endif
+serverprocs {
+	ServerHello hello(ClientHello) = 1;
+	void start_tls() = 2;
+	AuthReply start_auth(Authenticate) = 3;
+	AuthReply auth_step(AuthData) = 4;
+	
+	LockResult acquire_lock(AcquireLock) = 5;
+	Status release_lock(ReleaseLock) = 6;
+	Status parcel_commit(ParcelCommit) = 7;
+	Status add_parcel(AddParcel) = 8;
+	Status update_parcel(UpdateParcel) = 9;
+	Status update_key_root(UpdateKeyRoot) = 10;
+	Status remove_parcel(RemoveParcel) = 11;
+	ListParcelsReply list_parcels(ListParcels) = 12;
+	
+	ChunkReply chunk_request(ChunkRequest) = 13;
+	Status key_update(KeyUpdate) = 14;
+	Status chunk_upload(ChunkUpload) = 15;
+	NeedTags get_missing_data(GetMissingData) = 16;
+	
+	Status ping() = 17;
+}
+
+clientprocs {
+	
+}
