@@ -64,6 +64,10 @@ for $filename (@ARGV) {
 				$types{$2} = 1;
 			}
 		} else {
+			if (/}/) {
+				$inProcDefs = 0;
+				next;
+			}
 			if (/^\s*$type_re\s+$sym_re\($type_re\)\s*=
 						\s*([1-9][0-9]*)\s*;/x) {
 				$ret = $1;
@@ -74,9 +78,10 @@ for $filename (@ARGV) {
 					if !defined($types{$arg});
 				parseErr("No such type: $ret")
 					if !defined($types{$ret});
-			}
-			if (/}/) {
-				$inProcDefs = 0;
+			} elsif (/^\s*$/) {
+				next;
+			} else {
+				parseErr("Invalid syntax");
 			}
 		}
 	}

@@ -241,7 +241,7 @@ typedef Hash NeedTags<>;
 
 serverprocs {
 	ServerHello hello(ClientHello) = 1;
-	void start_tls() = 2;
+	void start_tls(void) = 2;
 	AuthReply start_auth(Authenticate) = 3;
 	AuthReply auth_step(AuthData) = 4;
 	
@@ -259,7 +259,7 @@ serverprocs {
 	Status chunk_upload(ChunkUpload) = 15;
 	NeedTags get_missing_data(GetMissingData) = 16;
 	
-	Status ping() = 17;
+	Status ping(void) = 17;
 }
 
 clientprocs {
