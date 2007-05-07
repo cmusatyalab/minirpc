@@ -1,23 +1,13 @@
-AM_CPPFLAGS = -Iclasses -Isupport
 AM_CFLAGS = -Wall -Wstrict-prototypes -Wmissing-prototypes
 
-# autogen.sh reads this
-ASNFILES = protocol.asn
+#flow.c flow.h: $(ASNFILES) genflow.pl
+#	./genflow.pl -o flow $(filter-out %.pl,$^)
+#BUILT_SOURCES = flow.h
 
-include stamp
-stamp: $(ASNFILES) compile.pl
-	./compile.pl $(filter-out %.pl,$^)
-MAINTAINERCLEANFILES = stamp
-
-flow.c flow.h: $(ASNFILES) genflow.pl
-	./genflow.pl -o flow $(filter-out %.pl,$^)
-BUILT_SOURCES = flow.h
-
-SUBDIRS = support classes test
+SUBDIRS = test
 
 noinst_LTLIBRARIES = libisrproto.la
 libisrproto_la_SOURCES = connection.c message.c
 libisrproto_la_SOURCES += hash.h list.h protocol.h internal.h
 libisrproto_la_SOURCES += flow.c flow.h
-libisrproto_la_LIBADD = support/libsupport.la classes/libclasses.la
 libisrproto_la_LDFLAGS = -static

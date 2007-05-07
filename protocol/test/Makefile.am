@@ -1,4 +1,4 @@
-AM_CPPFLAGS = -I.. -I../classes -I../support
+AM_CPPFLAGS = -I..
 AM_CFLAGS = -Wall -Wstrict-prototypes
 AM_LDFLAGS = -L.. -lisrproto -lpthread
 
