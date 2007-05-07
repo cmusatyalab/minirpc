@@ -36,6 +36,7 @@ foreach $type ("int", "unsigned", "unsigned int", "enum", "bool", "hyper",
 	$types{$type} = 1;
 }
 
+my @procNums = ({}, {});	# First hash is client, second is server
 my $inProcDefs = 0;
 my $isServerDefs = 0;
 my $sym_re = '([a-zA-Z0-9_]+)';
@@ -83,6 +84,10 @@ for $filename (@ARGV) {
 					if !defined($types{$arg});
 				parseErr("No such type: $ret")
 					if !defined($types{$ret});
+				parseErr("Duplicate procedure number")
+					if defined($procNums[$isServerDefs]
+								->{$num});
+				$procNums[$isServerDefs]->{$num}=1;
 				print "noreply " if $noreply;
 				print "$func($arg, $ret) = $num\n";
 			} elsif (/^\s*$/) {
