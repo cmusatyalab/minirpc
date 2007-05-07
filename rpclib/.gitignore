@@ -1,4 +1,4 @@
-openisr.h
+openisr_xdr.h
 openisr_xdr.c
-minirpc.h
+minirpc_xdr.h
 minirpc_xdr.c
