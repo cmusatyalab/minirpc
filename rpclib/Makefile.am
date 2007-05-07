@@ -1,6 +1,12 @@
 EXTRA_PROGRAMS = client
-client_SOURCES = openisr_clnt.c openisr_xdr.c openisr.h minirpc_xdr.c minirpc.h
-MAINTAINERCLEANFILES = openisr_clnt.c openisr_xdr.c openisr_svc.c openisr.h
+GEN = openisr_xdr.c openisr.h minirpc_xdr.c minirpc.h
+client_SOURCES = $(GEN)
+MAINTAINERCLEANFILES = $(GEN)
 
-%.h %_clnt.c %_svc.c %_xdr.c: %.x
-	rpcgen -5 -M -N $^
+%_xdr.c: %.x
+	rm -f $@
+	rpcgen -M -N -DRPCGEN -c -o $@ $^
+
+%.h: %.x
+	rm -f $@
+	rpcgen -M -N -DRPCGEN -h -o $@ $^

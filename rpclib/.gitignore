@@ -1,6 +1,4 @@
 openisr.h
-openisr_clnt.c
-openisr_svc.c
 openisr_xdr.c
 minirpc.h
 minirpc_xdr.c

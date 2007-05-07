@@ -243,6 +243,7 @@ struct NeedTags {
 
 /*** Program *****************************************************************/
 
+#ifndef RPCGEN
 program OPENISR {
 	version V0 {
 		ServerHello hello(ClientHello) = 1;
@@ -267,3 +268,4 @@ program OPENISR {
 		Status ping() = 17;
 	} = 0;
 } = 23456789;
+#endif
