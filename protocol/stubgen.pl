@@ -30,7 +30,7 @@ my %types;
 my $type;
 # These are the primitive types that can appear as procedure parameters.
 # Array types (opaque, string) and unions are not supported here.
-foreach $type ("int", "unsigned(\\s int)?", "enum", "bool", "hyper",
+foreach $type ("int", "unsigned", "unsigned int", "enum", "bool", "hyper",
 			"unsigned hyper", "float", "double", "quadruple",
 			"void") {
 	$types{$type} = 1;
@@ -38,7 +38,8 @@ foreach $type ("int", "unsigned(\\s int)?", "enum", "bool", "hyper",
 
 my $inProcDefs = 0;
 my $isServerDefs = 0;
-my $sym = "([a-zA-Z0-9_]+)";
+my $sym_re = '([a-zA-Z0-9_]+)';
+my $type_re = '((unsigned\s+)?[a-zA-Z0-9_]+)';
 my $arg;
 my $ret;
 my $func;
@@ -54,23 +55,24 @@ for $filename (@ARGV) {
 				next;
 			}
 			print XF;
-			if (/^\s*(struct|enum)\s+$sym\s+{/) {
+			if (/^\s*(struct|enum)\s+$sym_re\s+{/) {
 				print "Found $1 $2\n";
 				$types{$2} = 1;
 			}
-			if (/^\s*typedef\s+$sym\s+$sym[<\[]?/) {
+			if (/^\s*typedef\s+$sym_re\s+$type_re[<\[]?/) {
 				print "Found typedef $2\n";
 				$types{$2} = 1;
 			}
 		} else {
-			if (/^\s*$sym\s+$sym\($sym\)\s*=\s*([1-9][0-9]*)\s*;/) {
+			if (/^\s*$type_re\s+$sym_re\($type_re\)\s*=
+						\s*([1-9][0-9]*)\s*;/x) {
 				$ret = $1;
-				$func = $2;
-				$arg = $3;
-				$num = $4;
-				parseErr("No such type $arg")
+				$func = $3;
+				$arg = $4;
+				$num = $6;
+				parseErr("No such type: $arg")
 					if !defined($types{$arg});
-				parseErr("No such type $ret")
+				parseErr("No such type: $ret")
 					if !defined($types{$ret});
 			}
 			if (/}/) {
