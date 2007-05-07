@@ -240,26 +240,26 @@ typedef Hash NeedTags<>;
 /*** Program *****************************************************************/
 
 serverprocs {
-	ServerHello hello(ClientHello) = 1;
-	void start_tls(void) = 2;
-	AuthReply start_auth(Authenticate) = 3;
-	AuthReply auth_step(AuthData) = 4;
+	hello(ClientHello, ServerHello) = 1;
+	noreply start_tls() = 2;
+	start_auth(Authenticate, AuthReply) = 3;
+	auth_step(AuthData, AuthReply) = 4;
 	
-	LockResult acquire_lock(AcquireLock) = 5;
-	Status release_lock(ReleaseLock) = 6;
-	Status parcel_commit(ParcelCommit) = 7;
-	Status add_parcel(AddParcel) = 8;
-	Status update_parcel(UpdateParcel) = 9;
-	Status update_key_root(UpdateKeyRoot) = 10;
-	Status remove_parcel(RemoveParcel) = 11;
-	ListParcelsReply list_parcels(ListParcels) = 12;
+	acquire_lock(AcquireLock, LockResult) = 5;
+	release_lock(ReleaseLock) = 6;
+	parcel_commit(ParcelCommit) = 7;
+	add_parcel(AddParcel) = 8;
+	update_parcel(UpdateParcel) = 9;
+	update_key_root(UpdateKeyRoot) = 10;
+	remove_parcel(RemoveParcel) = 11;
+	list_parcels(ListParcels, ListParcelsReply) = 12;
 	
-	ChunkReply chunk_request(ChunkRequest) = 13;
-	Status key_update(KeyUpdate) = 14;
-	Status chunk_upload(ChunkUpload) = 15;
-	NeedTags get_missing_data(GetMissingData) = 16;
+	chunk_request(ChunkRequest, ChunkReply) = 13;
+	key_update(KeyUpdate) = 14;
+	chunk_upload(ChunkUpload) = 15;
+	get_missing_data(GetMissingData, NeedTags) = 16;
 	
-	Status ping(void) = 17;
+	ping() = 17;
 }
 
 clientprocs {

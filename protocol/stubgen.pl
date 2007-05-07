@@ -40,6 +40,7 @@ my $inProcDefs = 0;
 my $isServerDefs = 0;
 my $sym_re = '([a-zA-Z0-9_]+)';
 my $type_re = '((unsigned\s+)?[a-zA-Z0-9_]+)';
+my $noreply;
 my $arg;
 my $ret;
 my $func;
@@ -55,11 +56,11 @@ for $filename (@ARGV) {
 				next;
 			}
 			print XF;
-			if (/^\s*(struct|enum)\s+$sym_re\s+{/) {
+			if (/^\s*(struct|enum)\s+$sym_re\s+{/o) {
 				print "Found $1 $2\n";
 				$types{$2} = 1;
 			}
-			if (/^\s*typedef\s+$sym_re\s+$type_re[<\[]?/) {
+			if (/^\s*typedef\s+$sym_re\s+$type_re[<\[]?/o) {
 				print "Found typedef $2\n";
 				$types{$2} = 1;
 			}
@@ -68,16 +69,22 @@ for $filename (@ARGV) {
 				$inProcDefs = 0;
 				next;
 			}
-			if (/^\s*$type_re\s+$sym_re\($type_re\)\s*=
-						\s*([1-9][0-9]*)\s*;/x) {
-				$ret = $1;
-				$func = $3;
+			if (/^\s*(noreply)?\s+$sym_re\(($type_re
+						(,\s+$type_re)?)?\)\s*=
+						\s*([1-9][0-9]*)\s*;/ox) {
+				$noreply = defined($1);
+				$func = $2;
 				$arg = $4;
-				$num = $6;
+				$ret = $7;
+				$num = $9;
+				$arg = "void" if !defined($arg);
+				$ret = "void" if !defined($ret);
 				parseErr("No such type: $arg")
 					if !defined($types{$arg});
 				parseErr("No such type: $ret")
 					if !defined($types{$ret});
+				print "noreply " if $noreply;
+				print "$func($arg, $ret) = $num\n";
 			} elsif (/^\s*$/) {
 				next;
 			} else {
