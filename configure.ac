@@ -29,6 +29,5 @@ AC_PROG_LIBTOOL
 
 AC_CONFIG_FILES([Makefile
 		protocol/Makefile
-		protocol/test/Makefile
-		rpclib/Makefile])
+		protocol/test/Makefile])
 AC_OUTPUT
