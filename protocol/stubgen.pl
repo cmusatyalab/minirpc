@@ -127,6 +127,9 @@ for $filename (@ARGV) {
 				parseErr("Duplicate procedure number")
 					if defined($procNums[$isServerDefs]
 								->{$num});
+				parseErr("noreply attribute on procedure not" .
+							" returning void")
+					if $noreply && $ret ne "void";
 				$procNums[$isServerDefs]->{$num}=1;
 				print "noreply " if $noreply;
 				print "$func($arg, $ret) = $num\n";
