@@ -1,7 +1,7 @@
 AM_CFLAGS = -Wall -Wstrict-prototypes -Wmissing-prototypes
 
-GEN_C = openisr_xdr.c minirpc_xdr.c
-GEN_H = openisr_xdr.h minirpc_xdr.h
+GEN_C = minirpc_xdr.c openisr_xdr.c openisr_client.c openisr_server.c
+GEN_H = minirpc_xdr.h openisr_xdr.h openisr_client.h openisr_server.h
 GEN = $(GEN_C) $(GEN_H)
 MAINTAINERCLEANFILES = $(GEN)
 BUILT_SOURCES = $(GEN_H)
@@ -16,8 +16,8 @@ BUILT_SOURCES = $(GEN_H)
 	rm -f $@
 	rpcgen -M -N -h -o $@ $^
 
-%.x: %.mx stubgen.pl
-	./stubgen.pl -o $(@:%.x=%) $(filter-out %.pl,$^)
+%.x %_client.c %_client.h %_server.c %_server.h: %.mx stubgen.pl
+	./stubgen.pl -o $(<:%.mx=%) $(filter-out %.pl,$^)
 
 SUBDIRS = test
 
