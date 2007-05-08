@@ -1,7 +1,7 @@
 #ifndef PROTOCOL_H
 #define PROTOCOL_H
 
-#include "ISRMessage.h"
+struct ISRMessage;
 
 struct isr_conn_set;
 struct isr_connection;
