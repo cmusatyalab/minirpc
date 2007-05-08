@@ -52,4 +52,7 @@ int send_message(struct isr_connection *conn, struct ISRMessage *msg);
 unsigned request_hash(struct list_head *head, unsigned buckets);
 void process_incoming_message(struct isr_connection *conn);
 
+/* xdr_len.c */
+void xdrlen_create(XDR *xdrs);
+
 #endif
