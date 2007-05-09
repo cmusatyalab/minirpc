@@ -1,44 +1,32 @@
 #include <pthread.h>
 #define LIBPROTOCOL
 #include "internal.h"
-#include "flow.h"
 
 struct pending_reply {
 	struct list_head lh_pending;
-	struct ISRMessage *request;
-	reply_callback_fn *callback;
-	void *data;
-};
-
-struct sync_data {
-	pthread_cond_t *cond;
-	struct ISRMessage **reply;
+	unsigned sequence;
+	unsigned cmd;
+	int async;
+	union {
+		struct {
+			pthread_cond_t cond;
+			struct minirpc_message **reply;
+		} sync;
+		struct {
+			reply_callback_fn *callback;
+			void *private;
+		} async;
+	} data;
 };
 
 /* XXX deal with sequence number wraparound */
-
-struct ISRMessage *isr_alloc_message(void)
-{
-	struct ISRMessage *ret=malloc(sizeof(struct ISRMessage));
-	if (ret == NULL)
-		return ret;
-	memset(ret, 0, sizeof(struct ISRMessage));
-	return ret;
-}
-
-void isr_free_message(struct ISRMessage *msg)
-{
-	if (msg == NULL)
-		return;
-	ASN_STRUCT_FREE(asn_DEF_ISRMessage, msg);
-}
 
 /* XXX It would be nice to be able to make this static */
 unsigned request_hash(struct list_head *head, unsigned buckets)
 {
 	struct pending_reply *pending=list_entry(head, struct pending_reply,
 				lh_pending);
-	return pending->request->sequence % buckets;
+	return pending->sequence % buckets;
 }
 
 static int request_match(struct list_head *head, void *data)
@@ -46,10 +34,10 @@ static int request_match(struct list_head *head, void *data)
 	struct pending_reply *pending=list_entry(head, struct pending_reply,
 				lh_pending);
 	int *sequence=data;
-	return (*sequence == pending->request->sequence);
+	return (*sequence == pending->sequence);
 }
 
-static struct pending_reply *request_lookup(struct isr_connection *conn,
+static struct pending_reply *request_lookup(struct minirpc_connection *conn,
 			int sequence)
 {
 	struct list_head *head;
@@ -61,67 +49,36 @@ static struct pending_reply *request_lookup(struct isr_connection *conn,
 	return list_entry(head, struct pending_reply, lh_pending);
 }
 
-static int validate_request(struct ISRMessage *request, int fromServer,
-			int *willReply)
+static int send_request_setup(struct minirpc_connection *conn,
+			struct minirpc_message *request,
+			struct pending_reply **pending_reply)
 {
-	const struct flow_params *params;
+	struct pending_reply *pending;
 	
-	params=MessageBody_get_flow(request->body.present);
-	if (params == NULL)
-		return -EINVAL;
-	if (!fromServer && !(params->initiators & INITIATOR_CLIENT))
-		return -EINVAL;
-	if (fromServer && !(params->initiators & INITIATOR_SERVER))
-		return -EINVAL;
-	if (willReply != NULL)
-		*willReply = params->nr_reply_types ? 1 : 0;
-	return 0;
-}
-
-static int validate_reply(struct ISRMessage *request, struct ISRMessage *reply)
-{
-	const struct flow_params *params;
-	int i;
-	
-	params=MessageBody_get_flow(request->body.present);
-	if (params == NULL)
-		return -EINVAL;
-	for (i=0; i<params->nr_reply_types; i++)
-		if (reply->body.present == params->reply_types[i])
-			break;
-	if (i == params->nr_reply_types)
-		return -EINVAL;
-	return 0;
-}
-
-/* If callback != NULL, returns with pending_replies_lock held, except on
-   error */
-static int _send_request_async(struct isr_connection *conn,
-			struct ISRMessage *request,
-			reply_callback_fn *callback, void *data)
-{
-	struct pending_reply *pending=NULL;  /* make gcc happy */
-	int ret;
-	
-	pthread_mutex_lock(&conn->next_sequence_lock);
-	request->sequence=conn->next_sequence++;
-	pthread_mutex_unlock(&conn->next_sequence_lock);
-	request->isReply=0;
-	
-	if (callback != NULL) {
+	if (pending_reply != NULL) {
 		pending=malloc(sizeof(*pending));
 		if (pending == NULL)
-			return -ENOMEM;
+			return MINIRPC_NOMEM;
 		INIT_LIST_HEAD(&pending->lh_pending);
-		pending->request=request;
-		pending->callback=callback;
-		pending->data=data;
-		pthread_mutex_lock(&conn->pending_replies_lock);
-		hash_add(conn->pending_replies, &pending->lh_pending);
+		pending->sequence=request->hdr.sequence;
+		pending->cmd=request->hdr.cmd;
+		*pending_reply=pending;
 	}
+	return MINIRPC_OK;
+}
+
+static int send_request_pending(struct minirpc_connection *conn,
+			struct minirpc_message *request,
+			struct pending_reply *pending)
+{
+	int ret;
 	
+	pthread_mutex_lock(&conn->pending_replies_lock);
+	hash_add(&conn->pending_replies, &pending->lh_pending);
+	pthread_mutex_unlock(&conn->pending_replies_lock);
 	ret=send_message(conn, request);
-	if (ret && callback != NULL) {
+	if (ret) {
+		pthread_mutex_lock(&conn->pending_replies_lock);
 		hash_remove(conn->pending_replies, &pending->lh_pending);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
 		free(pending);
@@ -129,89 +86,75 @@ static int _send_request_async(struct isr_connection *conn,
 	return ret;
 }
 
-int isr_send_request_async(struct isr_connection *conn,
-			struct ISRMessage *request,
-			reply_callback_fn *callback, void *data)
+/* msg is an inout parameter */
+int minirpc_send_request(struct minirpc_connection *conn,
+			struct minirpc_message **msg)
 {
+	struct pending_reply *pending;
+	struct minirpc_message *reply=NULL;
 	int ret;
-	int willReply;
 	
-	ret=validate_request(request, conn->set->is_server, &willReply);
+	ret=send_request_setup(conn, *msg, &pending);
 	if (ret)
 		return ret;
-	if (!willReply) {
-		/* The callback will never be called */
-		return -EINVAL;
-	}
-	/* Locks pending_replies_lock except on error */
-	ret=_send_request_async(conn, request, callback, data);
+	pending->async=0;
+	pthread_cond_init(&pending->data.sync.cond, NULL);
+	pending->data.sync.reply=&reply;
+	ret=send_request_pending(conn, request, pending);
 	if (ret)
 		return ret;
-	pthread_mutex_unlock(&conn->pending_replies_lock);
+	pthread_mutex_lock(&conn->sync_wakeup_lock);
+	while (reply == NULL)
+		pthread_cond_wait(&cond, &conn->sync_wakeup_lock);
+	pthread_mutex_unlock(&conn->sync_wakeup_lock);
+	*msg=reply;
 	return 0;
 }
 
-static void sync_callback(struct isr_connection *conn, void *conn_data,
-			struct ISRMessage *request, struct ISRMessage *reply,
-			void *msg_data)
+int minirpc_send_request_async(struct minirpc_connection *conn,
+			struct minirpc_message *request,
+			reply_callback_fn *callback, void *private)
 {
-	struct sync_data *sdata=msg_data;
-	
-	*sdata->reply=reply;
-	pthread_cond_signal(sdata->cond);
-}
-
-int isr_send_request(struct isr_connection *conn, struct ISRMessage *request,
-			struct ISRMessage **reply)
-{
-	pthread_cond_t cond=PTHREAD_COND_INITIALIZER;
-	struct sync_data sdata;
+	struct pending_reply *pending;
 	int ret;
-	int willReply;
 	
-	ret=validate_request(request, conn->set->is_server, &willReply);
+	ret=send_request_setup(conn, request, &pending);
 	if (ret)
 		return ret;
-	if (willReply) {
-		sdata.cond=&cond;
-		sdata.reply=reply;
-		/* Locks pending_replies_lock except on error */
-		ret=_send_request_async(conn, request, sync_callback, &sdata);
-		if (ret)
-			return ret;
-		pthread_cond_wait(&cond, &conn->pending_replies_lock);
-		pthread_mutex_unlock(&conn->pending_replies_lock);
-		return 0;
-	} else {
-		*reply=NULL;
-		/* Does not lock pending_replies_lock */
-		return _send_request_async(conn, request, NULL, NULL);
-	}
+	pending->async=1;
+	pending->data.async.callback=callback;
+	pending->data.async.private=private;
+	return send_request_pending(conn, request, pending);
 }
 
-int isr_send_reply(struct isr_connection *conn,
-			struct ISRMessage *request, struct ISRMessage *reply)
+int minirpc_send_request_noreply(struct minirpc_connection *conn,
+			struct minirpc_message *request)
+{
+	int ret;
+	
+	ret=send_request_setup(conn, request, NULL);
+	if (ret)
+		return ret;
+	return send_message(conn, request);
+}
+
+int minirpc_send_reply(struct minirpc_connection *conn,
+			struct minirpc_message *reply)
 {
 	int ret;
 	
 	reply->sequence=request->sequence;
 	reply->isReply=1;
-	ret=validate_reply(request, reply);
-	if (ret)
-		return ret;
 	return send_message(conn, reply);
 }
 
 /* XXX what happens if we get a bad reply?  close the connection? */
-void process_incoming_message(struct isr_connection *conn)
+void process_incoming_message(struct minirpc_connection *conn)
 {
-	struct ISRMessage *msg=conn->recv_msg;
+	struct minirpc_message *msg=conn->recv_msg;
 	struct pending_reply *pending;
 	
-	if (!msg->isReply) {
-		if (validate_request(msg, !conn->set->is_server, NULL)) {
-			/*XXX*/;
-		}
+	if (msg->hdr.status == MINIRPC_REQUEST) {
 		conn->set->request(conn, conn->data, msg);
 	} else {
 		pthread_mutex_lock(&conn->pending_replies_lock);
@@ -220,16 +163,30 @@ void process_incoming_message(struct isr_connection *conn)
 			hash_remove(conn->pending_replies,
 						&pending->lh_pending);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
-		if (pending == NULL || validate_reply(pending->request, msg)) {
-			isr_free_message(msg);
+		if (pending == NULL || pending->cmd != msg->hdr.cmd ||
+					(pending->status != 0 &&
+					pending->datalen != 0)) {
+			/* XXX what is this thing we received? */
+			minirpc_free_message(msg);
 			if (pending != NULL) {
-				isr_free_message(pending->request);
+				minirpc_free_message(pending->request);
 				free(pending);
 			}
 			return;
 		}
-		pending->callback(conn, conn->data, pending->request, msg,
-					pending->data);
+		if (pending->async) {
+			msg->callback=pending->data.async.callback;
+			msg->private=pending->data.async.private;
+			pthread_mutex_lock(&set->callback_queue_lock);
+			list_add_tail(&msg->lh_msgs, &set->callback_queue);
+			pthread_cond_signal(&set->callback_queue_cond);
+			pthread_mutex_unlock(&set->callback_queue_lock);
+		} else {
+			pthread_mutex_lock(&conn->sync_wakeup_lock);
+			*pending->data.sync.reply=msg;
+			pthread_cond_signal(pending->data.sync.cond);
+			pthread_mutex_unlock(&conn->sync_wakeup_lock);
+		}
 		free(pending);
 	}
 }

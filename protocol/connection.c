@@ -9,11 +9,6 @@
 
 #define POLLEVENTS (EPOLLIN|EPOLLERR|EPOLLHUP)
 
-struct queued_message {
-	struct list_head lh_msgs;
-	struct ISRMessage *msg;
-};
-
 static unsigned conn_hash(struct list_head *entry, unsigned buckets)
 {
 	struct isr_connection *conn=list_entry(entry, struct isr_connection,
@@ -52,10 +47,10 @@ static int set_nonblock(int fd)
 	return 0;
 }
 
-int isr_conn_add(struct isr_connection **new_conn, struct isr_conn_set *set,
-			int fd, void *data)
+int minirpc_conn_add(struct minirpc_connection **new_conn,
+			struct minirpc_conn_set *set, int fd, void *data)
 {
-	struct isr_connection *conn;
+	struct minirpc_connection *conn;
 	struct epoll_event event;
 	int ret;
 	
@@ -102,9 +97,9 @@ int isr_conn_add(struct isr_connection **new_conn, struct isr_conn_set *set,
 		free(conn);
 		return ret;
 	}
-	pthread_mutex_lock(&set->lock);
+	pthread_mutex_lock(&set->conns_lock);
 	hash_add(set->conns, &conn->lh_conns);
-	pthread_mutex_unlock(&set->lock);
+	pthread_mutex_unlock(&set->conns_lock);
 	*new_conn=conn;
 	return 0;
 }
@@ -114,9 +109,9 @@ void isr_conn_remove(struct isr_connection *conn)
 	struct isr_conn_set *set=conn->set;
 	
 	/* XXX data already in buffer? */
-	pthread_mutex_lock(&set->lock);
+	pthread_mutex_lock(&set->conns_lock);
 	hash_remove(set->conns, &conn->lh_conns);
-	pthread_mutex_unlock(&set->lock);
+	pthread_mutex_unlock(&set->conns_lock);
 	hash_free(conn->pending_replies);
 	free(conn->recv_buf);
 	free(conn->send_buf);
@@ -140,132 +135,156 @@ static void conn_kill(struct isr_connection *conn)
 	/* XXX */
 }
 
-static int process_buffer(struct isr_connection *conn, unsigned *start)
+static int process_incoming_header(struct isr_connection *conn)
 {
-	asn_dec_rval_t rval;
-	int ret=0;
+	int ret;
 	
-	rval=ber_decode(NULL, &asn_DEF_ISRMessage, (void**)&conn->recv_msg,
-				conn->recv_buf + *start,
-				conn->recv_offset - *start);
-	switch (rval.code) {
-	case RC_OK:
-		printf("Received full buffer\n");
-		if (asn_check_constraints(&asn_DEF_ISRMessage, conn->recv_msg,
-					NULL, NULL)) {
-			isr_free_message(conn->recv_msg);
-			conn->recv_msg=NULL;
-			ret=-EINVAL;
-			break;
-		}
-		process_incoming_message(conn);
-		conn->recv_msg=NULL;
-		break;
-	case RC_WMORE:
-		printf("Received partial buffer\n");
-		ret=-EAGAIN;
-		break;
-	case RC_FAIL:
-		printf("Failed to decode\n");
-		isr_free_message(conn->recv_msg);
-		conn->recv_msg=NULL;
-		ret=-EINVAL;
-		break;
+	ret=unserialize(xdr_minirpc_header, conn->recv_hdr_buf,
+				MINIRPC_HEADER_LEN, conn->recv_msg->hdr,
+				sizeof(conn->recv_msg->hdr));
+	if (ret)
+		return ret;
+	if (conn->recv_msg->hdr.datalen > conn->set->maxbuf) {
+		/* XXX doesn't get returned to client if request */
+  		return MINIRPC_ENCODING_ERR;
 	}
-	*start += rval.consumed;
-	return ret;
+	
+	conn->recv_msg->data=malloc(conn->recv_msg->hdr.datalen);
+	if (conn->recv_msg->data == NULL) {
+		/* XXX */
+		return MINIRPC_NOMEM;
+	}
+	conn->recv_state=STATE_DATA;
+	return 0;
 }
 
 static void try_read_conn(struct isr_connection *conn)
 {
 	ssize_t count;
-	unsigned start;
-	int ret;
+	char *buf;
+	unsigned len;
 	
 	printf("try_read_conn\n");
 	while (1) {
-		printf("Read, start %d, count %d\n", conn->recv_offset,
-					conn->set->buflen - conn->recv_offset);
-		count=read(conn->fd, conn->recv_buf + conn->recv_offset,
-					conn->set->buflen - conn->recv_offset);
-		if (count == -1 && errno == EINTR) {
-			continue;
-		} else if (count == -1 && errno == EAGAIN) {
-			return;
-		} else if (count == 0 || count == -1) {
-			conn_kill(conn);
-			return;
+		if (conn->recv_msg == NULL) {
+			conn->recv_msg=minirpc_alloc_message();
+			if (conn->recv_msg == NULL) {
+				/* XXX */
+			}
 		}
-		conn->recv_offset += count;
 		
-		start=0;
-		while (1) {
-			printf("Processing buffer, %d bytes from %d\n",
-						count - start, start);
-			ret=process_buffer(conn, &start);
-			if (ret == -EINVAL) {
+		switch (conn->recv_state) {
+		case STATE_HEADER:
+			buf=&conn->recv_hdr_buf;
+			len=MINIRPC_HEADER_LEN;
+			break;
+		case STATE_DATA:
+			buf=conn->recv_msg->data;
+			len=conn->recv_msg->hdr.datalen;
+			break;
+		}
+		
+		if (conn->recv_offset < len) {
+			printf("Read, start %d, count %d\n", conn->recv_offset,
+						len - conn->recv_offset);
+			count=read(conn->fd, buf + conn->recv_offset,
+						len - conn->recv_offset);
+			if (count == -1 && errno == EINTR) {
+				continue;
+			} else if (count == -1 && errno == EAGAIN) {
+				return;
+			} else if (count == 0 || count == -1) {
 				conn_kill(conn);
 				return;
 			}
-			if (ret == -EAGAIN) {
-				memmove(conn->recv_buf, conn->recv_buf + start,
-						conn->recv_offset - start);
-				conn->recv_offset -= start;
-				break;
-			}
+			conn->recv_offset += count;
 		}
 		
-		if (conn->recv_offset == conn->set->buflen) {
-			conn_kill(conn);
-			break;
+		if (conn->recv_offset == len) {
+			switch (conn->recv_state) {
+			case STATE_HEADER:
+				if (process_incoming_header(conn)) {
+					/* XXX */
+					;
+				}
+				break;
+			case STATE_DATA:
+				if (process_incoming_message(conn)) {
+					/* XXX */
+				}
+				conn->recv_state=STATE_HEADER;
+				conn->recv_msg=NULL;
+				break;
+			}
 		}
 	}
 }
 
-static int form_buffer(struct isr_connection *conn)
+static int get_next_message(struct isr_connection *conn)
 {
-	asn_enc_rval_t rval;
-	struct queued_message *queued;
+	int ret;
 	
 	pthread_mutex_lock(&conn->send_msgs_lock);
 	if (list_is_empty(&conn->send_msgs)) {
 		need_writable(conn, 0);
 		pthread_mutex_unlock(&conn->send_msgs_lock);
-		return -EAGAIN;
+		return 0;
 	}
-	queued=list_entry(conn->send_msgs.next, struct queued_message, lh_msgs);
-	list_del_init(&queued->lh_msgs);
+	conn->send_msg=list_entry(conn->send_msgs.next, struct minirpc_message,
+				lh_msgs);
+	list_del_init(&conn->send_msg->lh_msgs);
 	pthread_mutex_unlock(&conn->send_msgs_lock);
 	
-	rval=der_encode_to_buffer(&asn_DEF_ISRMessage, queued->msg,
-				conn->send_buf, conn->set->buflen);
-	printf("Encoded %d bytes\n", rval.encoded);
-	if (rval.encoded == -1)
-		return -EINVAL;
+	conn->send_state=STATE_HEADER;
+	conn->send_hdr_buf=malloc(MINIRPC_HEADER_LEN);
+	if (conn->send_hdr_buf == NULL) {
+		/* XXX */
+	}
+	ret=serialize_len((xdrproc_t)xdr_minirpc_header, &conn->send_msg->hdr,
+				conn->send_hdr_buf, MINIRPC_HEADER_LEN);
+	if (ret) {
+		/* XXX message dropped on floor */
+		minirpc_free_message(conn->send_msg);
+		conn->send_msg=NULL;
+		return ret;
+	}
 	conn->send_offset=0;
-	conn->send_length=rval.encoded;
 	return 0;
 }
 
+/* XXX cork would be useful here */
 static void try_write_conn(struct isr_connection *conn)
 {
 	ssize_t count;
 	int ret;
+	char *buf;
+	unsigned len;
 	
 	printf("try_write_conn\n");
 	while (1) {
-		if (conn->send_offset == conn->send_length) {
-			ret=form_buffer(conn);
-			if (ret == -EAGAIN)
-				break;
-			else if (ret == -EINVAL) {
+		if (conn->send_msg == NULL) {
+			if (get_next_message(conn)) {
+				/* XXX */
 				conn_kill(conn);
 				break;
 			}
+			if (conn->send_msg == NULL)
+				break;
 		}
 		
-		count=write(conn->fd, conn->send_buf + conn->send_offset,
-					conn->send_length - conn->send_offset);
+		switch (conn->send_state) {
+		case STATE_HEADER:
+			buf=&conn->send_hdr_buf;
+			len=MINIRPC_HEADER_LEN;
+			break;
+		case STATE_DATA:
+			buf=conn->send_msg->data;
+			len=conn->send_msg->hdr.datalen;
+			break;
+		}
+		
+		count=write(conn->fd, buf + conn->send_offset,
+					len - conn->send_offset);
 		if (count == 0 || (count == -1 && errno == EAGAIN)) {
 			break;
 		} else if (count == -1 && errno == EINTR) {
@@ -275,6 +294,19 @@ static void try_write_conn(struct isr_connection *conn)
 			break;
 		}
 		conn->send_offset += count;
+		if (conn->send_offset == len) {
+			switch (conn->send_state) {
+			case STATE_HEADER:
+				conn->send_state=STATE_DATA;
+				conn->send_offset=0;
+				break;
+			case STATE_DATA:
+				conn->send_state=STATE_HEADER;
+				minirpc_free_message(conn->send_msg);
+				conn->send_msg=NULL;
+				break;
+			}
+		}
 	}
 }
 
@@ -304,33 +336,26 @@ static void *listener(void *data)
 	}
 }
 
-int send_message(struct isr_connection *conn, struct ISRMessage *msg)
+int send_message(struct isr_connection *conn, struct minirpc_message *msg)
 {
-	struct queued_message *queued;
 	int ret;
 	
-	queued=malloc(sizeof(*queued));
-	if (queued == NULL)
-		return -ENOMEM;
-	INIT_LIST_HEAD(&queued->lh_msgs);
-	queued->msg=msg;
 	pthread_mutex_lock(&conn->send_msgs_lock);
 	/* XXX extra syscall even when we don't need it */
 	ret=need_writable(conn, 1);
 	if (ret) {
-		free(queued);
+		free(queued);  /* XXX?? */
 		pthread_mutex_unlock(&conn->send_msgs_lock);
 		return ret;
 	}
-	list_add_tail(&queued->lh_msgs, &conn->send_msgs);
+	list_add_tail(&msg->lh_msgs, &conn->send_msgs);
 	pthread_mutex_unlock(&conn->send_msgs_lock);
 	return 0;
 }
 
-int isr_conn_set_alloc(struct isr_conn_set **new_set, int is_server,
-			request_fn *func, int expected_fds,
-			unsigned conn_buckets, unsigned msg_buckets,
-			unsigned msg_buf_len)
+int isr_conn_set_alloc(struct isr_conn_set **new_set, request_fn *func,
+			int expected_fds, unsigned conn_buckets,
+			unsigned msg_buckets, unsigned msg_max_buf_len)
 {
 	struct isr_conn_set *set;
 	struct epoll_event event;
@@ -339,12 +364,11 @@ int isr_conn_set_alloc(struct isr_conn_set **new_set, int is_server,
 	set=malloc(sizeof(*set));
 	if (set == NULL)
 		goto bad_alloc;
-	pthread_mutex_init(&set->lock, NULL);
+	pthread_mutex_init(&set->conns_lock, NULL);
 	set->conns=hash_alloc(conn_buckets, conn_hash);
 	if (set->conns == NULL)
 		goto bad_conns;
-	set->buflen=msg_buf_len;
-	set->is_server=is_server;
+	set->maxbuf=msg_max_buf_len;
 	set->request=func;
 	set->msg_buckets=msg_buckets;
 	set->expected_fds=expected_fds;

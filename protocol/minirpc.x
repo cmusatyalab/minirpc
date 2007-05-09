@@ -1,14 +1,19 @@
 enum minirpc_status {
-	MINIRPC_REPLY			=  0,
+	MINIRPC_OK			=  0,
 	MINIRPC_REQUEST			= -1,
-	MINIRPC_NO_HANDLER		= -2,
-	MINIRPC_PROCEDURE_UNKNOWN	= -3,
-	MINIRPC_MESSAGE_TOO_LARGE	= -4
+	MINIRPC_ENCODING_ERR		= -2,
+	MINIRPC_NOMEM			= -3,
+	MINIRPC_PROCEDURE_UNAVAIL	= -4,
+	MINIRPC_PROTOCOL_MISMATCH	= -5
 };
 
 struct minirpc_header {
 	unsigned sequence;
 	int status;
 	unsigned cmd;
-	unsigned arglen;
+	unsigned datalen;
 };
+
+#ifdef RPC_HDR
+%#define MINIRPC_HEADER_LEN	16
+#endif
