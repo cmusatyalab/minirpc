@@ -4,35 +4,35 @@
 #include <string.h>
 #include <errno.h>
 #include <pthread.h>
-#define LIBPROTOCOL
+#define MINIRPC_INTERNAL
 #include "internal.h"
 
 #define POLLEVENTS (EPOLLIN|EPOLLERR|EPOLLHUP)
 
 static unsigned conn_hash(struct list_head *entry, unsigned buckets)
 {
-	struct isr_connection *conn=list_entry(entry, struct isr_connection,
+	struct mrpc_connection *conn=list_entry(entry, struct mrpc_connection,
 				lh_conns);
 	return conn->fd % buckets;
 }
 
 static int conn_match(struct list_head *entry, void *data)
 {
-	struct isr_connection *conn=list_entry(entry, struct isr_connection,
+	struct mrpc_connection *conn=list_entry(entry, struct mrpc_connection,
 				lh_conns);
 	int *fd=data;
 	return (*fd == conn->fd);
 }
 
 /* XXX unused since epoll provides a data pointer */
-static struct isr_connection *conn_lookup(struct isr_conn_set *set, int fd)
+static struct mrpc_connection *conn_lookup(struct mrpc_conn_set *set, int fd)
 {
 	struct list_head *head;
 	
 	head=hash_get(set->conns, conn_match, fd, &fd);
 	if (head == NULL)
 		return NULL;
-	return list_entry(head, struct isr_connection, lh_conns);
+	return list_entry(head, struct mrpc_connection, lh_conns);
 }
 
 static int set_nonblock(int fd)
@@ -47,10 +47,10 @@ static int set_nonblock(int fd)
 	return 0;
 }
 
-int minirpc_conn_add(struct minirpc_connection **new_conn,
-			struct minirpc_conn_set *set, int fd, void *data)
+int mrpc_conn_add(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
+			int fd, void *data)
 {
-	struct minirpc_connection *conn;
+	struct mrpc_connection *conn;
 	struct epoll_event event;
 	int ret;
 	
@@ -104,9 +104,9 @@ int minirpc_conn_add(struct minirpc_connection **new_conn,
 	return 0;
 }
 
-void isr_conn_remove(struct isr_connection *conn)
+void mrpc_conn_remove(struct mrpc_connection *conn)
 {
-	struct isr_conn_set *set=conn->set;
+	struct mrpc_conn_set *set=conn->set;
 	
 	/* XXX data already in buffer? */
 	pthread_mutex_lock(&set->conns_lock);
@@ -118,8 +118,8 @@ void isr_conn_remove(struct isr_connection *conn)
 	free(conn);
 }
 
-int minirpc_conn_set_operations(struct minirpc_connection *conn,
-			struct minirpc_protocol *protocol, void *ops)
+int mrpc_conn_set_operations(struct mrpc_connection *conn,
+			struct mrpc_protocol *protocol, void *ops)
 {
 	if (conn->set->protocol != protocol)
 		return MINIRPC_PROTOCOL_MISMATCH;
@@ -129,7 +129,7 @@ int minirpc_conn_set_operations(struct minirpc_connection *conn,
 	return MINIRPC_OK;
 }
 
-static int need_writable(struct isr_connection *conn, int writable)
+static int need_writable(struct mrpc_connection *conn, int writable)
 {
 	struct epoll_event event;
 	
@@ -140,17 +140,17 @@ static int need_writable(struct isr_connection *conn, int writable)
 	return epoll_ctl(conn->set->epoll_fd, EPOLL_CTL_MOD, conn->fd, &event);
 }
 
-static void conn_kill(struct isr_connection *conn)
+static void conn_kill(struct mrpc_connection *conn)
 {
 	close(conn->fd);
 	/* XXX */
 }
 
-static int process_incoming_header(struct isr_connection *conn)
+static int process_incoming_header(struct mrpc_connection *conn)
 {
 	int ret;
 	
-	ret=unserialize(xdr_minirpc_header, conn->recv_hdr_buf,
+	ret=unserialize(xdr_mrpc_header, conn->recv_hdr_buf,
 				MINIRPC_HEADER_LEN, conn->recv_msg->hdr,
 				sizeof(conn->recv_msg->hdr));
 	if (ret)
@@ -169,7 +169,7 @@ static int process_incoming_header(struct isr_connection *conn)
 	return 0;
 }
 
-static void try_read_conn(struct isr_connection *conn)
+static void try_read_conn(struct mrpc_connection *conn)
 {
 	ssize_t count;
 	char *buf;
@@ -178,7 +178,7 @@ static void try_read_conn(struct isr_connection *conn)
 	printf("try_read_conn\n");
 	while (1) {
 		if (conn->recv_msg == NULL) {
-			conn->recv_msg=minirpc_alloc_message(conn);
+			conn->recv_msg=mrpc_alloc_message(conn);
 			if (conn->recv_msg == NULL) {
 				/* XXX */
 			}
@@ -231,7 +231,7 @@ static void try_read_conn(struct isr_connection *conn)
 	}
 }
 
-static int get_next_message(struct isr_connection *conn)
+static int get_next_message(struct mrpc_connection *conn)
 {
 	int ret;
 	
@@ -241,7 +241,7 @@ static int get_next_message(struct isr_connection *conn)
 		pthread_mutex_unlock(&conn->send_msgs_lock);
 		return 0;
 	}
-	conn->send_msg=list_entry(conn->send_msgs.next, struct minirpc_message,
+	conn->send_msg=list_entry(conn->send_msgs.next, struct mrpc_message,
 				lh_msgs);
 	list_del_init(&conn->send_msg->lh_msgs);
 	pthread_mutex_unlock(&conn->send_msgs_lock);
@@ -251,11 +251,11 @@ static int get_next_message(struct isr_connection *conn)
 	if (conn->send_hdr_buf == NULL) {
 		/* XXX */
 	}
-	ret=serialize_len((xdrproc_t)xdr_minirpc_header, &conn->send_msg->hdr,
+	ret=serialize_len((xdrproc_t)xdr_mrpc_header, &conn->send_msg->hdr,
 				conn->send_hdr_buf, MINIRPC_HEADER_LEN);
 	if (ret) {
 		/* XXX message dropped on floor */
-		minirpc_free_message(conn->send_msg);
+		mrpc_free_message(conn->send_msg);
 		conn->send_msg=NULL;
 		return ret;
 	}
@@ -264,7 +264,7 @@ static int get_next_message(struct isr_connection *conn)
 }
 
 /* XXX cork would be useful here */
-static void try_write_conn(struct isr_connection *conn)
+static void try_write_conn(struct mrpc_connection *conn)
 {
 	ssize_t count;
 	int ret;
@@ -313,7 +313,7 @@ static void try_write_conn(struct isr_connection *conn)
 				break;
 			case STATE_DATA:
 				conn->send_state=STATE_HEADER;
-				minirpc_free_message(conn->send_msg);
+				mrpc_free_message(conn->send_msg);
 				conn->send_msg=NULL;
 				break;
 			}
@@ -325,7 +325,7 @@ static void try_write_conn(struct isr_connection *conn)
 /* XXX need provisions for connection timeout */
 static void *listener(void *data)
 {
-	struct isr_conn_set *set=data;
+	struct mrpc_conn_set *set=data;
 	struct epoll_event events[set->expected_fds];
 	int count;
 	int i;
@@ -347,9 +347,9 @@ static void *listener(void *data)
 	}
 }
 
-int send_message(struct minirpc_message *msg)
+int send_message(struct mrpc_message *msg)
 {
-	struct minirpc_connection *conn=msg->conn;
+	struct mrpc_connection *conn=msg->conn;
 	int ret;
 	
 	pthread_mutex_lock(&conn->send_msgs_lock);
@@ -357,7 +357,7 @@ int send_message(struct minirpc_message *msg)
 	ret=need_writable(conn, 1);
 	if (ret) {
 		pthread_mutex_unlock(&conn->send_msgs_lock);
-		minirpc_free_message(msg);  /* XXX?? */
+		mrpc_free_message(msg);  /* XXX?? */
 		return ret;
 	}
 	list_add_tail(&msg->lh_msgs, &conn->send_msgs);
@@ -365,11 +365,11 @@ int send_message(struct minirpc_message *msg)
 	return 0;
 }
 
-int isr_conn_set_alloc(struct isr_conn_set **new_set, request_fn *func,
+int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set, request_fn *func,
 			int expected_fds, unsigned conn_buckets,
 			unsigned msg_buckets, unsigned msg_max_buf_len)
 {
-	struct isr_conn_set *set;
+	struct mrpc_conn_set *set;
 	struct epoll_event event;
 	int ret=-ENOMEM;
 	
@@ -423,7 +423,7 @@ bad_alloc:
 }
 
 /* XXX drops lots of stuff on the floor */
-void isr_conn_set_free(struct isr_conn_set *set)
+void mrpc_conn_set_free(struct mrpc_conn_set *set)
 {
 	write(set->signal_pipe[1], "s", 1);
 	pthread_join(set->thread, NULL);

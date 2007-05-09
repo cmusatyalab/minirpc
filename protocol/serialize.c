@@ -1,9 +1,9 @@
-#define LIBPROTOCOL
+#define MINIRPC_INTERNAL
 #include "internal.h"
 
-struct minirpc_message *minirpc_alloc_message(struct minirpc_connection *conn)
+struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn)
 {
-	struct minirpc_message *msg;
+	struct mrpc_message *msg;
 	
 	msg=malloc(sizeof(*msg));
 	if (msg == NULL)
@@ -14,7 +14,7 @@ struct minirpc_message *minirpc_alloc_message(struct minirpc_connection *conn)
 	return msg;
 }
 
-void minirpc_free_message(struct minirpc_message *msg)
+void mrpc_free_message(struct mrpc_message *msg)
 {
 	/* XXX make sure list is empty */
 	free(msg->data);
@@ -81,18 +81,18 @@ int serialize(xdrproc_t xdr_proc, void *in, char **out, unsigned *out_len)
 	return MINIRPC_OK;
 }
 
-static int format_message(struct minirpc_connection *conn, xdrproc_t type,
-			void *data, struct minirpc_message **result)
+static int format_message(struct mrpc_connection *conn, xdrproc_t type,
+			void *data, struct mrpc_message **result)
 {
-	struct minirpc_message *msg;
+	struct mrpc_message *msg;
 	int ret;
 	
-	msg=minirpc_alloc_message(conn);
+	msg=mrpc_alloc_message(conn);
 	if (msg == NULL)
 		return MINIRPC_NOMEM;
 	ret=serialize(type, in, &msg->data, &msg->hdr.datalen);
 	if (ret) {
-		minirpc_free_message(msg);
+		mrpc_free_message(msg);
 		return ret;
 	}
 	*result=msg;
@@ -100,7 +100,7 @@ static int format_message(struct minirpc_connection *conn, xdrproc_t type,
 }
 
 static int unformat_message(xdrproc_t type, unsigned size,
-			struct minirpc_message *msg, void **result)
+			struct mrpc_message *msg, void **result)
 {
 	void *buf;
 	
@@ -116,10 +116,10 @@ static int unformat_message(xdrproc_t type, unsigned size,
 	return MINIRPC_OK;
 }
 
-int format_request(struct minirpc_connection *conn, unsigned cmd, void *data,
-			struct minirpc_message **result)
+int format_request(struct mrpc_connection *conn, unsigned cmd, void *data,
+			struct mrpc_message **result)
 {
-	struct minirpc_message *msg;
+	struct mrpc_message *msg;
 	xdrproc_t type;
 	int ret;
 	
@@ -136,10 +136,10 @@ int format_request(struct minirpc_connection *conn, unsigned cmd, void *data,
 	return MINIRPC_OK;
 }
 
-int format_reply(struct minirpc_message *request, void *data,
-			struct minirpc_message **result)
+int format_reply(struct mrpc_message *request, void *data,
+			struct mrpc_message **result)
 {
-	struct minirpc_message *msg;
+	struct mrpc_message *msg;
 	xdrproc_t type;
 	int ret;
 	
@@ -154,10 +154,10 @@ int format_reply(struct minirpc_message *request, void *data,
 	return MINIRPC_OK;
 }
 
-int format_reply_error(struct minirpc_message *request, int err,
-			struct minirpc_message **result)
+int format_reply_error(struct mrpc_message *request, int err,
+			struct mrpc_message **result)
 {
-	struct minirpc_message *msg;
+	struct mrpc_message *msg;
 	int ret;
 	
 	ret=format_message(request->conn, xdr_void, NULL, &msg);
@@ -170,7 +170,7 @@ int format_reply_error(struct minirpc_message *request, int err,
 	return MINIRPC_OK;
 }
 
-int unformat_request(struct minirpc_message *msg, void **result)
+int unformat_request(struct mrpc_message *msg, void **result)
 {
 	xdrproc_t type;
 	unsigned size;
@@ -179,7 +179,7 @@ int unformat_request(struct minirpc_message *msg, void **result)
 	return unformat_message(type, size, msg, result);
 }
 
-int unformat_reply(struct minirpc_message *msg, void **result)
+int unformat_reply(struct mrpc_message *msg, void **result)
 {
 	xdrproc_t type;
 	unsigned size;

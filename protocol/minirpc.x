@@ -1,4 +1,4 @@
-enum minirpc_status {
+enum mrpc_status {
 	MINIRPC_OK			=  0,
 	MINIRPC_REQUEST			= -1,
 	MINIRPC_ENCODING_ERR		= -2,
@@ -8,7 +8,7 @@ enum minirpc_status {
 	MINIRPC_DEFER			= -6
 };
 
-struct minirpc_header {
+struct mrpc_header {
 	unsigned sequence;
 	int status;
 	unsigned cmd;
@@ -16,5 +16,5 @@ struct minirpc_header {
 };
 
 #ifdef RPC_HDR
-%#define MINIRPC_HEADER_LEN	16
+%#define MRPC_HEADER_LEN	16
 #endif

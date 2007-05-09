@@ -1,11 +1,11 @@
-#ifndef LIBPROTOCOL
-#error This header is for internal use by the ISR protocol library
+#ifndef MINIRPC_INTERNAL
+#error This header is for internal use by the miniRPC protocol library
 #endif
 
-#ifndef INTERNAL_H
-#define INTERNAL_H
+#ifndef MINIRPC_INTERNAL_H
+#define MINIRPC_INTERNAL_H
 
-#include "protocol.h"
+#include "minirpc.h"
 #include "minirpc_xdr.h"
 #include "list.h"
 #include "hash.h"
@@ -15,10 +15,10 @@
 			*(ptr)=(val); \
 	} while (0)
 
-struct minirpc_message {
-	struct minirpc_connection *conn;
+struct mrpc_message {
+	struct mrpc_connection *conn;
 	struct list_head lh_msgs;
-	struct minirpc_header hdr;
+	struct mrpc_header hdr;
 	char *data;
 	
 	/* For async callbacks */
@@ -26,15 +26,15 @@ struct minirpc_message {
 	void *private;
 };
 
-struct minirpc_protocol {
-	int (*request)(struct minirpc_connection *conn, int cmd, void *in,
+struct mrpc_protocol {
+	int (*request)(struct mrpc_connection *conn, int cmd, void *in,
 			void *out);
 	int (*request_info)(unsigned cmd, xdrproc_t *type, unsigned *size);
 	int (*reply_info)(unsigned cmd, xdrproc_t *type, unsigned *size);
 };
 
-struct minirpc_conn_set {
-	const struct minirpc_protocol *protocol;
+struct mrpc_conn_set {
+	const struct mrpc_protocol *protocol;
 	unsigned maxbuf;
 	unsigned expected_fds;
 	unsigned msg_buckets;
@@ -56,9 +56,9 @@ enum conn_state {
 	STATE_DATA
 }
 
-struct minirpc_connection {
+struct mrpc_connection {
 	struct list_head lh_conns;
-	struct isr_conn_set *set;
+	struct mrpc_conn_set *set;
 	int fd;
 	void *private;
 	
@@ -90,20 +90,10 @@ typedef void (reply_callback_fn)(void *conn_private, void *msg_private,
 			int status, void *data);
 
 /* connection.c */
-int send_message(struct isr_connection *conn, struct ISRMessage *msg);
 
 /* message.c */
-struct minirpc_message *minirpc_alloc_message(void);
-void minirpc_free_message(struct minirpc_message *msg);
-unsigned request_hash(struct list_head *head, unsigned buckets);
-void process_incoming_message(struct isr_connection *conn);
-int isr_send_request(struct isr_connection *conn, struct ISRMessage *request,
-			struct ISRMessage **reply);
-int isr_send_request_async(struct isr_connection *conn,
-			struct ISRMessage *request,
-			reply_callback_fn *callback, void *data);
-int isr_send_reply(struct isr_connection *conn,
-			struct ISRMessage *request, struct ISRMessage *reply);
+
+/* serialize.c */
 
 /* xdr_len.c */
 void xdrlen_create(XDR *xdrs);
