@@ -122,7 +122,7 @@ int mrpc_conn_set_operations(struct mrpc_connection *conn,
 			struct mrpc_protocol *protocol, void *ops)
 {
 	if (conn->set->protocol != protocol)
-		return MINIRPC_PROTOCOL_MISMATCH;
+		return MINIRPC_INVALID_ARGUMENT;
 	pthread_rwlock_wrlock(&conn->operations_lock);
 	conn->operations=ops;
 	pthread_rwlock_unlock(&conn->operations_lock);
@@ -247,10 +247,6 @@ static int get_next_message(struct mrpc_connection *conn)
 	pthread_mutex_unlock(&conn->send_msgs_lock);
 	
 	conn->send_state=STATE_HEADER;
-	conn->send_hdr_buf=malloc(MINIRPC_HEADER_LEN);
-	if (conn->send_hdr_buf == NULL) {
-		/* XXX */
-	}
 	ret=serialize_len((xdrproc_t)xdr_mrpc_header, &conn->send_msg->hdr,
 				conn->send_hdr_buf, MINIRPC_HEADER_LEN);
 	if (ret) {
@@ -425,6 +421,14 @@ bad_alloc:
 /* XXX drops lots of stuff on the floor */
 void mrpc_conn_set_free(struct mrpc_conn_set *set)
 {
+	pthread_mutex_lock(&set->event_queue_lock);
+	set->dying=1;
+	while (set->event_queue_threads) {
+		pthread_cond_broadcast(&set->event_queue_cond);
+		pthread_cond_wait(&set->event_queue_cond,
+					&set->event_queue_lock);
+	}
+	pthread_mutex_unlock(&set->event_queue_lock);
 	write(set->signal_pipe[1], "s", 1);
 	pthread_join(set->thread, NULL);
 	close(set->epoll_fd);

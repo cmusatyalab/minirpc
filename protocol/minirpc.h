@@ -3,6 +3,5 @@
 
 struct mrpc_conn_set;
 struct mrpc_connection;
-struct mrpc_protocol;
 
 #endif

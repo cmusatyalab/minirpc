@@ -19,8 +19,6 @@ struct pending_reply {
 	} data;
 };
 
-/* XXX deal with sequence number wraparound */
-
 /* XXX It would be nice to be able to make this static */
 unsigned request_hash(struct list_head *head, unsigned buckets)
 {
@@ -124,6 +122,8 @@ int mrpc_send_request_async(struct mrpc_connection *conn, unsigned cmd,
 	struct pending_reply *pending;
 	int ret;
 	
+	if (callback == NULL)
+		return MINIRPC_INVALID_ARGUMENT;
 	ret=format_request(conn, cmd, in, &msg);
 	if (ret)
 		return ret;
@@ -154,9 +154,11 @@ int mrpc_send_reply(struct mrpc_message *request, int status, void *data)
 {
 	struct mrpc_message *reply;
 	
+	if (status == MINIRPC_REQUEST)
+		return MINIRPC_INVALID_ARGUMENT;
 	if (status == MINIRPC_DEFER)
 		return MINIRPC_DEFER;
-	} else if (status) {
+	if (status) {
 		ret=format_reply_error(request, status, &reply);
 	} else {
 		ret=format_reply(request, data, &reply);
@@ -167,6 +169,14 @@ int mrpc_send_reply(struct mrpc_message *request, int status, void *data)
 	return send_message(reply);
 }
 
+static void queue_event(struct mrpc_message *msg)
+{
+	pthread_mutex_lock(&set->callback_queue_lock);
+	list_add_tail(&msg->lh_msgs, &set->callback_queue);
+	pthread_cond_signal(&set->callback_queue_cond);
+	pthread_mutex_unlock(&set->callback_queue_lock);
+}
+
 /* XXX what happens if we get a bad reply?  close the connection? */
 void process_incoming_message(struct mrpc_connection *conn)
 {
@@ -174,7 +184,7 @@ void process_incoming_message(struct mrpc_connection *conn)
 	struct pending_reply *pending;
 	
 	if (msg->hdr.status == MINIRPC_REQUEST) {
-		conn->set->request(conn, conn->data, msg);
+		queue_event(msg);
 	} else {
 		pthread_mutex_lock(&conn->pending_replies_lock);
 		pending=request_lookup(conn, msg->sequence);
@@ -196,10 +206,7 @@ void process_incoming_message(struct mrpc_connection *conn)
 		if (pending->async) {
 			msg->callback=pending->data.async.callback;
 			msg->private=pending->data.async.private;
-			pthread_mutex_lock(&set->callback_queue_lock);
-			list_add_tail(&msg->lh_msgs, &set->callback_queue);
-			pthread_cond_signal(&set->callback_queue_cond);
-			pthread_mutex_unlock(&set->callback_queue_lock);
+			queue_event(msg);
 		} else {
 			pthread_mutex_lock(&conn->sync_wakeup_lock);
 			*pending->data.sync.reply=msg;
@@ -210,7 +217,7 @@ void process_incoming_message(struct mrpc_connection *conn)
 	}
 }
 
-void dispatch_request(struct mrpc_message *request)
+static void dispatch_request(struct mrpc_message *request)
 {
 	struct mrpc_connection *conn=request->conn;
 	struct mrpc_message *reply;
@@ -256,16 +263,24 @@ void dispatch_request(struct mrpc_message *request)
 	free(request_data);
 	
 	if (doreply) {
+		if (result == MINIRPC_DEFER) {
+			free(reply_data);
+			/* This struct is going to stay around for a while,
+			   but we won't need the serialized request data
+			   anymore.  Free up some memory. */
+			free(request->data);
+			request->data=NULL;
+		}
 		ret=mrpc_send_reply(conn, request, result, reply_data);
 		free(reply_data);
-		if (ret && ret != MINIRPC_DEFER)
+		if (ret)
 			XXX;
 	} else {
 		mrpc_free_message(request);
 	}
 }
 
-void run_reply_callback(struct mrpc_message *reply)
+static void run_reply_callback(struct mrpc_message *reply)
 {
 	void *out=NULL;
 	int ret;
@@ -275,4 +290,55 @@ void run_reply_callback(struct mrpc_message *reply)
 		ret=unformat_request(msg, &out);
 	reply->callback(reply->conn->private, reply->private, ret, out);
 	mrpc_free_message(reply);
+}
+
+static void dispatch_event(struct mrpc_message *msg)
+{
+	if (msg->callback) {
+		run_reply_callback(msg);
+	} else if (msg->hdr.status == MINIRPC_REQUEST) {
+		dispatch_request(msg);
+	} else {
+		BUG();
+	}
+}
+
+void mrpc_dispatch_loop(struct mrpc_conn_set *set)
+{
+	struct mrpc_message *msg;
+	
+	pthread_mutex_lock(&set->event_queue_lock);
+	set->event_queue_threads++
+	while (!set->dying) {
+		if (list_is_empty(&set->event_queue)) {
+			pthread_cond_wait(&set->event_queue_cond,
+						&set->event_queue_lock);
+			continue;
+		}
+		msg=list_entry(set->event_queue.next, struct mrpc_message,
+					lh_msgs);
+		list_del_init(&msg->lh_msgs);
+		pthread_mutex_unlock(&set->event_queue_lock);
+		dispatch_event(msg);
+		pthread_mutex_lock(&set->event_queue_lock);
+	}
+	set->event_queue_threads--;
+	pthread_cond_broadcast(&set->event_queue_cond);
+	pthread_mutex_unlock(&set->event_queue_lock);
+}
+
+int mrpc_dispatch_nonblock(struct mrpc_conn_set *set)
+{
+	struct mrpc_message *msg=NULL;
+	
+	pthread_mutex_lock(&set->event_queue_lock);
+	if (!list_is_empty(&set->event_queue)) {
+		msg=list_entry(set->event_queue.next, struct mrpc_message,
+					lh_msgs);
+		list_del_init(&msg->lh_msgs);
+	}
+	pthread_mutex_unlock(&set->event_queue_lock);
+	if (msg != NULL)
+		dispatch_event(msg);
+	return (msg != NULL);
 }

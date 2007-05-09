@@ -15,17 +15,6 @@
 			*(ptr)=(val); \
 	} while (0)
 
-struct mrpc_message {
-	struct mrpc_connection *conn;
-	struct list_head lh_msgs;
-	struct mrpc_header hdr;
-	char *data;
-	
-	/* For async callbacks */
-	reply_callback_fn *callback;
-	void *private;
-};
-
 struct mrpc_protocol {
 	int (*request)(struct mrpc_connection *conn, int cmd, void *in,
 			void *out);
@@ -42,9 +31,11 @@ struct mrpc_conn_set {
 	struct htable *conns;
 	pthread_mutex_t conns_lock;
 	
-	struct list_head callback_queue;
-	pthread_mutex_t callback_queue_lock;
-	pthread_cond_t callback_queue_cond;
+	struct list_head event_queue;
+	pthread_mutex_t event_queue_lock;
+	pthread_cond_t event_queue_cond;
+	int dying;
+	unsigned event_queue_threads;
 	
 	int epoll_fd;
 	int signal_pipe[2];
@@ -54,7 +45,7 @@ struct mrpc_conn_set {
 enum conn_state {
 	STATE_HEADER,
 	STATE_DATA
-}
+};
 
 struct mrpc_connection {
 	struct list_head lh_conns;
@@ -88,6 +79,17 @@ struct mrpc_connection {
 
 typedef void (reply_callback_fn)(void *conn_private, void *msg_private,
 			int status, void *data);
+
+struct mrpc_message {
+	struct mrpc_connection *conn;
+	struct list_head lh_msgs;
+	struct mrpc_header hdr;
+	char *data;
+	
+	/* For async callbacks */
+	reply_callback_fn *callback;
+	void *private;
+};
 
 /* connection.c */
 

@@ -4,7 +4,7 @@ enum mrpc_status {
 	MINIRPC_ENCODING_ERR		= -2,
 	MINIRPC_NOMEM			= -3,
 	MINIRPC_PROCEDURE_UNAVAIL	= -4,
-	MINIRPC_PROTOCOL_MISMATCH	= -5,
+	MINIRPC_INVALID_ARGUMENT	= -5,
 	MINIRPC_DEFER			= -6
 };
 
@@ -16,5 +16,5 @@ struct mrpc_header {
 };
 
 #ifdef RPC_HDR
-%#define MRPC_HEADER_LEN	16
+%#define MINIRPC_HEADER_LEN	16
 #endif

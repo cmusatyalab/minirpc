@@ -91,5 +91,3 @@ int sample_client_set_operations(struct mrpc_connection *conn,
 {
 	return mrpc_conn_set_operations(conn, protocol, ops);
 }
-
-/* XXX restrict app from returning REQUEST status? */

@@ -17,7 +17,8 @@ struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn)
 void mrpc_free_message(struct mrpc_message *msg)
 {
 	/* XXX make sure list is empty */
-	free(msg->data);
+	if (msg->data != NULL)
+		free(msg->data);
 	free(msg);
 }
 
@@ -53,7 +54,8 @@ int unserialize(xdrproc_t xdr_proc, char *in, unsigned in_len, void *out,
 	return ret;
 }
 
-int serialize(xdrproc_t xdr_proc, void *in, char **out, unsigned *out_len)
+static int serialize(xdrproc_t xdr_proc, void *in, char **out,
+			unsigned *out_len)
 {
 	XDR xdrs;
 	char *buf;
