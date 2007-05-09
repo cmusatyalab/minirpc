@@ -36,7 +36,8 @@ int list_parcels_oneway(struct minirpc_connection *conn, ListParcels *in)
 	return minirpc_send_request_noreply(conn, nr_list_parcels, in);
 }
 
-int sample_client_request_info(unsigned cmd, xdrproc_t *type, unsigned *size)
+static int sample_client_request_info(unsigned cmd, xdrproc_t *type,
+			unsigned *size)
 {
 	switch (cmd) {
 	case nr_list_parcels:
@@ -49,7 +50,8 @@ int sample_client_request_info(unsigned cmd, xdrproc_t *type, unsigned *size)
 	
 }
 
-int sample_client_reply_info(unsigned cmd, xdrproc_t *type, unsigned *size)
+static int sample_client_reply_info(unsigned cmd, xdrproc_t *type,
+			unsigned *size)
 {
 	switch (cmd) {
 	case nr_list_parcels:
@@ -62,8 +64,8 @@ int sample_client_reply_info(unsigned cmd, xdrproc_t *type, unsigned *size)
 	
 }
 
-int sample_client_request(struct minirpc_connection *conn, int cmd, void *in,
-			void *out)
+static int sample_client_request(struct minirpc_connection *conn, int cmd,
+			void *in, void *out)
 {
 	struct sample_client_operations *ops=conn->operations;
 	
@@ -77,6 +79,12 @@ int sample_client_request(struct minirpc_connection *conn, int cmd, void *in,
 		return MINIRPC_PROCEDURE_UNAVAIL;
 	}
 }
+
+struct minirpc_protocol sample_client = {
+	.request = sample_client_request;
+	.request_info = sample_client_request_info;
+	.reply_info = sample_client_reply_info;
+};
 
 int sample_client_set_operations(struct minirpc_connection *conn,
 			struct sample_client_operations *ops)

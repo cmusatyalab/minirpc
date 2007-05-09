@@ -3,6 +3,7 @@
 
 struct minirpc_conn_set;
 struct minirpc_connection;
+struct minirpc_protocol;
 
 int minirpc_conn_set_alloc(struct minirpc_conn_set **new_set, int is_server,
 			request_fn *func, int expected_fds,
