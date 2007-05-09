@@ -49,28 +49,25 @@ static struct pending_reply *request_lookup(struct minirpc_connection *conn,
 	return list_entry(head, struct pending_reply, lh_pending);
 }
 
-static int send_request_setup(struct minirpc_connection *conn,
-			struct minirpc_message *request,
+static int pending_alloc(struct minirpc_message *request,
 			struct pending_reply **pending_reply)
 {
 	struct pending_reply *pending;
 	
-	if (pending_reply != NULL) {
-		pending=malloc(sizeof(*pending));
-		if (pending == NULL)
-			return MINIRPC_NOMEM;
-		INIT_LIST_HEAD(&pending->lh_pending);
-		pending->sequence=request->hdr.sequence;
-		pending->cmd=request->hdr.cmd;
-		*pending_reply=pending;
-	}
+	pending=malloc(sizeof(*pending));
+	if (pending == NULL)
+		return MINIRPC_NOMEM;
+	INIT_LIST_HEAD(&pending->lh_pending);
+	pending->sequence=request->hdr.sequence;
+	pending->cmd=request->hdr.cmd;
+	*pending_reply=pending;
 	return MINIRPC_OK;
 }
 
-static int send_request_pending(struct minirpc_connection *conn,
-			struct minirpc_message *request,
+static int send_request_pending(struct minirpc_message *request,
 			struct pending_reply *pending)
 {
+	struct minirpc_connection *conn=request->conn;
 	int ret;
 	
 	pthread_mutex_lock(&conn->pending_replies_lock);
@@ -87,14 +84,14 @@ static int send_request_pending(struct minirpc_connection *conn,
 }
 
 /* msg is an inout parameter */
-int minirpc_send_request(struct minirpc_connection *conn,
-			struct minirpc_message **msg)
+int minirpc_send_request(struct minirpc_message **msg)
 {
+	struct minirpc_connection *conn=(*msg)->conn;
 	struct pending_reply *pending;
 	struct minirpc_message *reply=NULL;
 	int ret;
 	
-	ret=send_request_setup(conn, *msg, &pending);
+	ret=pending_alloc(*msg, &pending);
 	if (ret)
 		return ret;
 	pending->async=0;
@@ -111,41 +108,36 @@ int minirpc_send_request(struct minirpc_connection *conn,
 	return 0;
 }
 
-int minirpc_send_request_async(struct minirpc_connection *conn,
-			struct minirpc_message *request,
+int minirpc_send_request_async(struct minirpc_message *request,
 			reply_callback_fn *callback, void *private)
 {
 	struct pending_reply *pending;
 	int ret;
 	
-	ret=send_request_setup(conn, request, &pending);
+	ret=pending_alloc(request, &pending);
 	if (ret)
 		return ret;
 	pending->async=1;
 	pending->data.async.callback=callback;
 	pending->data.async.private=private;
-	return send_request_pending(conn, request, pending);
+	return send_request_pending(msg->conn, request, pending);
 }
 
-int minirpc_send_request_noreply(struct minirpc_connection *conn,
-			struct minirpc_message *request)
+int minirpc_send_reply(struct minirpc_message *request, int status, void *data)
 {
-	int ret;
+	struct minirpc_message *reply;
 	
-	ret=send_request_setup(conn, request, NULL);
+	if (status == MINIRPC_DEFER)
+		return MINIRPC_DEFER;
+	} else if (status) {
+		ret=format_reply_error(request, status, &reply);
+	} else {
+		ret=format_reply(request, data, &reply);
+	}
+	minirpc_free_message(request);
 	if (ret)
 		return ret;
-	return send_message(conn, request);
-}
-
-int minirpc_send_reply(struct minirpc_connection *conn,
-			struct minirpc_message *reply)
-{
-	int ret;
-	
-	reply->sequence=request->sequence;
-	reply->isReply=1;
-	return send_message(conn, reply);
+	return send_message(reply);
 }
 
 /* XXX what happens if we get a bad reply?  close the connection? */
@@ -189,4 +181,71 @@ void process_incoming_message(struct minirpc_connection *conn)
 		}
 		free(pending);
 	}
+}
+
+void dispatch_request(struct minirpc_message *request)
+{
+	struct minirpc_connection *conn=request->conn;
+	struct minirpc_message *reply;
+	void *request_data;
+	void *reply_data=NULL;
+	int ret;
+	int result;
+	xdrproc_t request_type;
+	xdrproc_t reply_type;
+	unsigned request_size;
+	unsigned reply_size;
+	int doreply=0;
+	
+	BUG_ON(request->hdr.status != MINIRPC_REQUEST);
+	
+	if (conn->set->protocol->request_info(request->hdr.cmd, &request_type,
+				&request_size)) {
+		minirpc_free_message(request);
+		return;
+	}
+	if (conn->set->protocol->reply_info(request->hdr.cmd, &reply_type,
+				&reply_size) == MINIRPC_OK)
+		doreply=1;
+	
+	request_data=malloc(request_size);
+	if (request_data == NULL) {
+		/* XXX */
+	}
+	if (doreply) {
+		reply_data=malloc(reply_size);
+		if (reply_data == NULL) {
+			free(request_data);
+			/* XXX */
+		}
+	}
+	ret=unserialize(request_type, request->data, request->hdr.datalen,
+				request_data, request_size);
+	
+	pthread_rwlock_rdlock(&conn->operations_lock);
+	result=conn->set->protocol->request(conn, request->hdr.cmd,
+				request_data, reply_data);
+	pthread_rwlock_unlock(&conn->operations_lock);
+	free(request_data);
+	
+	if (doreply) {
+		ret=minirpc_send_reply(conn, request, result, reply_data);
+		free(reply_data);
+		if (ret && ret != MINIRPC_DEFER)
+			XXX;
+	} else {
+		minirpc_free_message(request);
+	}
+}
+
+void run_reply_callback(struct minirpc_message *reply)
+{
+	void *out=NULL;
+	int ret;
+	
+	ret=reply->hdr.status;
+	if (!ret)
+		ret=unformat_request(msg, &out);
+	reply->callback(reply->conn->private, reply->private, ret, out);
+	minirpc_free_message(reply);
 }

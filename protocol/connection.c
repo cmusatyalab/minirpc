@@ -167,7 +167,7 @@ static void try_read_conn(struct isr_connection *conn)
 	printf("try_read_conn\n");
 	while (1) {
 		if (conn->recv_msg == NULL) {
-			conn->recv_msg=minirpc_alloc_message();
+			conn->recv_msg=minirpc_alloc_message(conn);
 			if (conn->recv_msg == NULL) {
 				/* XXX */
 			}
@@ -336,16 +336,17 @@ static void *listener(void *data)
 	}
 }
 
-int send_message(struct isr_connection *conn, struct minirpc_message *msg)
+int send_message(struct minirpc_message *msg)
 {
+	struct minirpc_connection *conn=msg->conn;
 	int ret;
 	
 	pthread_mutex_lock(&conn->send_msgs_lock);
 	/* XXX extra syscall even when we don't need it */
 	ret=need_writable(conn, 1);
 	if (ret) {
-		free(queued);  /* XXX?? */
 		pthread_mutex_unlock(&conn->send_msgs_lock);
+		minirpc_free_message(msg);  /* XXX?? */
 		return ret;
 	}
 	list_add_tail(&msg->lh_msgs, &conn->send_msgs);

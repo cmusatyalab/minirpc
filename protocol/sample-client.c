@@ -9,10 +9,56 @@ void free_ListParcels(ListParcels *in, int container)
 		free(in);
 }
 
+typedef void (list_parcels_callback_fn)(void *conn_private, void *msg_private,
+			int status, ListParcelsReply *reply);
+
 int list_parcels(struct minirpc_connection *conn, ListParcels *in,
 			ListParcelsReply **out)
 {
-	return call_sync(conn, 17, in, out);
+	struct minirpc_message *msg;
+	int ret;
+	
+	ret=format_request(conn, 17, in, &msg);
+	if (ret)
+		return ret;
+	ret=minirpc_send_request(conn, &msg);
+	if (ret)
+		return ret;
+	ret=msg->hdr.status;
+	if (!ret)
+		ret=unformat_request(conn, 17, msg, out);
+	minirpc_free_message(msg);
+	return ret;
+}
+
+int list_parcels_async(struct minirpc_connection *conn, ListParcels *in,
+			list_parcels_callback_fn *callback, void *private)
+{
+	struct minirpc_message *msg;
+	int ret;
+	
+	ret=format_request(conn, 17, in, &msg);
+	if (ret)
+		return ret;
+	return minirpc_send_request_async(conn, msg, callback, private);
+}
+
+int send_list_parcels_async_reply(struct minirpc_message *request,
+			ListParcelsReply *out)
+{
+	stuff;
+	minirpc_free_message(request);
+}
+
+int list_parcels_oneway(struct minirpc_connection *conn, ListParcels *in)
+{
+	struct minirpc_message *msg;
+	int ret;
+	
+	ret=format_request(conn, 17, in, &msg);
+	if (ret)
+		return ret;
+	return send_message(conn, msg);
 }
 
 int sample_client_request_info(unsigned cmd, xdrproc_t *type, unsigned *size)
@@ -55,72 +101,6 @@ int sample_client_request(struct minirpc_connection *conn, int cmd, void *in,
 	default:
 		return MINIRPC_PROCEDURE_UNAVAIL;
 	}
-}
-
-void dispatch_request(struct minirpc_conn_set *conn,
-			struct minirpc_message *request)
-{
-	struct minirpc_message *reply;
-	void *request_data;
-	void *reply_data;
-	int ret;
-	xdrproc_t request_type;
-	xdrproc_t reply_type;
-	unsigned request_size;
-	unsigned reply_size;
-	int noreply;
-	
-	BUG_ON(request->hdr.status != MINIRPC_REQUEST);
-	
-	conn->set->protocol->info(request->hdr.cmd, &noreply, &request_type,
-				&reply_type, &request_size, &reply_size);
-	if (!noreply) {
-		reply=minirpc_alloc_message();
-		if (reply == NULL) {
-			/* XXX we can't return an error because we're out of
-			   memory */
-		}
-		reply->hdr.sequence=request->hdr.sequence;
-		reply->hdr.cmd=request->hdr.cmd;
-	}
-	request_data=malloc(request_size);
-	if (request_data == NULL) {
-		/* XXX */
-	}
-	if (!noreply) {
-		reply_data=malloc(reply_size);
-		if (reply_data == NULL) {
-			free(request_data);
-			/* XXX */
-		}
-	}
-	ret=unserialize(request_type, request->data, request->hdr.datalen,
-				request_data, request_size);
-	
-	pthread_rwlock_rdlock(&conn->operations_lock);
-	ret=conn->set->protocol->request(conn, request->hdr.cmd, request_data,
-				reply_data);
-	pthread_rwlock_unlock(&conn->operations_lock);
-	
-	minirpc_free_message(request);
-	free(request_data);
-	if (!noreply) {
-		reply->hdr.status=ret;
-		if (ret == MINIRPC_OK) {
-			ret=serialize(reply_type, reply_data, &reply->data,
-						&reply->hdr.datalen);
-			if (ret)
-				reply->hdr.status=ret;
-		}
-		free(reply_data);
-		send_message(conn, reply);
-	}
-}
-
-void dispatch_reply(struct minirpc_connection *conn,
-			struct minirpc_message *msg, void *data)
-{
-	
 }
 
 int sample_client_set_operations(struct minirpc_connection *conn,

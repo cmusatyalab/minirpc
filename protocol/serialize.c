@@ -1,7 +1,7 @@
 #define LIBPROTOCOL
 #include "internal.h"
 
-struct minirpc_message *minirpc_alloc_message(void)
+struct minirpc_message *minirpc_alloc_message(struct minirpc_connection *conn)
 {
 	struct minirpc_message *msg;
 	
@@ -10,6 +10,7 @@ struct minirpc_message *minirpc_alloc_message(void)
 		return NULL;
 	memset(msg, 0, sizeof(*msg));
 	INIT_LIST_HEAD(&msg->lh_msgs);
+	msg->conn=conn;
 	return msg;
 }
 
@@ -80,13 +81,13 @@ int serialize(xdrproc_t xdr_proc, void *in, char **out, unsigned *out_len)
 	return MINIRPC_OK;
 }
 
-static int format_message(xdrproc_t type, void *data,
-			struct minirpc_message **result)
+static int format_message(struct minirpc_connection *conn, xdrproc_t type,
+			void *data, struct minirpc_message **result)
 {
 	struct minirpc_message *msg;
 	int ret;
 	
-	msg=minirpc_alloc_message();
+	msg=minirpc_alloc_message(conn);
 	if (msg == NULL)
 		return MINIRPC_NOMEM;
 	ret=serialize(type, in, &msg->data, &msg->hdr.datalen);
@@ -123,7 +124,7 @@ int format_request(struct minirpc_connection *conn, unsigned cmd, void *data,
 	int ret;
 	
 	conn->set->protocol->request_info(cmd, &type, NULL);
-	ret=format_message(type, data, &msg);
+	ret=format_message(conn, type, data, &msg);
 	if (ret)
 		return ret;
 	pthread_mutex_lock(&conn->next_sequence_lock);
@@ -135,62 +136,56 @@ int format_request(struct minirpc_connection *conn, unsigned cmd, void *data,
 	return MINIRPC_OK;
 }
 
-int format_reply(struct minirpc_connection *conn, unsigned sequence,
-			unsigned cmd, void *data,
+int format_reply(struct minirpc_message *request, void *data,
 			struct minirpc_message **result)
 {
 	struct minirpc_message *msg;
 	xdrproc_t type;
 	int ret;
 	
-	conn->set->protocol->reply_info(cmd, &type, NULL);
-	ret=format_message(type, data, &msg);
+	conn->set->protocol->reply_info(request->hdr.cmd, &type, NULL);
+	ret=format_message(request->conn, type, data, &msg);
 	if (ret)
 		return ret;
-	msg->hdr.sequence=sequence;
+	msg->hdr.sequence=request->hdr.sequence;
 	msg->hdr.status=MINIRPC_OK;
-	msg->hdr.cmd=cmd;
+	msg->hdr.cmd=request->hdr.cmd;
 	*result=msg;
 	return MINIRPC_OK;
 }
 
-int format_error_reply(struct minirpc_connection *conn, unsigned sequence,
-			unsigned cmd, int err, struct minirpc_message **result)
+int format_reply_error(struct minirpc_message *request, int err,
+			struct minirpc_message **result)
 {
 	struct minirpc_message *msg;
 	int ret;
 	
-	ret=format_message(xdr_void, data, &msg);
+	ret=format_message(request->conn, xdr_void, NULL, &msg);
 	if (ret)
 		return ret;
-	msg->hdr.sequence=sequence;
+	msg->hdr.sequence=request->hdr.sequence;
 	msg->hdr.status=err;
-	msg->hdr.cmd=cmd;
+	msg->hdr.cmd=request->hdr.cmd;
 	*result=msg;
 	return MINIRPC_OK;
 }
 
-int unformat_request(struct minirpc_connection *conn, unsigned cmd,
-			struct minirpc_message *msg, void **result)
+int unformat_request(struct minirpc_message *msg, void **result)
 {
 	xdrproc_t type;
 	unsigned size;
 	
-	conn->set->protocol->request_info(cmd, &type, &size);
+	msg->conn->set->protocol->request_info(msg->hdr.cmd, &type, &size);
 	return unformat_message(type, size, msg, result);
 }
 
-int unformat_reply(struct minirpc_connection *conn, unsigned cmd,
-			struct minirpc_message *msg, void **result)
+int unformat_reply(struct minirpc_message *msg, void **result)
 {
 	xdrproc_t type;
 	unsigned size;
 	
-	if (msg->hdr.status) {
-		type=xdr_void;
-		size=0;
-	} else {
-		conn->set->protocol->reply_info(cmd, &type, &size);
-	}
+	if (msg->hdr.status)
+		return msg->hdr.status;
+	msg->conn->set->protocol->reply_info(msg->hdr.cmd, &type, &size);
 	return unformat_message(type, size, msg, result);
 }

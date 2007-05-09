@@ -16,6 +16,7 @@
 	} while (0)
 
 struct minirpc_message {
+	struct minirpc_connection *conn;
 	struct list_head lh_msgs;
 	struct minirpc_header hdr;
 	char *data;
@@ -26,8 +27,6 @@ struct minirpc_message {
 };
 
 struct minirpc_protocol {
-	void request
-	void (*async_reply)(struct minirpc_message *msg)
 	int (*request)(struct minirpc_connection *conn, int cmd, void *in,
 			void *out);
 	int (*request_info)(unsigned cmd, xdrproc_t *type, unsigned *size);
@@ -88,7 +87,7 @@ struct minirpc_connection {
 };
 
 typedef void (reply_callback_fn)(void *conn_private, void *msg_private,
-			void *data);
+			int status, void *data);
 
 /* connection.c */
 int send_message(struct isr_connection *conn, struct ISRMessage *msg);

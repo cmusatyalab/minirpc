@@ -4,7 +4,8 @@ enum minirpc_status {
 	MINIRPC_ENCODING_ERR		= -2,
 	MINIRPC_NOMEM			= -3,
 	MINIRPC_PROCEDURE_UNAVAIL	= -4,
-	MINIRPC_PROTOCOL_MISMATCH	= -5
+	MINIRPC_PROTOCOL_MISMATCH	= -5,
+	MINIRPC_DEFER			= -6
 };
 
 struct minirpc_header {
