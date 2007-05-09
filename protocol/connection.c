@@ -118,6 +118,17 @@ void isr_conn_remove(struct isr_connection *conn)
 	free(conn);
 }
 
+int minirpc_conn_set_operations(struct minirpc_connection *conn,
+			struct minirpc_protocol *protocol, void *ops)
+{
+	if (conn->set->protocol != protocol)
+		return MINIRPC_PROTOCOL_MISMATCH;
+	pthread_rwlock_wrlock(&conn->operations_lock);
+	conn->operations=ops;
+	pthread_rwlock_unlock(&conn->operations_lock);
+	return MINIRPC_OK;
+}
+
 static int need_writable(struct isr_connection *conn, int writable)
 {
 	struct epoll_event event;

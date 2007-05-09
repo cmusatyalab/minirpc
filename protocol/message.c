@@ -83,44 +83,71 @@ static int send_request_pending(struct minirpc_message *request,
 	return ret;
 }
 
-/* msg is an inout parameter */
-int minirpc_send_request(struct minirpc_message **msg)
+int minirpc_send_request(struct minirpc_connection *conn, unsigned cmd,
+			void *in, void **out)
 {
-	struct minirpc_connection *conn=(*msg)->conn;
-	struct pending_reply *pending;
+	struct minirpc_message *request;
 	struct minirpc_message *reply=NULL;
+	struct pending_reply *pending;
 	int ret;
 	
-	ret=pending_alloc(*msg, &pending);
+	ret=format_request(conn, cmd, in, &request);
 	if (ret)
 		return ret;
+	ret=pending_alloc(request, &pending);
+	if (ret) {
+		minirpc_free_message(request);
+		return ret;
+	}
 	pending->async=0;
 	pthread_cond_init(&pending->data.sync.cond, NULL);
 	pending->data.sync.reply=&reply;
-	ret=send_request_pending(conn, request, pending);
+	ret=send_request_pending(request, pending);
 	if (ret)
 		return ret;
+	
 	pthread_mutex_lock(&conn->sync_wakeup_lock);
 	while (reply == NULL)
 		pthread_cond_wait(&cond, &conn->sync_wakeup_lock);
 	pthread_mutex_unlock(&conn->sync_wakeup_lock);
-	*msg=reply;
-	return 0;
+	ret=reply->hdr.status;
+	if (!ret)
+		ret=unformat_reply(reply, out);
+	minirpc_free_message(reply);
+	return MINIRPC_OK;
 }
 
-int minirpc_send_request_async(struct minirpc_message *request,
-			reply_callback_fn *callback, void *private)
+int minirpc_send_request_async(struct minirpc_connection *conn, unsigned cmd,
+			void *in, reply_callback_fn *callback, void *private)
 {
+	struct minirpc_message *msg;
 	struct pending_reply *pending;
 	int ret;
 	
-	ret=pending_alloc(request, &pending);
+	ret=format_request(conn, cmd, in, &msg);
 	if (ret)
 		return ret;
+	ret=pending_alloc(request, &pending);
+	if (ret) {
+		minirpc_free_message(msg);
+		return ret;
+	}
 	pending->async=1;
 	pending->data.async.callback=callback;
 	pending->data.async.private=private;
-	return send_request_pending(msg->conn, request, pending);
+	return send_request_pending(msg, pending);
+}
+
+int minirpc_send_request_noreply(struct minirpc_connection *conn, unsigned cmd,
+			void *in)
+{
+	struct minirpc_message *msg;
+	int ret;
+	
+	ret=format_request(conn, cmd, in, &msg);
+	if (ret)
+		return ret;
+	return send_message(msg);
 }
 
 int minirpc_send_reply(struct minirpc_message *request, int status, void *data)
