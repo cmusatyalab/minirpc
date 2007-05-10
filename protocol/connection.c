@@ -241,7 +241,7 @@ static int get_next_message(struct mrpc_connection *conn)
 		pthread_mutex_unlock(&conn->send_msgs_lock);
 		return 0;
 	}
-	conn->send_msg=list_entry(conn->send_msgs.next, struct mrpc_message,
+	conn->send_msg=list_first_entry(&conn->send_msgs, struct mrpc_message,
 				lh_msgs);
 	list_del_init(&conn->send_msg->lh_msgs);
 	pthread_mutex_unlock(&conn->send_msgs_lock);

@@ -315,7 +315,7 @@ void mrpc_dispatch_loop(struct mrpc_conn_set *set)
 						&set->event_queue_lock);
 			continue;
 		}
-		msg=list_entry(set->event_queue.next, struct mrpc_message,
+		msg=list_first_entry(&set->event_queue, struct mrpc_message,
 					lh_msgs);
 		list_del_init(&msg->lh_msgs);
 		pthread_mutex_unlock(&set->event_queue_lock);
@@ -333,7 +333,7 @@ int mrpc_dispatch_nonblock(struct mrpc_conn_set *set)
 	
 	pthread_mutex_lock(&set->event_queue_lock);
 	if (!list_is_empty(&set->event_queue)) {
-		msg=list_entry(set->event_queue.next, struct mrpc_message,
+		msg=list_first_entry(&set->event_queue, struct mrpc_message,
 					lh_msgs);
 		list_del_init(&msg->lh_msgs);
 	}

@@ -44,6 +44,8 @@ static inline void list_del_init(struct list_head *head)
 }
 
 #define list_entry(head, type, field) (((void*)head) - offsetof(type, field))
+#define list_first_entry(head, type, field) \
+	list_entry((head)->next, type, field)
 #define list_for_each(cur, head) \
 	for (cur=(head)->next; cur != (head); cur=cur->next)
 #define list_for_each_safe(cur, next, head) \
