@@ -298,7 +298,9 @@ static void dispatch_request(struct mrpc_message *request)
 	ret=unformat_request(request, &request_data);
 	
 	pthread_rwlock_rdlock(&conn->operations_lock);
-	result=conn->set->protocol->request(request, request_data, reply_data);
+	result=conn->set->protocol->request(conn->operations, conn->private,
+				request, request->hdr.cmd, request_data,
+				reply_data);
 	pthread_rwlock_unlock(&conn->operations_lock);
 	xdr_free(request_type, request_data);
 	free(request_data);

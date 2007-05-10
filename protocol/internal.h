@@ -6,6 +6,7 @@
 #define MINIRPC_INTERNAL_H
 
 #include "minirpc.h"
+#include "minirpc_protocol.h"
 #include "minirpc_xdr.h"
 #include "list.h"
 #include "hash.h"
@@ -14,13 +15,6 @@
 		if ((ptr) != NULL) \
 			*(ptr)=(val); \
 	} while (0)
-
-struct mrpc_protocol {
-	int is_server;
-	int (*request)(struct mrpc_message *msg, void *in, void *out);
-	int (*request_info)(unsigned cmd, xdrproc_t *type, unsigned *size);
-	int (*reply_info)(unsigned cmd, xdrproc_t *type, unsigned *size);
-};
 
 struct mrpc_conn_set {
 	const struct mrpc_protocol *protocol;
@@ -76,9 +70,6 @@ struct mrpc_connection {
 	int next_sequence;
 	pthread_mutex_t next_sequence_lock;
 };
-
-typedef void (reply_callback_fn)(void *conn_private, void *msg_private,
-			int status, void *data);
 
 struct mrpc_message {
 	struct mrpc_connection *conn;

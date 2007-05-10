@@ -1,5 +1,5 @@
 #define MINIRPC_INTERNAL
-#include "internal.h"
+#include "minirpc_protocol.h"
 #include "sample-client.h"
 
 void free_ListParcels(ListParcels *in, int container)
@@ -64,16 +64,17 @@ static int sample_client_reply_info(unsigned cmd, xdrproc_t *type,
 	
 }
 
-static int sample_client_request(struct mrpc_message *msg, void *in, void *out)
+static int sample_client_request(void *p_ops, void *conn_data,
+			struct mrpc_message *msg, int cmd, void *in, void *out)
 {
-	struct sample_client_operations *ops=msg->conn->operations;
+	struct sample_client_operations *ops=p_ops;
 	
-	switch (msg->hdr.cmd) {
+	switch (cmd) {
 	case nr_func1:
-		if (conn->operations->func1 == NULL)
+		if (ops->func1 == NULL)
 			return MINIRPC_PROCEDURE_UNAVAIL;
 		else
-			return ops->func1(msg->conn->data, msg, in, out);
+			return ops->func1(conn_data, msg, in, out);
 	default:
 		return MINIRPC_PROCEDURE_UNAVAIL;
 	}

@@ -23,6 +23,6 @@ SUBDIRS = test
 
 noinst_LTLIBRARIES = libisrproto.la
 libisrproto_la_SOURCES = connection.c message.c serialize.c xdr_len.c
-libisrproto_la_SOURCES += hash.h list.h protocol.h internal.h
+libisrproto_la_SOURCES += hash.h list.h minirpc.h minirpc_protocol.h internal.h
 libisrproto_la_SOURCES += $(GEN)
 libisrproto_la_LDFLAGS = -static
