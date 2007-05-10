@@ -16,8 +16,8 @@
 	} while (0)
 
 struct mrpc_protocol {
-	int (*request)(struct mrpc_connection *conn, int cmd, void *in,
-			void *out);
+	int is_server;
+	int (*request)(struct mrpc_message *msg, void *in, void *out);
 	int (*request_info)(unsigned cmd, xdrproc_t *type, unsigned *size);
 	int (*reply_info)(unsigned cmd, xdrproc_t *type, unsigned *size);
 };

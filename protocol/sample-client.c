@@ -64,26 +64,26 @@ static int sample_client_reply_info(unsigned cmd, xdrproc_t *type,
 	
 }
 
-static int sample_client_request(struct mrpc_connection *conn, int cmd,
-			void *in, void *out)
+static int sample_client_request(struct mrpc_message *msg, void *in, void *out)
 {
-	struct sample_client_operations *ops=conn->operations;
+	struct sample_client_operations *ops=msg->conn->operations;
 	
-	switch (cmd) {
+	switch (msg->hdr.cmd) {
 	case nr_func1:
 		if (conn->operations->func1 == NULL)
 			return MINIRPC_PROCEDURE_UNAVAIL;
 		else
-			return ops->func1(conn->data, in, out);
+			return ops->func1(msg->conn->data, msg, in, out);
 	default:
 		return MINIRPC_PROCEDURE_UNAVAIL;
 	}
 }
 
 struct mrpc_protocol sample_client = {
-	.request = sample_client_request;
-	.request_info = sample_client_request_info;
-	.reply_info = sample_client_reply_info;
+	.is_server = 0,
+	.request = sample_client_request,
+	.request_info = sample_client_request_info,
+	.reply_info = sample_client_reply_info
 };
 
 int sample_client_set_operations(struct mrpc_connection *conn,

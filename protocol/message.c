@@ -271,57 +271,56 @@ static void dispatch_request(struct mrpc_message *request)
 	int result;
 	xdrproc_t request_type;
 	xdrproc_t reply_type;
-	unsigned request_size;
 	unsigned reply_size;
-	int doreply=0;
+	int doreply;
 	
 	BUG_ON(request->hdr.status != MINIRPC_REQUEST);
 	
 	if (conn->set->protocol->request_info(request->hdr.cmd, &request_type,
-				&request_size)) {
+				NULL) {
+		/* XXX invalid message */
 		mrpc_free_message(request);
 		return;
 	}
-	if (conn->set->protocol->reply_info(request->hdr.cmd, &reply_type,
-				&reply_size) == MINIRPC_OK)
-		doreply=1;
-	
-	request_data=malloc(request_size);
-	if (request_data == NULL) {
-		/* XXX */
-	}
+	doreply=(request->hdr.cmd >= 0);
 	if (doreply) {
-		reply_data=malloc(reply_size);
-		if (reply_data == NULL) {
-			free(request_data);
+		if (conn->set->protocol->reply_info(request->hdr.cmd,
+					&reply_type, &reply_size) {
 			/* XXX */
 		}
+		
+		reply_data=malloc(reply_size);
+		if (reply_data == NULL) {
+			/* XXX */
+		}
+		memset(reply_data, 0, reply_size);
 	}
-	ret=unserialize(request_type, request->data, request->hdr.datalen,
-				request_data, request_size);
+	ret=unformat_request(request, &request_data);
 	
 	pthread_rwlock_rdlock(&conn->operations_lock);
-	result=conn->set->protocol->request(conn, request->hdr.cmd,
-				request_data, reply_data);
+	result=conn->set->protocol->request(request, request_data, reply_data);
 	pthread_rwlock_unlock(&conn->operations_lock);
+	xdr_free(request_type, request_data);
 	free(request_data);
 	
 	if (doreply) {
 		if (result == MINIRPC_DEFER) {
+			xdr_free(reply_type, reply_data);
 			free(reply_data);
 			/* This struct is going to stay around for a while,
 			   but we won't need the serialized request data
 			   anymore.  Free up some memory. */
 			free(request->data);
 			request->data=NULL;
+			return;
 		}
-		ret=mrpc_send_reply(conn, request, result, reply_data);
+		ret=mrpc_send_reply(request, result, reply_data);
+		xdr_free(reply_type, reply_data);
 		free(reply_data);
 		if (ret)
 			XXX;
-	} else {
-		mrpc_free_message(request);
 	}
+	mrpc_free_message(request);
 }
 
 static void run_reply_callback(struct mrpc_message *reply)

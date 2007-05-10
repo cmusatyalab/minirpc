@@ -11,7 +11,7 @@ enum mrpc_status {
 struct mrpc_header {
 	unsigned sequence;
 	int status;
-	unsigned cmd;
+	int cmd;
 	unsigned datalen;
 };
 
