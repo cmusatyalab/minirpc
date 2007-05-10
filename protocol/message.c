@@ -171,10 +171,54 @@ int mrpc_send_reply(struct mrpc_message *request, int status, void *data)
 
 static void queue_event(struct mrpc_message *msg)
 {
-	pthread_mutex_lock(&set->callback_queue_lock);
-	list_add_tail(&msg->lh_msgs, &set->callback_queue);
-	pthread_cond_signal(&set->callback_queue_cond);
-	pthread_mutex_unlock(&set->callback_queue_lock);
+	struct mrpc_conn_set *set=msg->conn->set;
+	
+	pthread_mutex_lock(&set->events_lock);
+	if (list_is_empty(&set->events))
+		write(set->events_notify_pipe[1], "a", 1);
+	list_add_tail(&msg->lh_msgs, &set->events);
+	pthread_mutex_unlock(&set->events_lock);
+}
+
+static int empty_pipe(int fd)
+{
+	char buf[8];
+	int count;
+	ssize_t ret;
+	
+	for (count=0; (ret=read(fd, buf, sizeof(buf))) >= 0; count += ret);
+	return count;
+}
+
+static struct mrpc_message *unqueue_event(struct mrpc_conn_set *set)
+{
+	struct mrpc_message *msg=NULL;
+	
+	pthread_mutex_lock(&set->events_lock);
+	if (list_is_empty(&set->events)) {
+		if (empty_pipe(set->events_notify_pipe[0]))
+			XXX;
+	} else {
+		msg=list_first_entry(&set->events, struct mrpc_message,
+					lh_msgs);
+		list_del_init(&msg->lh_msgs);
+		if (list_is_empty(&set->events))
+			if (empty_pipe(set->events_notify_pipe[0]) != 1)
+				XXX;
+	}
+	pthread_mutex_unlock(&set->events_lock);
+	return msg;
+}
+
+/* Return a copy of the notify fd.  This ensures that the application can never
+   inadvertently cause SIGPIPE by closing the read end of the notify pipe, and
+   also ensures that we don't close the fd out from under the application when
+   the connection set is destroyed.  The application must close the fd when
+   done with it.  The application must not read or write the fd, only select()
+   on it.  When an event is ready to be processed, the fd will be readable. */
+int mrpc_get_event_fd(struct mrpc_conn_set *set)
+{
+	return dup(set->events_notify_pipe[0]);
 }
 
 /* XXX what happens if we get a bad reply?  close the connection? */
@@ -303,42 +347,55 @@ static void dispatch_event(struct mrpc_message *msg)
 	}
 }
 
-void mrpc_dispatch_loop(struct mrpc_conn_set *set)
+int mrpc_dispatch_one(struct mrpc_conn_set *set)
 {
 	struct mrpc_message *msg;
 	
-	pthread_mutex_lock(&set->event_queue_lock);
-	set->event_queue_threads++
-	while (!set->dying) {
-		if (list_is_empty(&set->event_queue)) {
-			pthread_cond_wait(&set->event_queue_cond,
-						&set->event_queue_lock);
-			continue;
-		}
-		msg=list_first_entry(&set->event_queue, struct mrpc_message,
-					lh_msgs);
-		list_del_init(&msg->lh_msgs);
-		pthread_mutex_unlock(&set->event_queue_lock);
-		dispatch_event(msg);
-		pthread_mutex_lock(&set->event_queue_lock);
-	}
-	set->event_queue_threads--;
-	pthread_cond_broadcast(&set->event_queue_cond);
-	pthread_mutex_unlock(&set->event_queue_lock);
-}
-
-int mrpc_dispatch_nonblock(struct mrpc_conn_set *set)
-{
-	struct mrpc_message *msg=NULL;
-	
-	pthread_mutex_lock(&set->event_queue_lock);
-	if (!list_is_empty(&set->event_queue)) {
-		msg=list_first_entry(&set->event_queue, struct mrpc_message,
-					lh_msgs);
-		list_del_init(&msg->lh_msgs);
-	}
-	pthread_mutex_unlock(&set->event_queue_lock);
+	msg=unqueue_event(set);
 	if (msg != NULL)
 		dispatch_event(msg);
 	return (msg != NULL);
+}
+
+int mrpc_dispatch_all(struct mrpc_conn_set *set)
+{
+	int i;
+	
+	for (i=0; mrpc_dispatch_one(set); i++);
+	return i;
+}
+
+int mrpc_dispatch_loop(struct mrpc_conn_set *set)
+{
+	struct mrpc_message *msg;
+	struct pollfd poll_s[2] = {0};
+	int ret=0;
+	
+	pthread_mutex_lock(&set->events_lock);
+	set->events_threads++;
+	pthread_cond_broadcast(&set->events_threads_cond);
+	pthread_mutex_unlock(&set->events_lock);
+	
+	poll_s[0].fd=set->events_notify_pipe[0];
+	poll_s[0].events=POLLIN;
+	poll_s[1].fd=set->shutdown_pipe[0];
+	poll_s[1].events=POLLIN;
+	
+	while (poll_s[1].revents == 0) {
+		msg=unqueue_event(set);
+		if (msg == NULL) {
+			if (poll(&poll_s, 2, -1) == -1 && errno != EINTR) {
+				ret=errno;
+				break;
+			}
+		} else {
+			dispatch_event(msg);
+		}
+	}
+	
+	pthread_mutex_lock(&set->events_lock);
+	set->events_threads--;
+	pthread_cond_broadcast(&set->events_threads_cond);
+	pthread_mutex_unlock(&set->events_lock);
+	return ret;
 }

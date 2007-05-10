@@ -380,10 +380,18 @@ int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set, request_fn *func,
 	set->request=func;
 	set->msg_buckets=msg_buckets;
 	set->expected_fds=expected_fds;
-	if (pipe(set->signal_pipe)) {
+	if (pipe(set->shutdown_pipe)) {
 		ret=-errno;
-		goto bad_pipe;
+		goto bad_shutdown_pipe;
 	}
+	if (pipe(set->events_notify_pipe)) {
+		ret=-errno;
+		goto bad_events_pipe;
+	}
+	if (set_nonblock(set->events_notify_pipe[0]))
+		goto bad_epoll;
+	if (set_nonblock(set->events_notify_pipe[1]))
+		goto bad_epoll;
 	set->epoll_fd=epoll_create(expected_fds);
 	if (set->epoll_fd < 0) {
 		ret=-errno;
@@ -391,7 +399,7 @@ int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set, request_fn *func,
 	}
 	event.events=EPOLLIN;
 	event.data.ptr=set;
-	if (epoll_ctl(set->epoll_fd, EPOLL_CTL_ADD, set->signal_pipe[0],
+	if (epoll_ctl(set->epoll_fd, EPOLL_CTL_ADD, set->shutdown_pipe[0],
 				&event)) {
 		ret=-errno;
 		goto bad_epoll_pipe;
@@ -408,9 +416,12 @@ bad_pthread:
 bad_epoll_pipe:
 	close(set->epoll_fd);
 bad_epoll:
-	close(set->signal_pipe[0]);
-	close(set->signal_pipe[1]);
-bad_pipe:
+	close(set->events_notify_pipe[0]);
+	close(set->events_notify_pipe[1]);
+bad_events_pipe:
+	close(set->shutdown_pipe[0]);
+	close(set->shutdown_pipe[1]);
+bad_shutdown_pipe:
 	hash_free(set->conns);
 bad_conns:
 	free(set);
@@ -421,15 +432,11 @@ bad_alloc:
 /* XXX drops lots of stuff on the floor */
 void mrpc_conn_set_free(struct mrpc_conn_set *set)
 {
-	pthread_mutex_lock(&set->event_queue_lock);
-	set->dying=1;
-	while (set->event_queue_threads) {
-		pthread_cond_broadcast(&set->event_queue_cond);
-		pthread_cond_wait(&set->event_queue_cond,
-					&set->event_queue_lock);
-	}
-	pthread_mutex_unlock(&set->event_queue_lock);
-	write(set->signal_pipe[1], "s", 1);
+	write(set->shutdown_pipe[1], "s", 1);
+	pthread_mutex_lock(&set->events_lock);
+	while (set->event_queue_threads)
+		pthread_cond_wait(&set->events_threads_cond, &set->events_lock);
+	pthread_mutex_unlock(&set->events_lock);
 	pthread_join(set->thread, NULL);
 	close(set->epoll_fd);
 	hash_free(set->conns);

@@ -31,15 +31,15 @@ struct mrpc_conn_set {
 	struct htable *conns;
 	pthread_mutex_t conns_lock;
 	
-	struct list_head event_queue;
-	pthread_mutex_t event_queue_lock;
-	pthread_cond_t event_queue_cond;
-	int dying;
-	unsigned event_queue_threads;
+	struct list_head events;
+	int events_notify_pipe[2];
+	pthread_mutex_t events_lock;
 	
 	int epoll_fd;
-	int signal_pipe[2];
+	int shutdown_pipe[2];
 	pthread_t thread;
+	unsigned events_threads;		/* protected by events_lock */
+	pthread_cond_t events_threads_cond;
 };
 
 enum conn_state {
