@@ -44,6 +44,83 @@ sub closeFiles {
 	}
 }
 
+sub gen_sender_stub {
+	my $cf = shift;
+	my $hf = shift;
+	my $func = shift;
+	my $in = shift;
+	my $out = shift;
+	
+	print $cf <<EOF;
+
+int $func(struct mrpc_connection *conn,
+			$in *in, $out **out)
+{
+	return mrpc_send_request(conn, nr_$func, in, out);
+}
+
+int ${func}_async(struct mrpc_connection *conn, $in *in,
+			${func}_callback_fn *callback, void *private)
+{
+	return mrpc_send_request_async(conn, nr_$func, in, callback,
+				private);
+}
+EOF
+
+	print $hf <<EOF;
+
+int $func(struct mrpc_connection *conn,
+			$in *in, $out **out);
+typedef void (${func}_callback_fn)(void *conn_private,
+			void *msg_private, int status, $out *reply);
+int ${func}_async(struct mrpc_connection *conn, $in *in,
+			${func}_callback_fn *callback, void *private);
+EOF
+}
+
+sub gen_receiver_stub {
+	my $cf = shift;
+	my $hf = shift;
+	my $func = shift;
+	my $in = shift;
+	my $out = shift;
+	
+	print $cf <<EOF;
+
+int ${func}_send_async_reply(struct mrpc_message *request,
+			int status, $out *out)
+{
+	return mrpc_send_reply(request, status, out);
+}
+EOF
+
+	print $hf <<EOF;
+int ${func}_send_async_reply(struct mrpc_message *request,
+			int status, $out *out);
+EOF
+}
+
+sub gen_oneway_stub {
+	my $cf = shift;
+	my $hf = shift;
+	my $func = shift;
+	my $in = shift;
+	my $out = shift;
+	
+	print $cf <<EOF;
+
+int ${func}_oneway(struct mrpc_connection *conn, $in *in)
+{
+	return mrpc_send_request_noreply(conn, nr_$func, in);
+}
+EOF
+
+	print $cf <<EOF;
+
+int ${func}_oneway(struct mrpc_connection *conn, $in *in)
+EOF
+}
+
 getopts("o:");
 die "No output file specified"
 	if !defined($opt_o);
@@ -67,6 +144,8 @@ my %procNums;
 my $inProcDefs;
 my $sym_re = '([a-zA-Z0-9_]+)';
 my $type_re = '((unsigned\s+)?[a-zA-Z0-9_]+)';
+my @sfh;
+my @rfh;
 my $noreply;
 my $arg;
 my $ret;
@@ -83,6 +162,13 @@ for $filename (@ARGV) {
 							"found")
 					if exists($procNums{$inProcDefs});
 				$procNums{$inProcDefs} = {};
+				if ($1 eq "server") {
+					@sfh = (*CCF, *CHF);
+					@rfh = (*SCF, *SHF);
+				} else {
+					@sfh = (*SCF, *SHF);
+					@rfh = (*CCF, *CHF);
+				}
 				$noreply = ($2 eq "msgs");
 				next;
 			}
@@ -120,6 +206,15 @@ for $filename (@ARGV) {
 					if $noreply && $ret ne "void";
 				$procNums{$inProcDefs}->{$num}=1;
 				print "$func($arg, $ret) = $num\n";
+				if ($noreply) {
+					gen_oneway_stub($sfh[0], $sfh[1],
+						$func, $arg, $ret);
+				} else {
+					gen_sender_stub($sfh[0], $sfh[1],
+						$func, $arg, $ret);
+					gen_receiver_stub($rfh[0], $rfh[1],
+						$func, $arg, $ret);
+				}
 			} elsif (/^\s*$/) {
 				next;
 			} else {

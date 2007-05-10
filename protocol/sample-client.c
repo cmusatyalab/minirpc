@@ -90,5 +90,5 @@ struct mrpc_protocol sample_client = {
 int sample_client_set_operations(struct mrpc_connection *conn,
 			struct sample_client_operations *ops)
 {
-	return mrpc_conn_set_operations(conn, protocol, ops);
+	return mrpc_conn_set_operations(conn, sample_client, ops);
 }
