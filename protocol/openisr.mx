@@ -241,7 +241,7 @@ typedef Hash NeedTags<>;
 
 serverprocs {
 	hello(ClientHello, ServerHello) = 1;
-	noreply start_tls() = 2;
+	start_tls() = 2;
 	start_auth(Authenticate, AuthReply) = 3;
 	auth_step(AuthData, AuthReply) = 4;
 	
@@ -262,6 +262,14 @@ serverprocs {
 	ping() = 17;
 }
 
+servermsgs {
+	oneway(Authenticate) = 1;
+}
+
 clientprocs {
+	
+}
+
+clientmsgs {
 	
 }

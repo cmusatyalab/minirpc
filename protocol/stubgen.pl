@@ -63,11 +63,8 @@ foreach $type ("int", "unsigned", "unsigned int", "enum", "bool", "hyper",
 	$types{$type} = 1;
 }
 
-my @procNums = ({}, {});	# First hash is client, second is server
-my $inProcDefs = 0;
-my $isServerDefs = 0;
-my $haveServerDefs = 0;
-my $haveClientDefs = 0;
+my %procNums;
+my $inProcDefs;
 my $sym_re = '([a-zA-Z0-9_]+)';
 my $type_re = '((unsigned\s+)?[a-zA-Z0-9_]+)';
 my $noreply;
@@ -80,20 +77,13 @@ for $filename (@ARGV) {
 		or die "Can't open $filename";
 	while (<FH>) {
 		if (!$inProcDefs) {
-			if (/^\s*(client|server)procs\s+{/) {
-				$inProcDefs = 1;
-				$isServerDefs = ($1 eq "server");
-				if ($isServerDefs) {
-					parseErr("Multiple serverprocs " .
-							"definitions found")
-						if $haveServerDefs;
-					$haveServerDefs = 1;
-				} else {
-					parseErr("Multiple clientprocs " .
-							"definitions found")
-						if $haveClientDefs;
-					$haveClientDefs = 1;
-				}
+			if (/^\s*(client|server)(procs|msgs)\s+{/) {
+				$inProcDefs = "$1$2";
+				parseErr("Multiple $inProcDefs definitions " .
+							"found")
+					if exists($procNums{$inProcDefs});
+				$procNums{$inProcDefs} = {};
+				$noreply = ($2 eq "msgs");
 				next;
 			}
 			print XF;
@@ -107,17 +97,15 @@ for $filename (@ARGV) {
 			}
 		} else {
 			if (/}/) {
-				$inProcDefs = 0;
+				undef $inProcDefs;
 				next;
 			}
-			if (/^\s*(noreply)?\s+$sym_re\(($type_re
-						(,\s+$type_re)?)?\)\s*=
+			if (/^\s*$sym_re\(($type_re(,\s+$type_re)?)?\)\s*=
 						\s*([1-9][0-9]*)\s*;/ox) {
-				$noreply = defined($1);
-				$func = $2;
-				$arg = $4;
-				$ret = $7;
-				$num = $9;
+				$func = $1;
+				$arg = $3;
+				$ret = $6;
+				$num = $8;
 				$arg = "void" if !defined($arg);
 				$ret = "void" if !defined($ret);
 				parseErr("No such type: $arg")
@@ -125,13 +113,12 @@ for $filename (@ARGV) {
 				parseErr("No such type: $ret")
 					if !defined($types{$ret});
 				parseErr("Duplicate procedure number")
-					if defined($procNums[$isServerDefs]
+					if defined($procNums{$inProcDefs}
 								->{$num});
-				parseErr("noreply attribute on procedure not" .
-							" returning void")
+				parseErr("Procedures in $inProcDefs section " .
+							"cannot return a value")
 					if $noreply && $ret ne "void";
-				$procNums[$isServerDefs]->{$num}=1;
-				print "noreply " if $noreply;
+				$procNums{$inProcDefs}->{$num}=1;
 				print "$func($arg, $ret) = $num\n";
 			} elsif (/^\s*$/) {
 				next;
