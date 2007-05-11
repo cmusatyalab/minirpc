@@ -45,23 +45,51 @@ sub closeFiles {
 	}
 }
 
+sub argument {
+	my $type = shift;
+	my $var = shift;
+	
+	if ($type ne "void") {
+		return ", $type $var";
+	} else {
+		return "";
+	}
+}
+
+sub parameter {
+	my $type = shift;
+	my $param = shift;
+	
+	if ($type ne "void") {
+		return $param;
+	} else {
+		return "NULL";
+	}
+}
+
 sub gen_sender_stub_c {
 	my $fh = shift;
 	my $func = shift;
 	my $in = shift;
 	my $out = shift;
 	
+	my $inarg = argument($in, "*in");
+	my $outarg = argument($out, "**out");
+	my $inparam = parameter($in, "in");
+	my $outparam = parameter($out, "out");
+	
 	print $fh <<EOF;
 
-int $func(struct mrpc_connection *conn, $in *in, $out **out)
+int $func(struct mrpc_connection *conn$inarg$outarg)
 {
-	return mrpc_send_request(conn, nr_$func, in, out);
+	return mrpc_send_request(conn, nr_$func, $inparam, $outparam);
 }
 
-int ${func}_async(struct mrpc_connection *conn, $in *in,
-			${func}_callback_fn *callback, void *private)
+int ${func}_async(struct mrpc_connection *conn,
+			${func}_callback_fn *callback,
+			void *private$inarg)
 {
-	return mrpc_send_request_async(conn, nr_$func, in, callback,
+	return mrpc_send_request_async(conn, nr_$func, $inparam, callback,
 				private);
 }
 EOF
@@ -73,9 +101,11 @@ sub gen_sender_stub_sync_h {
 	my $in = shift;
 	my $out = shift;
 	
+	my $inarg = argument($in, "*in");
+	my $outarg = argument($out, "**out");
+	
 	print $fh <<EOF;
-int $func(struct mrpc_connection *conn,
-			$in *in, $out **out);
+int $func(struct mrpc_connection *conn$inarg$outarg);
 EOF
 }
 
@@ -85,9 +115,11 @@ sub gen_sender_stub_typedef_h {
 	my $in = shift;
 	my $out = shift;
 	
+	my $outarg = argument($out, "*reply");
+	
 	print $fh <<EOF;
 typedef void (${func}_callback_fn)(void *conn_private,
-			void *msg_private, int status, $out *reply);
+			void *msg_private, int status$outarg);
 EOF
 }
 
@@ -97,9 +129,12 @@ sub gen_sender_stub_async_h {
 	my $in = shift;
 	my $out = shift;
 	
+	my $inarg = argument($in, "*in");
+	
 	print $fh <<EOF;
-int ${func}_async(struct mrpc_connection *conn, $in *in,
-			${func}_callback_fn *callback, void *private);
+int ${func}_async(struct mrpc_connection *conn,
+			${func}_callback_fn *callback,
+			void *private$inarg);
 EOF
 }
 
@@ -109,12 +144,15 @@ sub gen_receiver_stub_c {
 	my $in = shift;
 	my $out = shift;
 	
+	my $outarg = argument($out, "*out");
+	my $outparam = parameter($out, "out");
+	
 	print $fh <<EOF;
 
 int ${func}_send_async_reply(struct mrpc_message *request,
-			int status, $out *out)
+			int status$outarg)
 {
-	return mrpc_send_reply(request, status, out);
+	return mrpc_send_reply(request, status$outparam);
 }
 EOF
 }
@@ -125,9 +163,11 @@ sub gen_receiver_stub_h {
 	my $in = shift;
 	my $out = shift;
 	
+	my $outarg = argument($out, "*out");
+	
 	print $fh <<EOF;
 int ${func}_send_async_reply(struct mrpc_message *request,
-			int status, $out *out);
+			int status$outarg);
 EOF
 }
 
@@ -137,11 +177,14 @@ sub gen_oneway_stub_c {
 	my $in = shift;
 	my $out = shift;
 	
+	my $inarg = argument($in, "*in");
+	my $inparam = parameter($in, "in");
+	
 	print $fh <<EOF;
 
-int ${func}(struct mrpc_connection *conn, $in *in)
+int ${func}(struct mrpc_connection *conn$inarg)
 {
-	return mrpc_send_request_noreply(conn, nr_$func, in);
+	return mrpc_send_request_noreply(conn, nr_$func, $inparam);
 }
 EOF
 }
@@ -152,8 +195,10 @@ sub gen_oneway_stub_h {
 	my $in = shift;
 	my $out = shift;
 	
+	my $inarg = argument($in, "*in");
+	
 	print $fh <<EOF;
-int ${func}(struct mrpc_connection *conn, $in *in);
+int ${func}(struct mrpc_connection *conn$inarg);
 EOF
 }
 

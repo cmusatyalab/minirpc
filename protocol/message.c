@@ -116,7 +116,7 @@ int mrpc_send_request(struct mrpc_connection *conn, unsigned cmd, void *in,
 }
 
 int mrpc_send_request_async(struct mrpc_connection *conn, unsigned cmd,
-			void *in, reply_callback_fn *callback, void *private)
+			reply_callback_fn *callback, void *private, void *in)
 {
 	struct mrpc_message *msg;
 	struct pending_reply *pending;
