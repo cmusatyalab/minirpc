@@ -3,6 +3,7 @@
 use strict;
 use warnings;
 use Getopt::Std;
+use File::Compare;
 
 our $filename;
 our $opt_o;
@@ -40,7 +41,12 @@ sub closeFiles {
 	
 	while (($handle, $file) = each %outfiles) {
 		close($handle);
-		rename("$file.$$", "$file") || die "Couldn't write $file";
+		if (!compare("$file.$$", "$file")) {
+			unlink("$file.$$");
+		} else {
+			rename("$file.$$", "$file") ||
+				die "Couldn't write $file";
+		}
 		delete $outfiles{$handle};
 	}
 }
