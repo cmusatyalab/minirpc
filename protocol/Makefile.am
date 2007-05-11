@@ -6,8 +6,8 @@ GEN = $(GEN_C) $(GEN_H)
 MAINTAINERCLEANFILES = $(GEN)
 BUILT_SOURCES = $(GEN_H)
 
-%_client.c %_client.h %_server.c %_server.h %_xdr.c %_xdr.h: %.mx stubgen.pl
-	./stubgen.pl -o $(<:%.mx=%) $(filter-out %.pl,$^)
+%_client.c %_client.h %_server.c %_server.h %_xdr.c %_xdr.h: %.mx minirpcgen.pl
+	./minirpcgen.pl -o $(<:%.mx=%) $(filter-out %.pl,$^)
 
 SUBDIRS = test
 

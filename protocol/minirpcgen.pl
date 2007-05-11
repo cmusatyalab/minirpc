@@ -290,8 +290,10 @@ sub genstubs {
 }
 
 getopts("o:");
-die "No output file specified"
-	if !defined($opt_o);
+if (!defined($opt_o) || @ARGV == 0) {
+	print "Usage: $0 -o <output_file_base_name> <input_files>\n";
+	exit 1;
+}
 
 # Initialize primitive types
 my $type;
