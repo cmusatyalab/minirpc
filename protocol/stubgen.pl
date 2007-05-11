@@ -300,21 +300,33 @@ foreach $type ("int", "unsigned", "unsigned int", "enum", "bool", "hyper",
 	$types{$type} = 1;
 }
 
+my $infile;
 my $filename;
+my $line;
+my $data;
 my %procs;
 my $curProcData;
 my $curDefs;
 my $sym_re = '([a-zA-Z0-9_]+)';
 my $type_re = '((unsigned\s+)?[a-zA-Z0-9_]+)';
 my $num;
-for $filename (@ARGV) {
-	open(FH, "<", $filename)
-		or die "Can't open $filename";
-	while (<FH>) {
+for $infile (@ARGV) {
+	$data=`cpp $infile`;
+	die "Couldn't open $infile"
+		if $?;
+	$filename = $infile;
+	$line = 0;
+	foreach $_ (split /\n/, $data) {
+		$line++;
+		if (/^# ([1-9][0-9]*) "([^"]+)"/) {
+			# cpp line marker
+			$filename = $2;
+			$line = $1 - 1;
+		}
 		if (!$curDefs) {
 			if (/^\s*(client|server)(procs|msgs)\s+{/) {
 				$curDefs = "$1$2";
-				parseErr($filename, $., "Multiple $curDefs" .
+				parseErr($filename, $line, "Multiple $curDefs" .
 							" definitions found")
 					if exists($procs{$curDefs});
 				$procs{$curDefs} = {};
@@ -338,21 +350,20 @@ for $filename (@ARGV) {
 						\s*([1-9][0-9]*)\s*;/ox) {
 				$num = $8;
 				# file, line, func, arg, ret, num
-				$curProcData = [$filename, $., $1,
+				$curProcData = [$filename, $line, $1,
 							$3 ? $3 : "void",
 							$6 ? $6 : "void", $num];
-				parseErr($filename, $., "Duplicate " .
+				parseErr($filename, $line, "Duplicate " .
 							"procedure number")
 					if defined($procs{$curDefs}->{$num});
 				$procs{$curDefs}->{$num} = $curProcData;
 			} elsif (/^\s*$/) {
 				next;
 			} else {
-				parseErr($filename, $., "Invalid syntax");
+				parseErr($filename, $line, "Invalid syntax");
 			}
 		}
 	}
-	close FH;
 }
 
 my @sfh;
