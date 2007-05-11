@@ -7,6 +7,7 @@ use Getopt::Std;
 our $filename;
 our $opt_o;
 our %outfiles;
+our %types;
 
 END {
 	my $status = $?;
@@ -44,17 +45,15 @@ sub closeFiles {
 	}
 }
 
-sub gen_sender_stub {
-	my $cf = shift;
-	my $hf = shift;
+sub gen_sender_stub_c {
+	my $fh = shift;
 	my $func = shift;
 	my $in = shift;
 	my $out = shift;
 	
-	print $cf <<EOF;
+	print $fh <<EOF;
 
-int $func(struct mrpc_connection *conn,
-			$in *in, $out **out)
+int $func(struct mrpc_connection *conn, $in *in, $out **out)
 {
 	return mrpc_send_request(conn, nr_$func, in, out);
 }
@@ -66,26 +65,51 @@ int ${func}_async(struct mrpc_connection *conn, $in *in,
 				private);
 }
 EOF
+}
 
-	print $hf <<EOF;
-
+sub gen_sender_stub_sync_h {
+	my $fh = shift;
+	my $func = shift;
+	my $in = shift;
+	my $out = shift;
+	
+	print $fh <<EOF;
 int $func(struct mrpc_connection *conn,
 			$in *in, $out **out);
+EOF
+}
+
+sub gen_sender_stub_typedef_h {
+	my $fh = shift;
+	my $func = shift;
+	my $in = shift;
+	my $out = shift;
+	
+	print $fh <<EOF;
 typedef void (${func}_callback_fn)(void *conn_private,
 			void *msg_private, int status, $out *reply);
+EOF
+}
+
+sub gen_sender_stub_async_h {
+	my $fh = shift;
+	my $func = shift;
+	my $in = shift;
+	my $out = shift;
+	
+	print $fh <<EOF;
 int ${func}_async(struct mrpc_connection *conn, $in *in,
 			${func}_callback_fn *callback, void *private);
 EOF
 }
 
-sub gen_receiver_stub {
-	my $cf = shift;
-	my $hf = shift;
+sub gen_receiver_stub_c {
+	my $fh = shift;
 	my $func = shift;
 	my $in = shift;
 	my $out = shift;
 	
-	print $cf <<EOF;
+	print $fh <<EOF;
 
 int ${func}_send_async_reply(struct mrpc_message *request,
 			int status, $out *out)
@@ -93,44 +117,110 @@ int ${func}_send_async_reply(struct mrpc_message *request,
 	return mrpc_send_reply(request, status, out);
 }
 EOF
+}
 
-	print $hf <<EOF;
+sub gen_receiver_stub_h {
+	my $fh = shift;
+	my $func = shift;
+	my $in = shift;
+	my $out = shift;
+	
+	print $fh <<EOF;
 int ${func}_send_async_reply(struct mrpc_message *request,
 			int status, $out *out);
 EOF
 }
 
-sub gen_oneway_stub {
-	my $cf = shift;
-	my $hf = shift;
+sub gen_oneway_stub_c {
+	my $fh = shift;
 	my $func = shift;
 	my $in = shift;
 	my $out = shift;
 	
-	print $cf <<EOF;
+	print $fh <<EOF;
 
-int ${func}_oneway(struct mrpc_connection *conn, $in *in)
+int ${func}(struct mrpc_connection *conn, $in *in)
 {
 	return mrpc_send_request_noreply(conn, nr_$func, in);
 }
 EOF
+}
 
-	print $cf <<EOF;
-
-int ${func}_oneway(struct mrpc_connection *conn, $in *in)
+sub gen_oneway_stub_h {
+	my $fh = shift;
+	my $func = shift;
+	my $in = shift;
+	my $out = shift;
+	
+	print $fh <<EOF;
+int ${func}(struct mrpc_connection *conn, $in *in);
 EOF
+}
+
+sub genstubs {
+	my $section = shift;
+	my $procs = shift;
+	my $sfh = shift;
+	my $rfh = shift;
+	my $noreply = shift;
+	
+	my $file;
+	my $line;
+	my $num;
+	my $func;
+	my $arg;
+	my $ret;
+	my $fh;
+	
+	foreach $num (sort keys %$procs) {
+		($file, $line, $func, $arg, $ret, $num) = @{$procs->{$num}};
+		parseErr($file, $line, "No such type: $arg")
+			if !defined($types{$arg});
+		parseErr($file, $line, "No such type: $ret")
+			if !defined($types{$ret});
+		parseErr($file, $line, "Procedures in $section section " .
+					"cannot return a value")
+			if $noreply && $ret ne "void";
+		print "$func($arg, $ret) = $num\n";
+	}
+	
+	if ($noreply) {
+		foreach $num (sort keys %$procs) {
+			($file, $line, $func, $arg, $ret, $num) =
+						@{$procs->{$num}};
+			gen_oneway_stub_c($sfh->[0], $func, $arg, $ret);
+			gen_oneway_stub_h($sfh->[1], $func, $arg, $ret);
+		}
+	} else {
+		foreach $num (sort keys %$procs) {
+			($file, $line, $func, $arg, $ret, $num) =
+						@{$procs->{$num}};
+			gen_sender_stub_c($sfh->[0], $func, $arg, $ret);
+			gen_receiver_stub_c($rfh->[0], $func, $arg, $ret);
+			gen_sender_stub_typedef_h($sfh->[1], $func, $arg, $ret);
+			gen_receiver_stub_h($rfh->[1], $func, $arg, $ret);
+		}
+		print {$sfh->[1]} "\n";
+		foreach $num (sort keys %$procs) {
+			($file, $line, $func, $arg, $ret, $num) =
+						@{$procs->{$num}};
+			gen_sender_stub_sync_h($sfh->[1], $func, $arg, $ret);
+		}
+		print {$sfh->[1]} "\n";
+		foreach $num (sort keys %$procs) {
+			($file, $line, $func, $arg, $ret, $num) =
+						@{$procs->{$num}};
+			gen_sender_stub_async_h($sfh->[1], $func, $arg, $ret);
+		}
+		print {$sfh->[1]} "\n";
+	}
 }
 
 getopts("o:");
 die "No output file specified"
 	if !defined($opt_o);
 openFile(*XF, "$opt_o.x");
-openFile(*CCF, "${opt_o}_client.c");
-openFile(*CHF, "${opt_o}_client.h");
-openFile(*SCF, "${opt_o}_server.c");
-openFile(*SHF, "${opt_o}_server.h");
 
-my %types;
 my $type;
 # These are the primitive types that can appear as procedure parameters.
 # Array types (opaque, string) and unions are not supported here.
@@ -140,36 +230,23 @@ foreach $type ("int", "unsigned", "unsigned int", "enum", "bool", "hyper",
 	$types{$type} = 1;
 }
 
-my %procNums;
-my $inProcDefs;
+my %procs;
+my $curProcData;
+my $curDefs;
 my $sym_re = '([a-zA-Z0-9_]+)';
 my $type_re = '((unsigned\s+)?[a-zA-Z0-9_]+)';
-my @sfh;
-my @rfh;
-my $noreply;
-my $arg;
-my $ret;
-my $func;
 my $num;
 for $filename (@ARGV) {
 	open(FH, "<", $filename)
 		or die "Can't open $filename";
 	while (<FH>) {
-		if (!$inProcDefs) {
+		if (!$curDefs) {
 			if (/^\s*(client|server)(procs|msgs)\s+{/) {
-				$inProcDefs = "$1$2";
-				parseErr("Multiple $inProcDefs definitions " .
-							"found")
-					if exists($procNums{$inProcDefs});
-				$procNums{$inProcDefs} = {};
-				if ($1 eq "server") {
-					@sfh = (*CCF, *CHF);
-					@rfh = (*SCF, *SHF);
-				} else {
-					@sfh = (*SCF, *SHF);
-					@rfh = (*CCF, *CHF);
-				}
-				$noreply = ($2 eq "msgs");
+				$curDefs = "$1$2";
+				parseErr($filename, $., "Multiple $curDefs" .
+							" definitions found")
+					if exists($procs{$curDefs});
+				$procs{$curDefs} = {};
 				next;
 			}
 			print XF;
@@ -183,46 +260,46 @@ for $filename (@ARGV) {
 			}
 		} else {
 			if (/}/) {
-				undef $inProcDefs;
+				undef $curDefs;
 				next;
 			}
 			if (/^\s*$sym_re\(($type_re(,\s+$type_re)?)?\)\s*=
 						\s*([1-9][0-9]*)\s*;/ox) {
-				$func = $1;
-				$arg = $3;
-				$ret = $6;
 				$num = $8;
-				$arg = "void" if !defined($arg);
-				$ret = "void" if !defined($ret);
-				parseErr("No such type: $arg")
-					if !defined($types{$arg});
-				parseErr("No such type: $ret")
-					if !defined($types{$ret});
+				# file, line, func, arg, ret, num
+				$curProcData = [$filename, $., $1,
+							$3 ? $3 : "void",
+							$6 ? $6 : "void", $num];
 				parseErr("Duplicate procedure number")
-					if defined($procNums{$inProcDefs}
-								->{$num});
-				parseErr("Procedures in $inProcDefs section " .
-							"cannot return a value")
-					if $noreply && $ret ne "void";
-				$procNums{$inProcDefs}->{$num}=1;
-				print "$func($arg, $ret) = $num\n";
-				if ($noreply) {
-					gen_oneway_stub($sfh[0], $sfh[1],
-						$func, $arg, $ret);
-				} else {
-					gen_sender_stub($sfh[0], $sfh[1],
-						$func, $arg, $ret);
-					gen_receiver_stub($rfh[0], $rfh[1],
-						$func, $arg, $ret);
-				}
+					if defined($procs{$curDefs}->{$num});
+				$procs{$curDefs}->{$num} = $curProcData;
 			} elsif (/^\s*$/) {
 				next;
 			} else {
-				parseErr("Invalid syntax");
+				parseErr($filename, $., "Invalid syntax");
 			}
 		}
 	}
 	close FH;
 }
 
+my @sfh;
+my @rfh;
+my $noreply;
+openFile(*CCF, "${opt_o}_client.c");
+openFile(*CHF, "${opt_o}_client.h");
+openFile(*SCF, "${opt_o}_server.c");
+openFile(*SHF, "${opt_o}_server.h");
+foreach $curDefs ("serverprocs", "servermsgs", "clientprocs", "clientmsgs") {
+	next if !defined($procs{$curDefs});
+	if ($curDefs =~ /server/) {
+		@sfh = (*CCF, *CHF);
+		@rfh = (*SCF, *SHF);
+	} else {
+		@sfh = (*SCF, *SHF);
+		@rfh = (*CCF, *CHF);
+	}
+	$noreply = $curDefs =~ /msgs/;
+	genstubs($curDefs, $procs{$curDefs}, \@sfh, \@rfh, $noreply);
+}
 closeFiles();
