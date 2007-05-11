@@ -181,7 +181,7 @@ sub gen_receiver_stub_c {
 
 int ${func}_send_async_reply(struct mrpc_message *request, int status$outarg)
 {
-	return mrpc_send_reply(request, status$outparam);
+	return mrpc_send_reply(request, status, $outparam);
 }
 EOF
 }
@@ -231,12 +231,12 @@ EOF
 }
 
 sub genstubs {
-	my $section = shift;
+	my $direction = shift;
 	my $procs = shift;
 	my $sfh = shift;
 	my $rfh = shift;
-	my $noreply = shift;
 	
+	my @keys;
 	my $file;
 	my $line;
 	my $num;
@@ -245,47 +245,50 @@ sub genstubs {
 	my $ret;
 	my $fh;
 	
-	foreach $num (sort keys %$procs) {
+	# validation
+	foreach $num (sort {$a <=> $b} keys %$procs) {
 		($file, $line, $func, $arg, $ret, $num) = @{$procs->{$num}};
 		parseErr($file, $line, "No such type: $arg")
 			if !defined($types{$arg});
 		parseErr($file, $line, "No such type: $ret")
 			if !defined($types{$ret});
-		parseErr($file, $line, "Procedures in $section section " .
-					"cannot return a value")
-			if $noreply && $ret ne "void";
+		parseErr($file, $line, "Procedures in ${direction}msgs " .
+					"section cannot return a value")
+			if $num < 0 && $ret ne "void";
 		print "$func($arg, $ret) = $num\n";
 	}
 	
-	if ($noreply) {
-		foreach $num (sort keys %$procs) {
-			($file, $line, $func, $arg, $ret, $num) =
-						@{$procs->{$num}};
-			gen_oneway_stub_c($sfh->[0], $func, $arg, $ret);
-			gen_oneway_stub_h($sfh->[1], $func, $arg, $ret);
-		}
-	} else {
-		foreach $num (sort keys %$procs) {
-			($file, $line, $func, $arg, $ret, $num) =
-						@{$procs->{$num}};
-			gen_sender_stub_c($sfh->[0], $func, $arg, $ret);
-			gen_receiver_stub_c($rfh->[0], $func, $arg, $ret);
-			gen_sender_stub_typedef_h($sfh->[1], $func, $arg, $ret);
-			gen_receiver_stub_h($rfh->[1], $func, $arg, $ret);
-		}
-		print {$sfh->[1]} "\n";
-		foreach $num (sort keys %$procs) {
-			($file, $line, $func, $arg, $ret, $num) =
-						@{$procs->{$num}};
-			gen_sender_stub_sync_h($sfh->[1], $func, $arg, $ret);
-		}
-		print {$sfh->[1]} "\n";
-		foreach $num (sort keys %$procs) {
-			($file, $line, $func, $arg, $ret, $num) =
-						@{$procs->{$num}};
-			gen_sender_stub_async_h($sfh->[1], $func, $arg, $ret);
-		}
-		print {$sfh->[1]} "\n";
+	# request-reply
+	@keys = sort {$a <=> $b} grep ($_ >= 0, keys %$procs);
+	foreach $num (@keys) {
+		($file, $line, $func, $arg, $ret, $num) =
+					@{$procs->{$num}};
+		gen_sender_stub_c($sfh->[0], $func, $arg, $ret);
+		gen_receiver_stub_c($rfh->[0], $func, $arg, $ret);
+		gen_sender_stub_typedef_h($sfh->[1], $func, $arg, $ret);
+		gen_receiver_stub_h($rfh->[1], $func, $arg, $ret);
+	}
+	print {$sfh->[1]} "\n";
+	foreach $num (@keys) {
+		($file, $line, $func, $arg, $ret, $num) =
+					@{$procs->{$num}};
+		gen_sender_stub_sync_h($sfh->[1], $func, $arg, $ret);
+	}
+	print {$sfh->[1]} "\n";
+	foreach $num (@keys) {
+		($file, $line, $func, $arg, $ret, $num) =
+					@{$procs->{$num}};
+		gen_sender_stub_async_h($sfh->[1], $func, $arg, $ret);
+	}
+	print {$sfh->[1]} "\n";
+	
+	# noreply
+	@keys = sort {$b <=> $a} grep ($_ < 0, keys %$procs);
+	foreach $num (@keys) {
+		($file, $line, $func, $arg, $ret, $num) =
+					@{$procs->{$num}};
+		gen_oneway_stub_c($sfh->[0], $func, $arg, $ret);
+		gen_oneway_stub_h($sfh->[1], $func, $arg, $ret);
 	}
 }
 
@@ -311,10 +314,13 @@ my $filename;
 my $line;
 my $data;
 my %procs;
+my %procNames;
 my $curProcData;
 my $curDefs;
+my $noreply;
 my $sym_re = '([a-zA-Z0-9_]+)';
 my $type_re = '((unsigned\s+)?[a-zA-Z0-9_]+)';
+my $func;
 my $num;
 for $infile (@ARGV) {
 	$data=`cpp $infile`;
@@ -331,11 +337,10 @@ for $infile (@ARGV) {
 		}
 		if (!$curDefs) {
 			if (/^\s*(client|server)(procs|msgs)\s+{/) {
-				$curDefs = "$1$2";
-				parseErr($filename, $line, "Multiple $curDefs" .
-							" definitions found")
-					if exists($procs{$curDefs});
-				$procs{$curDefs} = {};
+				$curDefs = $1;
+				$noreply = ($2 eq "msgs");
+				$procs{$curDefs} = {}
+					if !exists($procs{$curDefs});
 				next;
 			}
 			if (/^\s*(struct|enum)\s+$sym_re\s+{/o) {
@@ -353,15 +358,22 @@ for $infile (@ARGV) {
 			}
 			if (/^\s*$sym_re\(($type_re(,\s+$type_re)?)?\)\s*=
 						\s*([1-9][0-9]*)\s*;/ox) {
+				$func = $1;
 				$num = $8;
+				$num = -$num
+					if $noreply;
 				# file, line, func, arg, ret, num
-				$curProcData = [$filename, $line, $1,
+				$curProcData = [$filename, $line, $func,
 							$3 ? $3 : "void",
 							$6 ? $6 : "void", $num];
 				parseErr($filename, $line, "Duplicate " .
 							"procedure number")
 					if defined($procs{$curDefs}->{$num});
+				parseErr($filename, $line, "Duplicate " .
+							"procedure name")
+					if defined($procNames{$func});
 				$procs{$curDefs}->{$num} = $curProcData;
+				$procNames{$func} = 1;
 			} elsif (/^\s*$/) {
 				next;
 			} else {
@@ -372,25 +384,18 @@ for $infile (@ARGV) {
 }
 
 # Generate stubs
+my @cfh;
 my @sfh;
-my @rfh;
-my $noreply;
 openFile(*CCF, "${opt_o}_client.c");
 openFile(*CHF, "${opt_o}_client.h");
 openFile(*SCF, "${opt_o}_server.c");
 openFile(*SHF, "${opt_o}_server.h");
-foreach $curDefs ("serverprocs", "servermsgs", "clientprocs", "clientmsgs") {
-	next if !defined($procs{$curDefs});
-	if ($curDefs =~ /server/) {
-		@sfh = (*CCF, *CHF);
-		@rfh = (*SCF, *SHF);
-	} else {
-		@sfh = (*SCF, *SHF);
-		@rfh = (*CCF, *CHF);
-	}
-	$noreply = $curDefs =~ /msgs/;
-	genstubs($curDefs, $procs{$curDefs}, \@sfh, \@rfh, $noreply);
-}
+@cfh = (*CCF, *CHF);
+@sfh = (*SCF, *SHF);
+genstubs("server", $procs{"server"}, \@cfh, \@sfh)
+	if defined($procs{"server"});
+genstubs("client", $procs{"client"}, \@sfh, \@cfh)
+	if defined($procs{"client"});
 
 # Read the input files again, this time without cpp, and generate a .x file
 # suitable for parsing with rpcgen.  Try to preserve line numbers.
