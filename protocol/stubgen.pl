@@ -16,6 +16,10 @@ END {
 	foreach $file (values %outfiles) {
 		unlink("$file.$$");
 	}
+	# Special case: temporary file which is never promoted to a real
+	# output file
+	unlink("${opt_o}.x.$$")
+		if $opt_o;
 	$? = $status;
 }
 
@@ -43,11 +47,10 @@ sub closeFiles {
 	
 	while (($handle, $file) = each %outfiles) {
 		close($handle);
-		if (!compare("$file.$$", "$file")) {
+		if (!compare("$file.$$", $file)) {
 			unlink("$file.$$");
 		} else {
-			rename("$file.$$", "$file") ||
-				die "Couldn't write $file";
+			rename("$file.$$", $file) || die "Couldn't write $file";
 		}
 		delete $outfiles{$handle};
 	}
@@ -289,8 +292,8 @@ sub genstubs {
 getopts("o:");
 die "No output file specified"
 	if !defined($opt_o);
-openFile(*XF, "$opt_o.x");
 
+# Initialize primitive types
 my $type;
 # These are the primitive types that can appear as procedure parameters.
 # Array types (opaque, string) and unions are not supported here.
@@ -300,6 +303,7 @@ foreach $type ("int", "unsigned", "unsigned int", "enum", "bool", "hyper",
 	$types{$type} = 1;
 }
 
+# Preprocess the input files with cpp and parse them
 my $infile;
 my $filename;
 my $line;
@@ -332,7 +336,6 @@ for $infile (@ARGV) {
 				$procs{$curDefs} = {};
 				next;
 			}
-			print XF;
 			if (/^\s*(struct|enum)\s+$sym_re\s+{/o) {
 				print "Found $1 $2\n";
 				$types{$2} = 1;
@@ -366,6 +369,7 @@ for $infile (@ARGV) {
 	}
 }
 
+# Generate stubs
 my @sfh;
 my @rfh;
 my $noreply;
@@ -385,4 +389,50 @@ foreach $curDefs ("serverprocs", "servermsgs", "clientprocs", "clientmsgs") {
 	$noreply = $curDefs =~ /msgs/;
 	genstubs($curDefs, $procs{$curDefs}, \@sfh, \@rfh, $noreply);
 }
+
+# Read the input files again, this time without cpp, and generate a .x file
+# suitable for parsing with rpcgen.  Try to preserve line numbers.
+my $inDefs = 0;
+open(XF, ">", "${opt_o}.x.$$") || die "Can't open ${opt_o}.x.$$";
+for $infile (@ARGV) {
+	open(FH, "<", $infile) || die "Can't open $infile";
+	while (<FH>) {
+		if (!$inDefs) {
+			if (/^\s*(client|server)(procs|msgs)\s+{/) {
+				$inDefs = 1;
+				print XF "\n";
+			} else {
+				print XF;
+			}
+		} else {
+			$inDefs = 0
+				if (/}/);
+			print XF "\n";
+		}
+	}
+}
+close(XF);
+
+# Generate xdr.c
+open(IF, "-|", "rpcgen -c $opt_o.x.$$") or
+	die "Couldn't generate ${opt_o}_xdr.c";
+openFile(*XCF, "${opt_o}_xdr.c");
+while (<IF>) {
+	s/${opt_o}\.x\.h/${opt_o}_xdr.h/
+		if /#include/;
+	print XCF;
+}
+
+# Generate xdr.h
+my $olddefine = uc "_$opt_o.x_H_RPCGEN";
+my $newdefine = uc "${opt_o}_XDR_H";
+open(IF, "-|", "rpcgen -h $opt_o.x.$$") or
+	die "Couldn't generate ${opt_o}_xdr.h";
+openFile(*XHF, "${opt_o}_xdr.h");
+while (<IF>) {
+	s/$olddefine/$newdefine/;
+	print XHF;
+}
+
+# Commit output
 closeFiles();

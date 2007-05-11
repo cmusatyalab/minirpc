@@ -6,17 +6,7 @@ GEN = $(GEN_C) $(GEN_H)
 MAINTAINERCLEANFILES = $(GEN)
 BUILT_SOURCES = $(GEN_H)
 
-%_xdr.c: %.x
-	rm -f $@
-	rpcgen -M -N -c $^ | \
-		sed -e 's/"$(^:%.x=%\.h)"/"$(^:%.x=%_xdr.h)"/g' > $@ || \
-		(rm $@ && false)
-
-%_xdr.h: %.x
-	rm -f $@
-	rpcgen -M -N -h -o $@ $^
-
-%.x %_client.c %_client.h %_server.c %_server.h: %.mx stubgen.pl
+%_client.c %_client.h %_server.c %_server.h %_xdr.c %_xdr.h: %.mx stubgen.pl
 	./stubgen.pl -o $(<:%.mx=%) $(filter-out %.pl,$^)
 
 SUBDIRS = test
