@@ -6,7 +6,6 @@ use Getopt::Std;
 use File::Compare;
 use Text::Wrap;
 
-our $filename;
 our $opt_o;
 our %outfiles;
 our %types;
@@ -21,9 +20,11 @@ END {
 }
 
 sub parseErr {
+	my $file = shift;
+	my $line = shift;
 	my $msg = shift;
 	
-	print(STDERR "$filename, line $.: $msg\n");
+	print(STDERR "$file, line $line: $msg\n");
 	exit 1;
 }
 
@@ -299,6 +300,7 @@ foreach $type ("int", "unsigned", "unsigned int", "enum", "bool", "hyper",
 	$types{$type} = 1;
 }
 
+my $filename;
 my %procs;
 my $curProcData;
 my $curDefs;
@@ -339,7 +341,8 @@ for $filename (@ARGV) {
 				$curProcData = [$filename, $., $1,
 							$3 ? $3 : "void",
 							$6 ? $6 : "void", $num];
-				parseErr("Duplicate procedure number")
+				parseErr($filename, $., "Duplicate " .
+							"procedure number")
 					if defined($procs{$curDefs}->{$num});
 				$procs{$curDefs}->{$num} = $curProcData;
 			} elsif (/^\s*$/) {
