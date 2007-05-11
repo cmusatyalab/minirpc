@@ -103,6 +103,16 @@ sub parameter {
 	}
 }
 
+sub typesize {
+	my $type = shift;
+	
+	if ($type ne "void") {
+		return "sizeof($type)";
+	} else {
+		return "0";
+	}
+}
+
 # Sort hash keys numerically: 0..MAX, -1..MIN
 sub opcodeSort {
 	my $hash = shift;
@@ -241,6 +251,45 @@ int ${func}(struct mrpc_connection *conn$inarg);
 EOF
 }
 
+sub gen_info_proc {
+	my $fh = shift;
+	my $direction = shift;
+	my $isReply = shift;
+	my $procs = shift;
+	
+	my $reply = $isReply ? "reply" : "request";
+	my $num;
+	my $func;
+	my $type;
+	my $typesize;
+	
+	print $fh wrapc(<<EOF);
+
+static int ${opt_o}_${direction}_${reply}_info(unsigned cmd, xdrproc_t *type, unsigned *size)
+{
+	switch (cmd) {
+EOF
+	
+	foreach $num (opcodeSort($procs)) {
+		$func = @{$procs->{$num}}[2];
+		$type = @{$procs->{$num}}[$isReply ? 4 : 3];
+		$typesize = typesize($type);
+		print $fh wrapc(<<EOF);
+	case nr_$func:
+		SET_PTR_IF_NOT_NULL(type, (xdrproc_t)xdr_$type);
+		SET_PTR_IF_NOT_NULL(size, $typesize);
+		return MINIRPC_OK;
+EOF
+	}
+	
+	print $fh wrapc(<<EOF);
+	default:
+		return MINIRPC_PROCEDURE_UNAVAIL;
+	}
+}
+EOF
+}
+
 sub gen_opcode_enum {
 	my $fh = shift;
 	my $direction = shift;
@@ -312,6 +361,8 @@ sub genstubs {
 	
 	# toplevel stuff
 	gen_opcode_enum($mfh->[1], $direction, $procs);
+	gen_info_proc($mfh->[0], $direction, 0, $procs);
+	gen_info_proc($mfh->[0], $direction, 1, $procs);	
 	gen_operations_struct($rfh->[1], $direction, $procs);
 	
 	# request-reply
@@ -352,14 +403,14 @@ if (!defined($opt_o) || @ARGV == 0) {
 }
 
 # Initialize primitive types
-my $type;
 # These are the primitive types that can appear as procedure parameters.
-# Array types (opaque, string) and unions are not supported here.
-foreach $type ("int", "unsigned", "unsigned int", "enum", "bool", "hyper",
-			"unsigned hyper", "float", "double", "quadruple",
-			"void") {
-	$types{$type} = 1;
-}
+# Right now we only support void, as a special case, because we don't want
+# to make assumptions about the native (unserialized) length of the data
+# types that XDR produces.  Regular types ("int", "bool", etc.) can still
+# be used with XDR typedefs, because sizeof(some_typedef) will do the right
+# thing (as opposed to sizeof(hyper), which is the only thing we could do
+# since we don't know what C type "hyper" corresponds to).
+$types{"void"} = 1;
 
 # Preprocess the input files with cpp and parse them
 my $infile;
