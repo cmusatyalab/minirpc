@@ -4,6 +4,7 @@ use strict;
 use warnings;
 use Getopt::Std;
 use File::Compare;
+use Text::Wrap;
 
 our $filename;
 our $opt_o;
@@ -51,6 +52,31 @@ sub closeFiles {
 	}
 }
 
+sub wrapc {
+	my $input = shift;
+	
+	my $output;
+	my $line;
+	
+	local($Text::Wrap::columns) = 80;
+	local($Text::Wrap::huge) = "overflow";
+	# Only break at argument boundaries
+	local($Text::Wrap::break) = qr/, /;
+	# ...and re-add the comma afterward.  Newer versions of Text::Wrap use
+	# separator2 for newly-added line breaks; older versions just use
+	# separator.  Test is formatted strangely since local() declaration
+	# can't be made inside a block
+	local($Text::Wrap::separator2) = ",\n"
+		if defined($Text::Wrap::separator2);
+	local($Text::Wrap::separator) = ",\n"
+		if !defined($Text::Wrap::separator2);
+
+	foreach $line (split(/\n/, $input)) {
+		$output .= Text::Wrap::wrap("", "\t\t\t", $line) . "\n";
+	}
+	return $output;
+}
+
 sub argument {
 	my $type = shift;
 	my $var = shift;
@@ -84,19 +110,16 @@ sub gen_sender_stub_c {
 	my $inparam = parameter($in, "in");
 	my $outparam = parameter($out, "out");
 	
-	print $fh <<EOF;
+	print $fh wrapc(<<EOF);
 
 int $func(struct mrpc_connection *conn$inarg$outarg)
 {
 	return mrpc_send_request(conn, nr_$func, $inparam, $outparam);
 }
 
-int ${func}_async(struct mrpc_connection *conn,
-			${func}_callback_fn *callback,
-			void *private$inarg)
+int ${func}_async(struct mrpc_connection *conn, ${func}_callback_fn *callback, void *private$inarg)
 {
-	return mrpc_send_request_async(conn, nr_$func, $inparam, callback,
-				private);
+	return mrpc_send_request_async(conn, nr_$func, $inparam, callback, private);
 }
 EOF
 }
@@ -110,7 +133,7 @@ sub gen_sender_stub_sync_h {
 	my $inarg = argument($in, "*in");
 	my $outarg = argument($out, "**out");
 	
-	print $fh <<EOF;
+	print $fh wrapc(<<EOF);
 int $func(struct mrpc_connection *conn$inarg$outarg);
 EOF
 }
@@ -123,9 +146,8 @@ sub gen_sender_stub_typedef_h {
 	
 	my $outarg = argument($out, "*reply");
 	
-	print $fh <<EOF;
-typedef void (${func}_callback_fn)(void *conn_private,
-			void *msg_private, int status$outarg);
+	print $fh wrapc(<<EOF);
+typedef void (${func}_callback_fn)(void *conn_private, void *msg_private, int status$outarg);
 EOF
 }
 
@@ -137,10 +159,8 @@ sub gen_sender_stub_async_h {
 	
 	my $inarg = argument($in, "*in");
 	
-	print $fh <<EOF;
-int ${func}_async(struct mrpc_connection *conn,
-			${func}_callback_fn *callback,
-			void *private$inarg);
+	print $fh wrapc(<<EOF);
+int ${func}_async(struct mrpc_connection *conn, ${func}_callback_fn *callback, void *private$inarg);
 EOF
 }
 
@@ -153,10 +173,9 @@ sub gen_receiver_stub_c {
 	my $outarg = argument($out, "*out");
 	my $outparam = parameter($out, "out");
 	
-	print $fh <<EOF;
+	print $fh wrapc(<<EOF);
 
-int ${func}_send_async_reply(struct mrpc_message *request,
-			int status$outarg)
+int ${func}_send_async_reply(struct mrpc_message *request, int status$outarg)
 {
 	return mrpc_send_reply(request, status$outparam);
 }
@@ -171,9 +190,8 @@ sub gen_receiver_stub_h {
 	
 	my $outarg = argument($out, "*out");
 	
-	print $fh <<EOF;
-int ${func}_send_async_reply(struct mrpc_message *request,
-			int status$outarg);
+	print $fh wrapc(<<EOF);
+int ${func}_send_async_reply(struct mrpc_message *request, int status$outarg);
 EOF
 }
 
@@ -186,7 +204,7 @@ sub gen_oneway_stub_c {
 	my $inarg = argument($in, "*in");
 	my $inparam = parameter($in, "in");
 	
-	print $fh <<EOF;
+	print $fh wrapc(<<EOF);
 
 int ${func}(struct mrpc_connection *conn$inarg)
 {
@@ -203,7 +221,7 @@ sub gen_oneway_stub_h {
 	
 	my $inarg = argument($in, "*in");
 	
-	print $fh <<EOF;
+	print $fh wrapc(<<EOF);
 int ${func}(struct mrpc_connection *conn$inarg);
 EOF
 }
