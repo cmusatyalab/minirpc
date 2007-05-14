@@ -81,7 +81,8 @@ static int send_request_pending(struct mrpc_message *request,
 	return ret;
 }
 
-int mrpc_send_request(struct mrpc_connection *conn, unsigned cmd, void *in,
+int mrpc_send_request(struct mrpc_protocol *protocol,
+			struct mrpc_connection *conn, unsigned cmd, void *in,
 			void **out)
 {
 	struct mrpc_message *request;
@@ -89,6 +90,8 @@ int mrpc_send_request(struct mrpc_connection *conn, unsigned cmd, void *in,
 	struct pending_reply *pending;
 	int ret;
 	
+	if (protocol != conn->set->protocol)
+		return MINIRPC_INVALID_PROTOCOL;
 	ret=format_request(conn, cmd, in, &request);
 	if (ret)
 		return ret;
@@ -115,13 +118,16 @@ int mrpc_send_request(struct mrpc_connection *conn, unsigned cmd, void *in,
 	return MINIRPC_OK;
 }
 
-int mrpc_send_request_async(struct mrpc_connection *conn, unsigned cmd,
+int mrpc_send_request_async(struct mrpc_protocol *protocol,
+			struct mrpc_connection *conn, unsigned cmd,
 			reply_callback_fn *callback, void *private, void *in)
 {
 	struct mrpc_message *msg;
 	struct pending_reply *pending;
 	int ret;
 	
+	if (protocol != conn->set->protocol)
+		return MINIRPC_INVALID_PROTOCOL;
 	if (callback == NULL)
 		return MINIRPC_INVALID_ARGUMENT;
 	ret=format_request(conn, cmd, in, &msg);
@@ -138,22 +144,27 @@ int mrpc_send_request_async(struct mrpc_connection *conn, unsigned cmd,
 	return send_request_pending(msg, pending);
 }
 
-int mrpc_send_request_noreply(struct mrpc_connection *conn, unsigned cmd,
-			void *in)
+int mrpc_send_request_noreply(struct mrpc_protocol *protocol,
+			struct mrpc_connection *conn, unsigned cmd, void *in)
 {
 	struct mrpc_message *msg;
 	int ret;
 	
+	if (protocol != conn->set->protocol)
+		return MINIRPC_INVALID_PROTOCOL;
 	ret=format_request(conn, cmd, in, &msg);
 	if (ret)
 		return ret;
 	return send_message(msg);
 }
 
-int mrpc_send_reply(struct mrpc_message *request, int status, void *data)
+int mrpc_send_reply(struct mrpc_protocol *protocol,
+			struct mrpc_message *request, int status, void *data)
 {
 	struct mrpc_message *reply;
 	
+	if (protocol != request->conn->set->protocol)
+		return MINIRPC_INVALID_PROTOCOL;
 	if (status == MINIRPC_REQUEST)
 		return MINIRPC_INVALID_ARGUMENT;
 	if (status == MINIRPC_DEFER)

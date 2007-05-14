@@ -5,7 +5,8 @@ enum mrpc_status {
 	MINIRPC_NOMEM			= -3,
 	MINIRPC_PROCEDURE_UNAVAIL	= -4,
 	MINIRPC_INVALID_ARGUMENT	= -5,
-	MINIRPC_DEFER			= -6
+	MINIRPC_INVALID_PROTOCOL	= -6,
+	MINIRPC_DEFER			= -7
 };
 
 struct mrpc_header {

@@ -137,6 +137,7 @@ sub opcodeSort {
 
 sub gen_sender_stub_c {
 	my $fh = shift;
+	my $role = shift;
 	my $func = shift;
 	my $in = shift;
 	my $out = shift;
@@ -150,12 +151,12 @@ sub gen_sender_stub_c {
 
 int $func(struct mrpc_connection *conn$inarg$outarg)
 {
-	return mrpc_send_request(conn, nr_$func, $inparam, $outparam);
+	return mrpc_send_request(&${opt_o}_$role, conn, nr_$func, $inparam, $outparam);
 }
 
 int ${func}_async(struct mrpc_connection *conn, ${func}_callback_fn *callback, void *private$inarg)
 {
-	return mrpc_send_request_async(conn, nr_$func, $inparam, callback, private);
+	return mrpc_send_request_async(&${opt_o}_$role, conn, nr_$func, $inparam, callback, private);
 }
 EOF
 }
@@ -177,7 +178,6 @@ EOF
 sub gen_sender_stub_typedef_h {
 	my $fh = shift;
 	my $func = shift;
-	my $in = shift;
 	my $out = shift;
 	
 	my $outarg = argument($out, "*reply");
@@ -191,7 +191,6 @@ sub gen_sender_stub_async_h {
 	my $fh = shift;
 	my $func = shift;
 	my $in = shift;
-	my $out = shift;
 	
 	my $inarg = argument($in, "*in");
 	
@@ -202,8 +201,8 @@ EOF
 
 sub gen_receiver_stub_c {
 	my $fh = shift;
+	my $role = shift;
 	my $func = shift;
-	my $in = shift;
 	my $out = shift;
 	
 	my $outarg = argument($out, "*out");
@@ -213,7 +212,7 @@ sub gen_receiver_stub_c {
 
 int ${func}_send_async_reply(struct mrpc_message *request, int status$outarg)
 {
-	return mrpc_send_reply(request, status, $outparam);
+	return mrpc_send_reply(&${opt_o}_$role, request, status, $outparam);
 }
 EOF
 }
@@ -221,7 +220,6 @@ EOF
 sub gen_receiver_stub_h {
 	my $fh = shift;
 	my $func = shift;
-	my $in = shift;
 	my $out = shift;
 	
 	my $outarg = argument($out, "*out");
@@ -235,7 +233,6 @@ sub gen_oneway_stub_c {
 	my $fh = shift;
 	my $func = shift;
 	my $in = shift;
-	my $out = shift;
 	
 	my $inarg = argument($in, "*in");
 	my $inparam = parameter($in, "in");
@@ -253,7 +250,6 @@ sub gen_oneway_stub_h {
 	my $fh = shift;
 	my $func = shift;
 	my $in = shift;
-	my $out = shift;
 	
 	my $inarg = argument($in, "*in");
 	
@@ -480,10 +476,10 @@ sub genstubs {
 	print {$rfh->[1]} "\n";
 	foreach $num (@keys) {
 		($file, $line, $func, $arg, $ret) = @{$procs->{$num}};
-		gen_sender_stub_c($sfh->[0], $func, $arg, $ret);
-		gen_receiver_stub_c($rfh->[0], $func, $arg, $ret);
-		gen_sender_stub_typedef_h($sfh->[1], $func, $arg, $ret);
-		gen_receiver_stub_h($rfh->[1], $func, $arg, $ret);
+		gen_sender_stub_c($sfh->[0], $role, $func, $arg, $ret);
+		gen_receiver_stub_c($rfh->[0], $role, $func, $ret);
+		gen_sender_stub_typedef_h($sfh->[1], $func, $ret);
+		gen_receiver_stub_h($rfh->[1], $func, $ret);
 	}
 	print {$sfh->[1]} "\n";
 	foreach $num (@keys) {
@@ -493,15 +489,15 @@ sub genstubs {
 	print {$sfh->[1]} "\n";
 	foreach $num (@keys) {
 		($file, $line, $func, $arg, $ret) = @{$procs->{$num}};
-		gen_sender_stub_async_h($sfh->[1], $func, $arg, $ret);
+		gen_sender_stub_async_h($sfh->[1], $func, $arg);
 	}
 	
 	# noreply
 	@keys = sort {$b <=> $a} grep ($_ < 0, keys %$procs);
 	foreach $num (@keys) {
 		($file, $line, $func, $arg, $ret) = @{$procs->{$num}};
-		gen_oneway_stub_c($sfh->[0], $func, $arg, $ret);
-		gen_oneway_stub_h($sfh->[1], $func, $arg, $ret);
+		gen_oneway_stub_c($sfh->[0], $func, $arg);
+		gen_oneway_stub_h($sfh->[1], $func, $arg);
 	}
 }
 
