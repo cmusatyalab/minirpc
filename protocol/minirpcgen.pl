@@ -577,10 +577,6 @@ sub genstubs_free {
 
 sub genstubs {
 	my $procmap = shift;
-	my $mcf = shift;
-	my $mhf = shift;
-	my $chf = shift;
-	my $shf = shift;
 	
 	my $role;
 	my $procs;
@@ -608,16 +604,22 @@ sub genstubs {
 		}
 	}
 	
+	# Create output files
+	openFile(*MCF, "${base}_minirpc.c");
+	openFile(*MHF, "${base}_minirpc.h");
+	openFile(*CHF, "${base}_client.h");
+	openFile(*SHF, "${base}_server.h");
+	
 	# Generate cpp directives
-	print $mcf "#define MINIRPC_PROTOCOL\n";
-	print $mcf "#include \"minirpc_protocol.h\"\n";
-	print $mcf "#include \"${base}_client.h\"\n";
-	print $mcf "#include \"${base}_server.h\"\n";
-	print $mhf "#ifndef " . uc $base . "_MINIRPC_H\n";
-	print $mhf "#define " . uc $base . "_MINIRPC_H\n\n";
-	print $mhf "#include \"${base}_xdr.h\"\n";
+	print MCF "#define MINIRPC_PROTOCOL\n";
+	print MCF "#include \"minirpc_protocol.h\"\n";
+	print MCF "#include \"${base}_client.h\"\n";
+	print MCF "#include \"${base}_server.h\"\n";
+	print MHF "#ifndef " . uc $base . "_MINIRPC_H\n";
+	print MHF "#define " . uc $base . "_MINIRPC_H\n\n";
+	print MHF "#include \"${base}_xdr.h\"\n";
 	foreach $role ("server", "client") {
-		$hf = ($role eq "server") ? $shf : $chf;
+		$hf = ($role eq "server") ? *SHF : *CHF;
 		print $hf "#ifndef " . uc "${base}_${role}_H" . "\n";
 		print $hf "#define " . uc "${base}_${role}_H" . "\n\n";
 		print $hf "#include \"${base}_minirpc.h\"\n";
@@ -625,48 +627,48 @@ sub genstubs {
 	
 	# Generate toplevel structures
 	foreach $role ("server", "client") {
-		gen_opcode_enum($mhf, $role, $procmap->{$role});
+		gen_opcode_enum(*MHF, $role, $procmap->{$role});
 	}
 	foreach $role ("server", "client") {
-		gen_info_proc($mcf, $role, 0, $procmap->{$role});
-		gen_info_proc($mcf, $role, 1, $procmap->{$role});
+		gen_info_proc(*MCF, $role, 0, $procmap->{$role});
+		gen_info_proc(*MCF, $role, 1, $procmap->{$role});
 	}
 	foreach $role ("server", "client") {
-		$hf = ($role eq "server") ? $shf : $chf;
+		$hf = ($role eq "server") ? *SHF : *CHF;
 		gen_operations_struct($hf, $role, $procmap->{$role});
 	}
 	foreach $role ("server", "client") {
-		gen_request_proc($mcf, $role, $procmap->{$role});
+		gen_request_proc(*MCF, $role, $procmap->{$role});
 	}
 	foreach $role ("server", "client") {
-		$hf = ($role eq "server") ? $shf : $chf;
-		gen_protocol_struct_c($mcf, $role);
+		$hf = ($role eq "server") ? *SHF : *CHF;
+		gen_protocol_struct_c(*MCF, $role);
 		gen_protocol_struct_h($hf, $role);
 	}
 	foreach $role ("server", "client") {
-		$hf = ($role eq "server") ? $shf : $chf;
-		gen_set_operations_c($mcf, $role);
+		$hf = ($role eq "server") ? *SHF : *CHF;
+		gen_set_operations_c(*MCF, $role);
 		gen_set_operations_h($hf, $role);
 	}
 	foreach $role ("server", "client") {
-		$hf = ($role eq "server") ? $chf : $shf;
-		genstubs_sync($role, $procmap->{$role}, $mcf, $hf);
+		$hf = ($role eq "server") ? *CHF : *SHF;
+		genstubs_sync($role, $procmap->{$role}, *MCF, $hf);
 	}
 	foreach $role ("server", "client") {
-		$hf = ($role eq "server") ? $chf : $shf;
-		genstubs_sender_async($role, $procmap->{$role}, $mcf, $hf);
+		$hf = ($role eq "server") ? *CHF : *SHF;
+		genstubs_sender_async($role, $procmap->{$role}, *MCF, $hf);
 	}
 	foreach $role ("server", "client") {
-		$hf = ($role eq "server") ? $shf : $chf;
-		genstubs_receiver_async($role, $procmap->{$role}, $mcf, $hf);
+		$hf = ($role eq "server") ? *SHF : *CHF;
+		genstubs_receiver_async($role, $procmap->{$role}, *MCF, $hf);
 	}
 	foreach $role ("server", "client") {
-		$hf = ($role eq "server") ? $chf : $shf;
-		genstubs_noreply($role, $procmap->{$role}, $mcf, $hf);
+		$hf = ($role eq "server") ? *CHF : *SHF;
+		genstubs_noreply($role, $procmap->{$role}, *MCF, $hf);
 	}
-	genstubs_free($mcf, $mhf);
+	genstubs_free(*MCF, *MHF);
 	
-	foreach $hf ($mhf, $chf, $shf) {
+	foreach $hf (*MHF, *CHF, *SHF) {
 		print $hf "\n#endif\n";
 	}
 }
@@ -765,11 +767,7 @@ for $infile (@ARGV) {
 }
 
 # Generate stubs
-openFile(*MCF, "${base}_minirpc.c");
-openFile(*MHF, "${base}_minirpc.h");
-openFile(*CHF, "${base}_client.h");
-openFile(*SHF, "${base}_server.h");
-genstubs(\%procs, *MCF, *MHF, *CHF, *SHF);
+genstubs(\%procs);
 
 # Read the input files again, this time without cpp, and generate a .x file
 # suitable for parsing with rpcgen.  Try to preserve line numbers.
