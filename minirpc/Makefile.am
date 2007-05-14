@@ -1,5 +1,6 @@
 AM_CPPFLAGS = -D_GNU_SOURCE
 AM_CFLAGS = -Wall -Wstrict-prototypes -Wmissing-prototypes
+AM_LDFLAGS = -lpthread
 
 GEN_C = minirpc_xdr.c
 GEN_H = minirpc_xdr.h
@@ -16,6 +17,8 @@ BUILT_SOURCES = $(GEN_H)
 %_xdr.h: %.x
 	rm -f $@
 	rpcgen -h -o $@ $^
+
+SUBDIRS = test
 
 lib_LTLIBRARIES = libminirpc.la
 libminirpc_la_SOURCES = connection.c message.c serialize.c xdr_len.c

@@ -9,8 +9,6 @@ BUILT_SOURCES = $(GEN_H)
 %_minirpc.c %_minirpc.h %_client.h %_server.h %_xdr.c %_xdr.h: %.mx ../minirpc/minirpcgen.pl
 	../minirpc/minirpcgen.pl -o $(<:%.mx=%) $(filter-out %.pl,$^)
 
-SUBDIRS = test
-
 noinst_LTLIBRARIES = libisrproto.la
 libisrproto_la_SOURCES = $(GEN)
 libisrproto_la_LDFLAGS = -static
