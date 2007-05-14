@@ -6,7 +6,7 @@ use Getopt::Std;
 use File::Compare;
 use Text::Wrap;
 
-our $opt_o;
+our $base;
 our %outfiles;
 our %types;
 
@@ -18,8 +18,8 @@ END {
 	}
 	# Special case: temporary file which is never promoted to a real
 	# output file
-	unlink("${opt_o}.x.$$")
-		if $opt_o;
+	unlink("$base.x.$$")
+		if $base;
 	$? = $status;
 }
 
@@ -151,12 +151,12 @@ sub gen_sender_stub_c {
 
 int $func(struct mrpc_connection *conn$inarg$outarg)
 {
-	return mrpc_send_request(&${opt_o}_$role, conn, nr_$func, $inparam, $outparam);
+	return mrpc_send_request(&${base}_$role, conn, nr_$func, $inparam, $outparam);
 }
 
 int ${func}_async(struct mrpc_connection *conn, ${func}_callback_fn *callback, void *private$inarg)
 {
-	return mrpc_send_request_async(&${opt_o}_$role, conn, nr_$func, $inparam, callback, private);
+	return mrpc_send_request_async(&${base}_$role, conn, nr_$func, $inparam, callback, private);
 }
 EOF
 }
@@ -212,7 +212,7 @@ sub gen_receiver_stub_c {
 
 int ${func}_send_async_reply(struct mrpc_message *request, int status$outarg)
 {
-	return mrpc_send_reply(&${opt_o}_$role, request, status, $outparam);
+	return mrpc_send_reply(&${base}_$role, request, status, $outparam);
 }
 EOF
 }
@@ -272,9 +272,9 @@ sub gen_request_proc {
 	
 	print $fh wrapc(<<EOF);
 
-static int ${opt_o}_${role}_request(void *p_ops, void *conn_data, struct mrpc_message *msg, int cmd, void *in, void *out)
+static int ${base}_${role}_request(void *p_ops, void *conn_data, struct mrpc_message *msg, int cmd, void *in, void *out)
 {
-	struct ${opt_o}_${role}_operations *ops=p_ops;
+	struct ${base}_${role}_operations *ops=p_ops;
 	
 	switch (cmd) {
 EOF
@@ -314,7 +314,7 @@ sub gen_info_proc {
 	
 	print $fh wrapc(<<EOF);
 
-static int ${opt_o}_${role}_${reply}_info(unsigned cmd, xdrproc_t *type, unsigned *size)
+static int ${base}_${role}_${reply}_info(unsigned cmd, xdrproc_t *type, unsigned *size)
 {
 	switch (cmd) {
 EOF
@@ -348,7 +348,7 @@ sub gen_opcode_enum {
 	my $func;
 	
 	return if (keys %$procs == 0);
-	print $fh "\nenum ${opt_o}_${role}_procedures {\n";
+	print $fh "\nenum ${base}_${role}_procedures {\n";
 	foreach $num (opcodeSort($procs)) {
 		$func = @{$procs->{$num}}[2];
 		print $fh "\tnr_$func = $num,\n";
@@ -369,7 +369,7 @@ sub gen_operations_struct {
 	my $outarg;
 	
 	return if (keys %$procs == 0);
-	print $fh "\nstruct ${opt_o}_${role}_operations {\n";
+	print $fh "\nstruct ${base}_${role}_operations {\n";
 	foreach $num (opcodeSort($procs)) {
 		($func, $in, $out) = @{$procs->{$num}}[2..4];
 		$inarg = argument($in, "*in");
@@ -385,9 +385,9 @@ sub gen_set_operations_c {
 	
 	print $fh wrapc(<<EOF);
 
-int ${opt_o}_${role}_set_operations(struct mrpc_connection *conn, struct ${opt_o}_${role}_operations *ops)
+int ${base}_${role}_set_operations(struct mrpc_connection *conn, struct ${base}_${role}_operations *ops)
 {
-	return mrpc_conn_set_operations(conn, ${opt_o}_$role, ops);
+	return mrpc_conn_set_operations(conn, ${base}_$role, ops);
 }
 EOF
 }
@@ -397,7 +397,7 @@ sub gen_set_operations_h {
 	my $role = shift;
 	
 	print $fh wrapc(<<EOF);
-int ${opt_o}_${role}_set_operations(struct mrpc_connection *conn, struct ${opt_o}_${role}_operations *ops);
+int ${base}_${role}_set_operations(struct mrpc_connection *conn, struct ${base}_${role}_operations *ops);
 EOF
 }
 
@@ -410,13 +410,13 @@ sub gen_protocol_struct_c {
 	
 	print $fh wrapc(<<EOF);
 
-struct mrpc_protocol ${opt_o}_$role = {
+struct mrpc_protocol ${base}_$role = {
 	.is_server = $isServer,
-	.request = ${opt_o}_${role}_request,
-	.sender_request_info = ${opt_o}_${role}_request_info,
-	.sender_reply_info = ${opt_o}_${role}_reply_info
-	.receiver_request_info = ${opt_o}_${antirole}_request_info,
-	.receiver_reply_info = ${opt_o}_${antirole}_reply_info
+	.request = ${base}_${role}_request,
+	.sender_request_info = ${base}_${role}_request_info,
+	.sender_reply_info = ${base}_${role}_reply_info
+	.receiver_request_info = ${base}_${antirole}_request_info,
+	.receiver_reply_info = ${base}_${antirole}_reply_info
 };
 EOF
 }
@@ -426,7 +426,7 @@ sub gen_protocol_struct_h {
 	my $role = shift;
 	
 	print $fh wrapc(<<EOF);
-extern struct mrpc_protocol ${opt_o}_$role;
+extern struct mrpc_protocol ${base}_$role;
 EOF
 }
 
@@ -501,11 +501,13 @@ sub genstubs {
 	}
 }
 
+our $opt_o;
 getopts("o:");
 if (!defined($opt_o) || @ARGV == 0) {
 	print "Usage: $0 -o <output_file_base_name> <input_files>\n";
 	exit 1;
 }
+$base = $opt_o;
 
 # Initialize primitive types
 # These are the primitive types that can appear as procedure parameters.
@@ -596,12 +598,12 @@ for $infile (@ARGV) {
 my @cfh;
 my @sfh;
 my @mfh;
-openFile(*CCF, "${opt_o}_client.c");
-openFile(*CHF, "${opt_o}_client.h");
-openFile(*SCF, "${opt_o}_server.c");
-openFile(*SHF, "${opt_o}_server.h");
-openFile(*MCF, "${opt_o}_common.c");
-openFile(*MHF, "${opt_o}_common.h");
+openFile(*CCF, "${base}_client.c");
+openFile(*CHF, "${base}_client.h");
+openFile(*SCF, "${base}_server.c");
+openFile(*SHF, "${base}_server.h");
+openFile(*MCF, "${base}_common.c");
+openFile(*MHF, "${base}_common.h");
 @cfh = (*CCF, *CHF);
 @sfh = (*SCF, *SHF);
 @mfh = (*MCF, *MHF);
@@ -613,7 +615,7 @@ genstubs("client", $procs{"client"}, \@sfh, \@cfh, \@mfh)
 # Read the input files again, this time without cpp, and generate a .x file
 # suitable for parsing with rpcgen.  Try to preserve line numbers.
 my $inDefs = 0;
-open(XF, ">", "${opt_o}.x.$$") || die "Can't open ${opt_o}.x.$$";
+open(XF, ">", "${base}.x.$$") || die "Can't open ${base}.x.$$";
 for $infile (@ARGV) {
 	open(FH, "<", $infile) || die "Can't open $infile";
 	while (<FH>) {
@@ -634,21 +636,21 @@ for $infile (@ARGV) {
 close(XF);
 
 # Generate xdr.c
-open(IF, "-|", "rpcgen -c $opt_o.x.$$") or
-	die "Couldn't generate ${opt_o}_xdr.c";
-openFile(*XCF, "${opt_o}_xdr.c");
+open(IF, "-|", "rpcgen -c $base.x.$$") or
+	die "Couldn't generate ${base}_xdr.c";
+openFile(*XCF, "${base}_xdr.c");
 while (<IF>) {
-	s/${opt_o}\.x\.h/${opt_o}_xdr.h/
+	s/${base}\.x\.h/${base}_xdr.h/
 		if /#include/;
 	print XCF;
 }
 
 # Generate xdr.h
-my $olddefine = uc "_$opt_o.x_H_RPCGEN";
-my $newdefine = uc "${opt_o}_XDR_H";
-open(IF, "-|", "rpcgen -h $opt_o.x.$$") or
-	die "Couldn't generate ${opt_o}_xdr.h";
-openFile(*XHF, "${opt_o}_xdr.h");
+my $olddefine = uc "_$base.x_H_RPCGEN";
+my $newdefine = uc "${base}_XDR_H";
+open(IF, "-|", "rpcgen -h $base.x.$$") or
+	die "Couldn't generate ${base}_xdr.h";
+openFile(*XHF, "${base}_xdr.h");
 while (<IF>) {
 	s/$olddefine/$newdefine/;
 	print XHF;
