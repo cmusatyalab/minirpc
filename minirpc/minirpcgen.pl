@@ -151,9 +151,9 @@ sub gen_sender_stub_sync_c {
 	
 	print $fh wrapc(<<EOF);
 
-int $func(struct mrpc_connection *conn$inarg$outarg)
+int ${base}_$func(struct mrpc_connection *conn$inarg$outarg)
 {
-	return mrpc_send_request(&${base}_$role, conn, nr_$func, $inparam, $outparam);
+	return mrpc_send_request(&${base}_$role, conn, nr_${base}_$func, $inparam, $outparam);
 }
 EOF
 }
@@ -168,7 +168,7 @@ sub gen_sender_stub_sync_h {
 	my $outarg = argument($out, "**out");
 	
 	print $fh wrapc(<<EOF);
-int $func(struct mrpc_connection *conn$inarg$outarg);
+int ${base}_$func(struct mrpc_connection *conn$inarg$outarg);
 EOF
 }
 
@@ -180,7 +180,7 @@ sub gen_sender_stub_typedef_h {
 	my $outarg = argument($out, "*reply");
 	
 	print $fh wrapc(<<EOF);
-typedef void (${func}_callback_fn)(void *conn_private, void *msg_private, int status$outarg);
+typedef void (${base}_${func}_callback_fn)(void *conn_private, void *msg_private, int status$outarg);
 EOF
 }
 
@@ -195,9 +195,9 @@ sub gen_sender_stub_async_c {
 	
 	print $fh wrapc(<<EOF);
 
-int ${func}_async(struct mrpc_connection *conn, ${func}_callback_fn *callback, void *private$inarg)
+int ${base}_${func}_async(struct mrpc_connection *conn, ${base}_${func}_callback_fn *callback, void *private$inarg)
 {
-	return mrpc_send_request_async(&${base}_$role, conn, nr_$func, $inparam, callback, private);
+	return mrpc_send_request_async(&${base}_$role, conn, nr_${base}_$func, $inparam, callback, private);
 }
 EOF
 }
@@ -210,7 +210,7 @@ sub gen_sender_stub_async_h {
 	my $inarg = argument($in, "*in");
 	
 	print $fh wrapc(<<EOF);
-int ${func}_async(struct mrpc_connection *conn, ${func}_callback_fn *callback, void *private$inarg);
+int ${base}_${func}_async(struct mrpc_connection *conn, ${base}_${func}_callback_fn *callback, void *private$inarg);
 EOF
 }
 
@@ -225,7 +225,7 @@ sub gen_receiver_stub_c {
 	
 	print $fh wrapc(<<EOF);
 
-int ${func}_send_async_reply(struct mrpc_message *request, int status$outarg)
+int ${base}_${func}_send_async_reply(struct mrpc_message *request, int status$outarg)
 {
 	return mrpc_send_reply(&${base}_$role, request, status, $outparam);
 }
@@ -240,7 +240,7 @@ sub gen_receiver_stub_h {
 	my $outarg = argument($out, "*out");
 	
 	print $fh wrapc(<<EOF);
-int ${func}_send_async_reply(struct mrpc_message *request, int status$outarg);
+int ${base}_${func}_send_async_reply(struct mrpc_message *request, int status$outarg);
 EOF
 }
 
@@ -254,9 +254,9 @@ sub gen_oneway_stub_c {
 	
 	print $fh wrapc(<<EOF);
 
-int ${func}(struct mrpc_connection *conn$inarg)
+int ${base}_${func}(struct mrpc_connection *conn$inarg)
 {
-	return mrpc_send_request_noreply(conn, nr_$func, $inparam);
+	return mrpc_send_request_noreply(conn, nr_${base}_$func, $inparam);
 }
 EOF
 }
@@ -269,7 +269,7 @@ sub gen_oneway_stub_h {
 	my $inarg = argument($in, "*in");
 	
 	print $fh wrapc(<<EOF);
-int ${func}(struct mrpc_connection *conn$inarg);
+int ${base}_${func}(struct mrpc_connection *conn$inarg);
 EOF
 }
 
@@ -326,7 +326,7 @@ EOF
 		$inparam = opt_parameter($in, "in");
 		$outparam = opt_parameter($out, "out");
 		print $fh wrapc(<<EOF);
-	case nr_$func:
+	case nr_${base}_$func:
 		if (ops->$func == NULL)
 			return MINIRPC_PROCEDURE_UNAVAIL;
 		else
@@ -366,7 +366,7 @@ EOF
 		$type = @{$procs->{$num}}[$isReply ? 4 : 3];
 		$typesize = typesize($type);
 		print $fh wrapc(<<EOF);
-	case nr_$func:
+	case nr_${base}_$func:
 		SET_PTR_IF_NOT_NULL(type, (xdrproc_t)xdr_$type);
 		SET_PTR_IF_NOT_NULL(size, $typesize);
 		return MINIRPC_OK;
@@ -393,7 +393,7 @@ sub gen_opcode_enum {
 	print $fh "\nenum ${base}_${role}_procedures {\n";
 	foreach $num (opcodeSort($procs)) {
 		$func = @{$procs->{$num}}[2];
-		print $fh "\tnr_$func = $num,\n";
+		print $fh "\tnr_${base}_$func = $num,\n";
 	}
 	print $fh "};\n";
 }
@@ -576,7 +576,7 @@ sub genstubs_free {
 	@typelist = grep(!/^void$/, sort keys %types);
 	return if !@typelist;
 	print $hf "\n";
-	foreach $type (sort keys %types) {
+	foreach $type (@typelist) {
 		gen_free_proc_c($cf, $type);
 		gen_free_proc_h($hf, $type);
 	}
