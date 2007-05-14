@@ -135,7 +135,7 @@ sub opcodeSort {
 	return @nums;
 }
 
-sub gen_sender_stub_c {
+sub gen_sender_stub_sync_c {
 	my $fh = shift;
 	my $role = shift;
 	my $func = shift;
@@ -152,11 +152,6 @@ sub gen_sender_stub_c {
 int $func(struct mrpc_connection *conn$inarg$outarg)
 {
 	return mrpc_send_request(&${base}_$role, conn, nr_$func, $inparam, $outparam);
-}
-
-int ${func}_async(struct mrpc_connection *conn, ${func}_callback_fn *callback, void *private$inarg)
-{
-	return mrpc_send_request_async(&${base}_$role, conn, nr_$func, $inparam, callback, private);
 }
 EOF
 }
@@ -184,6 +179,24 @@ sub gen_sender_stub_typedef_h {
 	
 	print $fh wrapc(<<EOF);
 typedef void (${func}_callback_fn)(void *conn_private, void *msg_private, int status$outarg);
+EOF
+}
+
+sub gen_sender_stub_async_c {
+	my $fh = shift;
+	my $role = shift;
+	my $func = shift;
+	my $in = shift;
+	
+	my $inarg = argument($in, "*in");
+	my $inparam = parameter($in, "in");
+	
+	print $fh wrapc(<<EOF);
+
+int ${func}_async(struct mrpc_connection *conn, ${func}_callback_fn *callback, void *private$inarg)
+{
+	return mrpc_send_request_async(&${base}_$role, conn, nr_$func, $inparam, callback, private);
+}
 EOF
 }
 
@@ -430,74 +443,171 @@ extern struct mrpc_protocol ${base}_$role;
 EOF
 }
 
-sub genstubs {
+sub genstubs_sync {
 	my $role = shift;
 	my $procs = shift;
-	my $sfh = shift;
-	my $rfh = shift;
-	my $mfh = shift;
+	my $cf = shift;
+	my $hf = shift;
 	
 	my @keys;
+	my $num;
+	my $func;
+	my $arg;
+	my $ret;
+	
+	@keys = sort {$a <=> $b} grep ($_ >= 0, keys %$procs);
+	return if !@keys;
+	print $hf "\n";
+	foreach $num (@keys) {
+		($func, $arg, $ret) = @{$procs->{$num}}[2..5];
+		gen_sender_stub_sync_c($cf, $role, $func, $arg, $ret);
+		gen_sender_stub_sync_h($hf, $func, $arg, $ret);
+	}
+}
+
+sub genstubs_sender_async {
+	my $role = shift;
+	my $procs = shift;
+	my $cf = shift;
+	my $hf = shift;
+	
+	my @keys;
+	my $num;
+	my $func;
+	my $arg;
+	my $ret;
+	
+	@keys = sort {$a <=> $b} grep ($_ >= 0, keys %$procs);
+	return if !@keys;
+	print $hf "\n";
+	foreach $num (@keys) {
+		($func, $arg, $ret) = @{$procs->{$num}}[2..5];
+		gen_sender_stub_async_c($cf, $role, $func, $arg);
+		gen_sender_stub_typedef_h($hf, $func, $ret);
+	}
+	print $hf "\n";
+	foreach $num (@keys) {
+		($func, $arg, $ret) = @{$procs->{$num}}[2..5];
+		gen_sender_stub_async_h($hf, $func, $arg);
+	}
+}
+
+sub genstubs_receiver_async {
+	my $role = shift;
+	my $procs = shift;
+	my $cf = shift;
+	my $hf = shift;
+	
+	my @keys;
+	my $num;
+	my $func;
+	my $arg;
+	my $ret;
+	
+	@keys = sort {$a <=> $b} grep ($_ >= 0, keys %$procs);
+	return if !@keys;
+	print $hf "\n";
+	foreach $num (@keys) {
+		($func, $arg, $ret) = @{$procs->{$num}}[2..5];
+		gen_receiver_stub_c($cf, $role, $func, $ret);
+		gen_receiver_stub_h($hf, $func, $ret);
+	}
+}
+
+sub genstubs_noreply {
+	my $role = shift;
+	my $procs = shift;
+	my $cf = shift;
+	my $hf = shift;
+	
+	my @keys;
+	my $num;
+	my $func;
+	my $arg;
+	
+	@keys = sort {$b <=> $a} grep ($_ < 0, keys %$procs);
+	return if !@keys;
+	print $hf "\n";
+	foreach $num (@keys) {
+		($func, $arg) = @{$procs->{$num}}[2..4];
+		gen_oneway_stub_c($cf, $func, $arg);
+		gen_oneway_stub_h($hf, $func, $arg);
+	}
+}
+
+sub genstubs {
+	my $procmap = shift;
+	my $mcf = shift;
+	my $mhf = shift;
+	my $chf = shift;
+	my $shf = shift;
+	
+	my $role;
+	my $procs;
 	my $file;
 	my $line;
 	my $num;
 	my $func;
 	my $arg;
 	my $ret;
-	my $fh;
+	my $hf;
 	
-	# validation
-	foreach $num (opcodeSort($procs)) {
-		($file, $line, $func, $arg, $ret) = @{$procs->{$num}};
-		parseErr($file, $line, "No such type: $arg")
-			if !defined($types{$arg});
-		parseErr($file, $line, "No such type: $ret")
-			if !defined($types{$ret});
-		parseErr($file, $line, "Procedures in ${role}msgs " .
-					"section cannot return a value")
-			if $num < 0 && $ret ne "void";
-		print "$func($arg, $ret) = $num\n";
+	# Validate procedure definitions
+	foreach $role ("server", "client") {
+		$procs = $procmap->{$role};
+		foreach $num (opcodeSort($procs)) {
+			($file, $line, $func, $arg, $ret) = @{$procs->{$num}};
+			parseErr($file, $line, "No such type: $arg")
+				if !defined($types{$arg});
+			parseErr($file, $line, "No such type: $ret")
+				if !defined($types{$ret});
+			parseErr($file, $line, "Procedures in ${role}msgs " .
+						"section cannot return a value")
+				if $num < 0 && $ret ne "void";
+			print "$func($arg, $ret) = $num\n";
+		}
 	}
 	
-	# toplevel stuff
-	gen_opcode_enum($mfh->[1], $role, $procs);
-	gen_info_proc($mfh->[0], $role, 0, $procs);
-	gen_info_proc($mfh->[0], $role, 1, $procs);
-	gen_operations_struct($rfh->[1], $role, $procs);
-	gen_set_operations_c($rfh->[0], $role);
-	gen_set_operations_h($rfh->[1], $role);
-	gen_request_proc($rfh->[0], $role, $procs);
-	gen_protocol_struct_c($rfh->[0], $role);
-	gen_protocol_struct_h($rfh->[1], $role);
-	
-	# request-reply
-	@keys = sort {$a <=> $b} grep ($_ >= 0, keys %$procs);
-	print {$sfh->[1]} "\n";
-	print {$rfh->[1]} "\n";
-	foreach $num (@keys) {
-		($file, $line, $func, $arg, $ret) = @{$procs->{$num}};
-		gen_sender_stub_c($sfh->[0], $role, $func, $arg, $ret);
-		gen_receiver_stub_c($rfh->[0], $role, $func, $ret);
-		gen_sender_stub_typedef_h($sfh->[1], $func, $ret);
-		gen_receiver_stub_h($rfh->[1], $func, $ret);
+	# Generate toplevel structures
+	foreach $role ("server", "client") {
+		gen_opcode_enum($mhf, $role, $procmap->{$role});
 	}
-	print {$sfh->[1]} "\n";
-	foreach $num (@keys) {
-		($file, $line, $func, $arg, $ret) = @{$procs->{$num}};
-		gen_sender_stub_sync_h($sfh->[1], $func, $arg, $ret);
+	foreach $role ("server", "client") {
+		gen_info_proc($mcf, $role, 0, $procmap->{$role});
+		gen_info_proc($mcf, $role, 1, $procmap->{$role});
 	}
-	print {$sfh->[1]} "\n";
-	foreach $num (@keys) {
-		($file, $line, $func, $arg, $ret) = @{$procs->{$num}};
-		gen_sender_stub_async_h($sfh->[1], $func, $arg);
+	foreach $role ("server", "client") {
+		$hf = ($role eq "server") ? $shf : $chf;
+		gen_operations_struct($hf, $role, $procmap->{$role});
 	}
-	
-	# noreply
-	@keys = sort {$b <=> $a} grep ($_ < 0, keys %$procs);
-	foreach $num (@keys) {
-		($file, $line, $func, $arg, $ret) = @{$procs->{$num}};
-		gen_oneway_stub_c($sfh->[0], $func, $arg);
-		gen_oneway_stub_h($sfh->[1], $func, $arg);
+	foreach $role ("server", "client") {
+		gen_request_proc($mcf, $role, $procmap->{$role});
+	}
+	foreach $role ("server", "client") {
+		$hf = ($role eq "server") ? $shf : $chf;
+		gen_protocol_struct_c($mcf, $role);
+		gen_protocol_struct_h($hf, $role);
+	}
+	foreach $role ("server", "client") {
+		$hf = ($role eq "server") ? $shf : $chf;
+		gen_set_operations_c($mcf, $role);
+		gen_set_operations_h($hf, $role);
+	}
+	foreach $role ("server", "client") {
+		$hf = ($role eq "server") ? $chf : $shf;
+		genstubs_sync($role, $procmap->{$role}, $mcf, $hf);
+	}
+	foreach $role ("server", "client") {
+		$hf = ($role eq "server") ? $chf : $shf;
+		genstubs_sender_async($role, $procmap->{$role}, $mcf, $hf);
+	}
+	foreach $role ("server", "client") {
+		$hf = ($role eq "server") ? $shf : $chf;
+		genstubs_receiver_async($role, $procmap->{$role}, $mcf, $hf);
+	}
+	foreach $role ("server", "client") {
+		$hf = ($role eq "server") ? $chf : $shf;
+		genstubs_noreply($role, $procmap->{$role}, $mcf, $hf);
 	}
 }
 
@@ -595,22 +705,11 @@ for $infile (@ARGV) {
 }
 
 # Generate stubs
-my @cfh;
-my @sfh;
-my @mfh;
-openFile(*CCF, "${base}_client.c");
+openFile(*MCF, "${base}_minirpc.c");
+openFile(*MHF, "${base}_minirpc.h");
 openFile(*CHF, "${base}_client.h");
-openFile(*SCF, "${base}_server.c");
 openFile(*SHF, "${base}_server.h");
-openFile(*MCF, "${base}_common.c");
-openFile(*MHF, "${base}_common.h");
-@cfh = (*CCF, *CHF);
-@sfh = (*SCF, *SHF);
-@mfh = (*MCF, *MHF);
-genstubs("server", $procs{"server"}, \@cfh, \@sfh, \@mfh)
-	if defined($procs{"server"});
-genstubs("client", $procs{"client"}, \@sfh, \@cfh, \@mfh)
-	if defined($procs{"client"});
+genstubs(\%procs, *MCF, *MHF, *CHF, *SHF);
 
 # Read the input files again, this time without cpp, and generate a .x file
 # suitable for parsing with rpcgen.  Try to preserve line numbers.
