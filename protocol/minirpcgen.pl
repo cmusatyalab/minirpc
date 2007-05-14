@@ -253,7 +253,7 @@ EOF
 
 sub gen_info_proc {
 	my $fh = shift;
-	my $direction = shift;
+	my $role = shift;
 	my $isReply = shift;
 	my $procs = shift;
 	
@@ -265,7 +265,7 @@ sub gen_info_proc {
 	
 	print $fh wrapc(<<EOF);
 
-static int ${opt_o}_${direction}_${reply}_info(unsigned cmd, xdrproc_t *type, unsigned *size)
+static int ${opt_o}_${role}_${reply}_info(unsigned cmd, xdrproc_t *type, unsigned *size)
 {
 	switch (cmd) {
 EOF
@@ -292,14 +292,14 @@ EOF
 
 sub gen_opcode_enum {
 	my $fh = shift;
-	my $direction = shift;
+	my $role = shift;
 	my $procs = shift;
 	
 	my $num;
 	my $func;
 	
 	return if (keys %$procs == 0);
-	print $fh "\nenum ${opt_o}_${direction}_procedures {\n";
+	print $fh "\nenum ${opt_o}_${role}_procedures {\n";
 	foreach $num (opcodeSort($procs)) {
 		$func = @{$procs->{$num}}[2];
 		print $fh "\tnr_$func = $num,\n";
@@ -309,7 +309,7 @@ sub gen_opcode_enum {
 
 sub gen_operations_struct {
 	my $fh = shift;
-	my $direction = shift;
+	my $role = shift;
 	my $procs = shift;
 	
 	my $num;
@@ -320,7 +320,7 @@ sub gen_operations_struct {
 	my $outarg;
 	
 	return if (keys %$procs == 0);
-	print $fh "\nstruct ${opt_o}_${direction}_operations {\n";
+	print $fh "\nstruct ${opt_o}_${role}_operations {\n";
 	foreach $num (opcodeSort($procs)) {
 		($func, $in, $out) = @{$procs->{$num}}[2..4];
 		$inarg = argument($in, "*in");
@@ -331,7 +331,7 @@ sub gen_operations_struct {
 }
 
 sub genstubs {
-	my $direction = shift;
+	my $role = shift;
 	my $procs = shift;
 	my $sfh = shift;
 	my $rfh = shift;
@@ -353,17 +353,17 @@ sub genstubs {
 			if !defined($types{$arg});
 		parseErr($file, $line, "No such type: $ret")
 			if !defined($types{$ret});
-		parseErr($file, $line, "Procedures in ${direction}msgs " .
+		parseErr($file, $line, "Procedures in ${role}msgs " .
 					"section cannot return a value")
 			if $num < 0 && $ret ne "void";
 		print "$func($arg, $ret) = $num\n";
 	}
 	
 	# toplevel stuff
-	gen_opcode_enum($mfh->[1], $direction, $procs);
-	gen_info_proc($mfh->[0], $direction, 0, $procs);
-	gen_info_proc($mfh->[0], $direction, 1, $procs);	
-	gen_operations_struct($rfh->[1], $direction, $procs);
+	gen_opcode_enum($mfh->[1], $role, $procs);
+	gen_info_proc($mfh->[0], $role, 0, $procs);
+	gen_info_proc($mfh->[0], $role, 1, $procs);	
+	gen_operations_struct($rfh->[1], $role, $procs);
 	
 	# request-reply
 	@keys = sort {$a <=> $b} grep ($_ >= 0, keys %$procs);
