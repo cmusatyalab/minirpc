@@ -1,5 +1,5 @@
 #include <rpc/xdr.h>
-#define LIBPROTOCOL
+#define MINIRPC_INTERNAL
 #include "internal.h"
 
 /* This is a fake XDR stream which exists to count the bytes in a serialized

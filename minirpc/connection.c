@@ -135,8 +135,8 @@ static int process_incoming_header(struct mrpc_connection *conn)
 {
 	int ret;
 	
-	ret=unserialize(xdr_mrpc_header, conn->recv_hdr_buf,
-				MINIRPC_HEADER_LEN, conn->recv_msg->hdr,
+	ret=unserialize((xdrproc_t)xdr_mrpc_header, conn->recv_hdr_buf,
+				MINIRPC_HEADER_LEN, &conn->recv_msg->hdr,
 				sizeof(conn->recv_msg->hdr));
 	if (ret)
 		return ret;
@@ -171,7 +171,7 @@ static void try_read_conn(struct mrpc_connection *conn)
 		
 		switch (conn->recv_state) {
 		case STATE_HEADER:
-			buf=&conn->recv_hdr_buf;
+			buf=conn->recv_hdr_buf;
 			len=MINIRPC_HEADER_LEN;
 			break;
 		case STATE_DATA:
@@ -205,9 +205,7 @@ static void try_read_conn(struct mrpc_connection *conn)
 				}
 				break;
 			case STATE_DATA:
-				if (process_incoming_message(conn)) {
-					/* XXX */
-				}
+				process_incoming_message(conn);
 				conn->recv_state=STATE_HEADER;
 				conn->recv_msg=NULL;
 				break;
@@ -248,7 +246,6 @@ static int get_next_message(struct mrpc_connection *conn)
 static void try_write_conn(struct mrpc_connection *conn)
 {
 	ssize_t count;
-	int ret;
 	char *buf;
 	unsigned len;
 	
@@ -266,7 +263,7 @@ static void try_write_conn(struct mrpc_connection *conn)
 		
 		switch (conn->send_state) {
 		case STATE_HEADER:
-			buf=&conn->send_hdr_buf;
+			buf=conn->send_hdr_buf;
 			len=MINIRPC_HEADER_LEN;
 			break;
 		case STATE_DATA:
@@ -425,7 +422,7 @@ void mrpc_conn_set_free(struct mrpc_conn_set *set)
 {
 	write(set->shutdown_pipe[1], "s", 1);
 	pthread_mutex_lock(&set->events_lock);
-	while (set->event_queue_threads)
+	while (set->events_threads)
 		pthread_cond_wait(&set->events_threads_cond, &set->events_lock);
 	pthread_mutex_unlock(&set->events_lock);
 	pthread_join(set->thread, NULL);

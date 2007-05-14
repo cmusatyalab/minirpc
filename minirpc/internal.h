@@ -4,6 +4,7 @@
 
 #ifndef MINIRPC_INTERNAL_H
 #define MINIRPC_INTERNAL_H
+#define MINIRPC_PROTOCOL
 
 #include "minirpc.h"
 #include "minirpc_protocol.h"
@@ -36,6 +37,17 @@ enum conn_state {
 	STATE_DATA
 };
 
+struct mrpc_message {
+	struct mrpc_connection *conn;
+	struct list_head lh_msgs;
+	struct mrpc_header hdr;
+	char *data;
+	
+	/* For async callbacks */
+	reply_callback_fn *callback;
+	void *private;
+};
+
 struct mrpc_connection {
 	struct list_head lh_conns;
 	struct mrpc_conn_set *set;
@@ -47,7 +59,7 @@ struct mrpc_connection {
 	
 	struct list_head send_msgs;
 	pthread_mutex_t send_msgs_lock;
-	struct queued_message *send_msg;
+	struct mrpc_message *send_msg;
 	enum conn_state send_state;
 	char send_hdr_buf[MINIRPC_HEADER_LEN];
 	unsigned send_offset;
@@ -56,7 +68,7 @@ struct mrpc_connection {
 	unsigned recv_length;
 	char recv_hdr_buf[MINIRPC_HEADER_LEN];
 	enum conn_state recv_state;
-	struct queued_message *recv_msg;
+	struct mrpc_message *recv_msg;
 	
 	struct htable *pending_replies;
 	pthread_mutex_t pending_replies_lock;
@@ -64,17 +76,6 @@ struct mrpc_connection {
 	
 	int next_sequence;
 	pthread_mutex_t next_sequence_lock;
-};
-
-struct mrpc_message {
-	struct mrpc_connection *conn;
-	struct list_head lh_msgs;
-	struct mrpc_header hdr;
-	char *data;
-	
-	/* For async callbacks */
-	reply_callback_fn *callback;
-	void *private;
 };
 
 /* connection.c */

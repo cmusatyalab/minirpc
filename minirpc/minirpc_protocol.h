@@ -38,15 +38,15 @@ int mrpc_conn_set_operations(struct mrpc_connection *conn,
 			struct mrpc_protocol *protocol, void *ops);
 
 /* message.c */
-int mrpc_send_request(struct mrpc_protocol *protocol,
+int mrpc_send_request(const struct mrpc_protocol *protocol,
 			struct mrpc_connection *conn, unsigned cmd, void *in,
 			void **out);
-int mrpc_send_request_async(struct mrpc_protocol *protocol,
+int mrpc_send_request_async(const struct mrpc_protocol *protocol,
 			struct mrpc_connection *conn, unsigned cmd,
 			reply_callback_fn *callback, void *private, void *in);
-int mrpc_send_request_noreply(struct mrpc_protocol *protocol,
+int mrpc_send_request_noreply(const struct mrpc_protocol *protocol,
 			struct mrpc_connection *conn, unsigned cmd, void *in);
-int mrpc_send_reply(struct mrpc_protocol *protocol,
+int mrpc_send_reply(const struct mrpc_protocol *protocol,
 			struct mrpc_message *request, int status, void *data);
 
 #endif

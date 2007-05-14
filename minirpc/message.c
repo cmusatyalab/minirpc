@@ -1,3 +1,5 @@
+#include <sys/poll.h>
+#include <unistd.h>
 #include <pthread.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
@@ -69,9 +71,9 @@ static int send_request_pending(struct mrpc_message *request,
 	int ret;
 	
 	pthread_mutex_lock(&conn->pending_replies_lock);
-	hash_add(&conn->pending_replies, &pending->lh_pending);
+	hash_add(conn->pending_replies, &pending->lh_pending);
 	pthread_mutex_unlock(&conn->pending_replies_lock);
-	ret=send_message(conn, request);
+	ret=send_message(request);
 	if (ret) {
 		pthread_mutex_lock(&conn->pending_replies_lock);
 		hash_remove(conn->pending_replies, &pending->lh_pending);
@@ -81,7 +83,7 @@ static int send_request_pending(struct mrpc_message *request,
 	return ret;
 }
 
-int mrpc_send_request(struct mrpc_protocol *protocol,
+int mrpc_send_request(const struct mrpc_protocol *protocol,
 			struct mrpc_connection *conn, unsigned cmd, void *in,
 			void **out)
 {
@@ -109,7 +111,8 @@ int mrpc_send_request(struct mrpc_protocol *protocol,
 	
 	pthread_mutex_lock(&conn->sync_wakeup_lock);
 	while (reply == NULL)
-		pthread_cond_wait(&cond, &conn->sync_wakeup_lock);
+		pthread_cond_wait(&pending->data.sync.cond,
+					&conn->sync_wakeup_lock);
 	pthread_mutex_unlock(&conn->sync_wakeup_lock);
 	ret=reply->hdr.status;
 	if (!ret)
@@ -118,7 +121,7 @@ int mrpc_send_request(struct mrpc_protocol *protocol,
 	return MINIRPC_OK;
 }
 
-int mrpc_send_request_async(struct mrpc_protocol *protocol,
+int mrpc_send_request_async(const struct mrpc_protocol *protocol,
 			struct mrpc_connection *conn, unsigned cmd,
 			reply_callback_fn *callback, void *private, void *in)
 {
@@ -133,7 +136,7 @@ int mrpc_send_request_async(struct mrpc_protocol *protocol,
 	ret=format_request(conn, cmd, in, &msg);
 	if (ret)
 		return ret;
-	ret=pending_alloc(request, &pending);
+	ret=pending_alloc(msg, &pending);
 	if (ret) {
 		mrpc_free_message(msg);
 		return ret;
@@ -144,7 +147,7 @@ int mrpc_send_request_async(struct mrpc_protocol *protocol,
 	return send_request_pending(msg, pending);
 }
 
-int mrpc_send_request_noreply(struct mrpc_protocol *protocol,
+int mrpc_send_request_noreply(const struct mrpc_protocol *protocol,
 			struct mrpc_connection *conn, unsigned cmd, void *in)
 {
 	struct mrpc_message *msg;
@@ -158,10 +161,11 @@ int mrpc_send_request_noreply(struct mrpc_protocol *protocol,
 	return send_message(msg);
 }
 
-int mrpc_send_reply(struct mrpc_protocol *protocol,
+int mrpc_send_reply(const struct mrpc_protocol *protocol,
 			struct mrpc_message *request, int status, void *data)
 {
 	struct mrpc_message *reply;
+	int ret;
 	
 	if (protocol != request->conn->set->protocol)
 		return MINIRPC_INVALID_PROTOCOL;
@@ -208,14 +212,14 @@ static struct mrpc_message *unqueue_event(struct mrpc_conn_set *set)
 	pthread_mutex_lock(&set->events_lock);
 	if (list_is_empty(&set->events)) {
 		if (empty_pipe(set->events_notify_pipe[0]))
-			XXX;
+			/* XXX */;
 	} else {
 		msg=list_first_entry(&set->events, struct mrpc_message,
 					lh_msgs);
 		list_del_init(&msg->lh_msgs);
 		if (list_is_empty(&set->events))
 			if (empty_pipe(set->events_notify_pipe[0]) != 1)
-				XXX;
+				/* XXX */;
 	}
 	pthread_mutex_unlock(&set->events_lock);
 	return msg;
@@ -242,20 +246,18 @@ void process_incoming_message(struct mrpc_connection *conn)
 		queue_event(msg);
 	} else {
 		pthread_mutex_lock(&conn->pending_replies_lock);
-		pending=request_lookup(conn, msg->sequence);
+		pending=request_lookup(conn, msg->hdr.sequence);
 		if (pending != NULL)
 			hash_remove(conn->pending_replies,
 						&pending->lh_pending);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
 		if (pending == NULL || pending->cmd != msg->hdr.cmd ||
-					(pending->status != 0 &&
-					pending->datalen != 0)) {
+					(msg->hdr.status != 0 &&
+					msg->hdr.datalen != 0)) {
 			/* XXX what is this thing we received? */
 			mrpc_free_message(msg);
-			if (pending != NULL) {
-				mrpc_free_message(pending->request);
+			if (pending != NULL)
 				free(pending);
-			}
 			return;
 		}
 		if (pending->async) {
@@ -265,7 +267,7 @@ void process_incoming_message(struct mrpc_connection *conn)
 		} else {
 			pthread_mutex_lock(&conn->sync_wakeup_lock);
 			*pending->data.sync.reply=msg;
-			pthread_cond_signal(pending->data.sync.cond);
+			pthread_cond_signal(&pending->data.sync.cond);
 			pthread_mutex_unlock(&conn->sync_wakeup_lock);
 		}
 		free(pending);
@@ -275,7 +277,6 @@ void process_incoming_message(struct mrpc_connection *conn)
 static void dispatch_request(struct mrpc_message *request)
 {
 	struct mrpc_connection *conn=request->conn;
-	struct mrpc_message *reply;
 	void *request_data;
 	void *reply_data=NULL;
 	int ret;
@@ -285,18 +286,18 @@ static void dispatch_request(struct mrpc_message *request)
 	unsigned reply_size;
 	int doreply;
 	
-	BUG_ON(request->hdr.status != MINIRPC_REQUEST);
+	/* BUG_ON(request->hdr.status != MINIRPC_REQUEST); XXX */
 	
-	if (conn->set->protocol->request_info(request->hdr.cmd, &request_type,
-				NULL) {
+	if (conn->set->protocol->receiver_request_info(request->hdr.cmd,
+				&request_type, NULL)) {
 		/* XXX invalid message */
 		mrpc_free_message(request);
 		return;
 	}
 	doreply=(request->hdr.cmd >= 0);
 	if (doreply) {
-		if (conn->set->protocol->reply_info(request->hdr.cmd,
-					&reply_type, &reply_size) {
+		if (conn->set->protocol->receiver_reply_info(request->hdr.cmd,
+					&reply_type, &reply_size)) {
 			/* XXX */
 		}
 		
@@ -327,11 +328,12 @@ static void dispatch_request(struct mrpc_message *request)
 			request->data=NULL;
 			return;
 		}
-		ret=mrpc_send_reply(request, result, reply_data);
+		ret=mrpc_send_reply(conn->set->protocol, request, result,
+					reply_data);
 		xdr_free(reply_type, reply_data);
 		free(reply_data);
 		if (ret)
-			XXX;
+			/* XXX */;
 	}
 	mrpc_free_message(request);
 }
@@ -343,7 +345,7 @@ static void run_reply_callback(struct mrpc_message *reply)
 	
 	ret=reply->hdr.status;
 	if (!ret)
-		ret=unformat_request(msg, &out);
+		ret=unformat_request(reply, &out);
 	reply->callback(reply->conn->private, reply->private, ret, out);
 	mrpc_free_message(reply);
 }
@@ -355,7 +357,7 @@ static void dispatch_event(struct mrpc_message *msg)
 	} else if (msg->hdr.status == MINIRPC_REQUEST) {
 		dispatch_request(msg);
 	} else {
-		BUG();
+		/* XXX BUG */;
 	}
 }
 
@@ -380,7 +382,7 @@ int mrpc_dispatch_all(struct mrpc_conn_set *set)
 int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 {
 	struct mrpc_message *msg;
-	struct pollfd poll_s[2] = {0};
+	struct pollfd poll_s[2] = {{0}};
 	int ret=0;
 	
 	pthread_mutex_lock(&set->events_lock);
@@ -396,7 +398,7 @@ int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 	while (poll_s[1].revents == 0) {
 		msg=unqueue_event(set);
 		if (msg == NULL) {
-			if (poll(&poll_s, 2, -1) == -1 && errno != EINTR) {
+			if (poll(poll_s, 2, -1) == -1 && errno != EINTR) {
 				ret=errno;
 				break;
 			}

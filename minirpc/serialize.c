@@ -1,3 +1,4 @@
+#include <pthread.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
@@ -92,7 +93,7 @@ static int format_message(struct mrpc_connection *conn, xdrproc_t type,
 	msg=mrpc_alloc_message(conn);
 	if (msg == NULL)
 		return MINIRPC_NOMEM;
-	ret=serialize(type, in, &msg->data, &msg->hdr.datalen);
+	ret=serialize(type, data, &msg->data, &msg->hdr.datalen);
 	if (ret) {
 		mrpc_free_message(msg);
 		return ret;
@@ -105,6 +106,7 @@ static int unformat_message(xdrproc_t type, unsigned size,
 			struct mrpc_message *msg, void **result)
 {
 	void *buf;
+	int ret;
 	
 	buf=malloc(size);
 	if (buf == NULL)
@@ -125,7 +127,7 @@ int format_request(struct mrpc_connection *conn, unsigned cmd, void *data,
 	xdrproc_t type;
 	int ret;
 	
-	conn->set->protocol->request_info(cmd, &type, NULL);
+	conn->set->protocol->sender_request_info(cmd, &type, NULL);
 	ret=format_message(conn, type, data, &msg);
 	if (ret)
 		return ret;
@@ -145,7 +147,8 @@ int format_reply(struct mrpc_message *request, void *data,
 	xdrproc_t type;
 	int ret;
 	
-	conn->set->protocol->reply_info(request->hdr.cmd, &type, NULL);
+	request->conn->set->protocol->receiver_reply_info(request->hdr.cmd,
+				&type, NULL);
 	ret=format_message(request->conn, type, data, &msg);
 	if (ret)
 		return ret;
@@ -162,7 +165,7 @@ int format_reply_error(struct mrpc_message *request, int err,
 	struct mrpc_message *msg;
 	int ret;
 	
-	ret=format_message(request->conn, xdr_void, NULL, &msg);
+	ret=format_message(request->conn, (xdrproc_t)xdr_void, NULL, &msg);
 	if (ret)
 		return ret;
 	msg->hdr.sequence=request->hdr.sequence;
@@ -177,7 +180,8 @@ int unformat_request(struct mrpc_message *msg, void **result)
 	xdrproc_t type;
 	unsigned size;
 	
-	msg->conn->set->protocol->request_info(msg->hdr.cmd, &type, &size);
+	msg->conn->set->protocol->receiver_request_info(msg->hdr.cmd, &type,
+				&size);
 	return unformat_message(type, size, msg, result);
 }
 
@@ -188,6 +192,7 @@ int unformat_reply(struct mrpc_message *msg, void **result)
 	
 	if (msg->hdr.status)
 		return msg->hdr.status;
-	msg->conn->set->protocol->reply_info(msg->hdr.cmd, &type, &size);
+	msg->conn->set->protocol->receiver_reply_info(msg->hdr.cmd, &type,
+				&size);
 	return unformat_message(type, size, msg, result);
 }

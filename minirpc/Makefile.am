@@ -1,3 +1,4 @@
+AM_CPPFLAGS = -D_GNU_SOURCE
 AM_CFLAGS = -Wall -Wstrict-prototypes -Wmissing-prototypes
 
 GEN_C = minirpc_xdr.c
