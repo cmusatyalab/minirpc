@@ -436,6 +436,7 @@ sub gen_set_operations_h {
 	my $role = shift;
 	
 	print $fh wrapc(<<EOF);
+
 int ${base}_${role}_set_operations(struct mrpc_connection *conn, struct ${base}_${role}_operations *ops);
 EOF
 }
@@ -465,6 +466,7 @@ sub gen_protocol_struct_h {
 	my $role = shift;
 	
 	print $fh wrapc(<<EOF);
+
 extern struct mrpc_protocol ${base}_$role;
 EOF
 }
