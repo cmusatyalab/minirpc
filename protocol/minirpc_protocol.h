@@ -1,3 +1,7 @@
+#ifndef MINIRPC_PROTOCOL
+#error This header is for use by miniRPC stub code only
+#endif
+
 #ifndef MINIRPC_PROTOCOL_H
 #define MINIRPC_PROTOCOL_H
 
