@@ -9,6 +9,8 @@ use Text::Wrap;
 our $base;
 our %outfiles;
 our %types;
+our %procSets;
+our %procNames;
 
 END {
 	my $status = $?;
@@ -576,8 +578,6 @@ sub genstubs_free {
 }
 
 sub genstubs {
-	my $procmap = shift;
-	
 	my $role;
 	my $procs;
 	my $file;
@@ -590,7 +590,7 @@ sub genstubs {
 	
 	# Validate procedure definitions
 	foreach $role ("server", "client") {
-		$procs = $procmap->{$role};
+		$procs = $procSets{$role};
 		foreach $num (opcodeSort($procs)) {
 			($file, $line, $func, $arg, $ret) = @{$procs->{$num}};
 			parseErr($file, $line, "No such type: $arg")
@@ -627,18 +627,18 @@ sub genstubs {
 	
 	# Generate toplevel structures
 	foreach $role ("server", "client") {
-		gen_opcode_enum(*MHF, $role, $procmap->{$role});
+		gen_opcode_enum(*MHF, $role, $procSets{$role});
 	}
 	foreach $role ("server", "client") {
-		gen_info_proc(*MCF, $role, 0, $procmap->{$role});
-		gen_info_proc(*MCF, $role, 1, $procmap->{$role});
+		gen_info_proc(*MCF, $role, 0, $procSets{$role});
+		gen_info_proc(*MCF, $role, 1, $procSets{$role});
 	}
 	foreach $role ("server", "client") {
 		$hf = ($role eq "server") ? *SHF : *CHF;
-		gen_operations_struct($hf, $role, $procmap->{$role});
+		gen_operations_struct($hf, $role, $procSets{$role});
 	}
 	foreach $role ("server", "client") {
-		gen_request_proc(*MCF, $role, $procmap->{$role});
+		gen_request_proc(*MCF, $role, $procSets{$role});
 	}
 	foreach $role ("server", "client") {
 		$hf = ($role eq "server") ? *SHF : *CHF;
@@ -652,19 +652,19 @@ sub genstubs {
 	}
 	foreach $role ("server", "client") {
 		$hf = ($role eq "server") ? *CHF : *SHF;
-		genstubs_sync($role, $procmap->{$role}, *MCF, $hf);
+		genstubs_sync($role, $procSets{$role}, *MCF, $hf);
 	}
 	foreach $role ("server", "client") {
 		$hf = ($role eq "server") ? *CHF : *SHF;
-		genstubs_sender_async($role, $procmap->{$role}, *MCF, $hf);
+		genstubs_sender_async($role, $procSets{$role}, *MCF, $hf);
 	}
 	foreach $role ("server", "client") {
 		$hf = ($role eq "server") ? *SHF : *CHF;
-		genstubs_receiver_async($role, $procmap->{$role}, *MCF, $hf);
+		genstubs_receiver_async($role, $procSets{$role}, *MCF, $hf);
 	}
 	foreach $role ("server", "client") {
 		$hf = ($role eq "server") ? *CHF : *SHF;
-		genstubs_noreply($role, $procmap->{$role}, *MCF, $hf);
+		genstubs_noreply($role, $procSets{$role}, *MCF, $hf);
 	}
 	genstubs_free(*MCF, *MHF);
 	
@@ -673,39 +673,20 @@ sub genstubs {
 	}
 }
 
-our $opt_o;
-getopts("o:");
-if (!defined($opt_o) || @ARGV == 0) {
-	print "Usage: $0 -o <output_file_base_name> <input_files>\n";
-	exit 1;
-}
-$base = $opt_o;
-
-# Initialize primitive types
-# These are the primitive types that can appear as procedure parameters.
-# Right now we only support void, as a special case, because we don't want
-# to make assumptions about the native (unserialized) length of the data
-# types that XDR produces.  Regular types ("int", "bool", etc.) can still
-# be used with XDR typedefs, because sizeof(some_typedef) will do the right
-# thing (as opposed to sizeof(hyper), which is the only thing we could do
-# since we don't know what C type "hyper" corresponds to).
-$types{"void"} = 1;
-
-# Preprocess the input files with cpp and parse them
-my $infile;
-my $filename;
-my $line;
-my $data;
-my %procs;
-my %procNames;
-my $curProcData;
-my $curDefs;
-my $noreply;
-my $sym_re = '([a-zA-Z0-9_]+)';
-my $type_re = '((unsigned\s+)?[a-zA-Z0-9_]+)';
-my $func;
-my $num;
-for $infile (@ARGV) {
+sub parseFile {
+	my $infile = shift;
+	
+	my $filename;
+	my $line;
+	my $data;
+	my $curProcData;
+	my $curDefs;
+	my $noreply;
+	my $sym_re = '([a-zA-Z0-9_]+)';
+	my $type_re = '((unsigned\s+)?[a-zA-Z0-9_]+)';
+	my $func;
+	my $num;
+	
 	$data=`cpp $infile`;
 	die "Couldn't open $infile"
 		if $?;
@@ -722,8 +703,8 @@ for $infile (@ARGV) {
 			if (/^\s*(client|server)(procs|msgs)\s+{/) {
 				$curDefs = $1;
 				$noreply = ($2 eq "msgs");
-				$procs{$curDefs} = {}
-					if !exists($procs{$curDefs});
+				$procSets{$curDefs} = {}
+					if !exists($procSets{$curDefs});
 				next;
 			}
 			if (/^\s*(struct|enum)\s+$sym_re\s+{/o) {
@@ -751,11 +732,11 @@ for $infile (@ARGV) {
 							$6 ? $6 : "void"];
 				parseErr($filename, $line, "Duplicate " .
 							"procedure number")
-					if defined($procs{$curDefs}->{$num});
+					if defined($procSets{$curDefs}->{$num});
 				parseErr($filename, $line, "Duplicate " .
 							"procedure name")
 					if defined($procNames{$func});
-				$procs{$curDefs}->{$num} = $curProcData;
+				$procSets{$curDefs}->{$num} = $curProcData;
 				$procNames{$func} = 1;
 			} elsif (/^\s*$/) {
 				next;
@@ -766,31 +747,64 @@ for $infile (@ARGV) {
 	}
 }
 
+sub genRpclFile {
+	my @files = shift;
+	
+	my $inDefs = 0;
+	my $infile;
+	
+	open(XF, ">", "${base}.x.$$") || die "Can't open ${base}.x.$$";
+	for $infile (@files) {
+		open(FH, "<", $infile) || die "Can't open $infile";
+		while (<FH>) {
+			if (!$inDefs) {
+				if (/^\s*(client|server)(procs|msgs)\s+{/) {
+					$inDefs = 1;
+					print XF "\n";
+				} else {
+					print XF;
+				}
+			} else {
+				$inDefs = 0
+					if (/}/);
+				print XF "\n";
+			}
+		}
+	}
+	close(XF);
+}
+
+
+our $opt_o;
+getopts("o:");
+if (!defined($opt_o) || @ARGV == 0) {
+	print "Usage: $0 -o <output_file_base_name> <input_files>\n";
+	exit 1;
+}
+$base = $opt_o;
+
+# Initialize primitive types
+# These are the primitive types that can appear as procedure parameters.
+# Right now we only support void, as a special case, because we don't want
+# to make assumptions about the native (unserialized) length of the data
+# types that XDR produces.  Regular types ("int", "bool", etc.) can still
+# be used with XDR typedefs, because sizeof(some_typedef) will do the right
+# thing (as opposed to sizeof(hyper), which is the only thing we could do
+# since we don't know what C type "hyper" corresponds to).
+$types{"void"} = 1;
+
+# Preprocess the input files with cpp and parse them
+my $infile;
+for $infile (@ARGV) {
+	parseFile($infile);
+}
+
 # Generate stubs
-genstubs(\%procs);
+genstubs;
 
 # Read the input files again, this time without cpp, and generate a .x file
 # suitable for parsing with rpcgen.  Try to preserve line numbers.
-my $inDefs = 0;
-open(XF, ">", "${base}.x.$$") || die "Can't open ${base}.x.$$";
-for $infile (@ARGV) {
-	open(FH, "<", $infile) || die "Can't open $infile";
-	while (<FH>) {
-		if (!$inDefs) {
-			if (/^\s*(client|server)(procs|msgs)\s+{/) {
-				$inDefs = 1;
-				print XF "\n";
-			} else {
-				print XF;
-			}
-		} else {
-			$inDefs = 0
-				if (/}/);
-			print XF "\n";
-		}
-	}
-}
-close(XF);
+genRpclFile(@ARGV);
 
 # Generate xdr.c
 open(IF, "-|", "rpcgen -c $base.x.$$") or
