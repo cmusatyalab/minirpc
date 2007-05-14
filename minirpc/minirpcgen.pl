@@ -329,9 +329,20 @@ EOF
 	case nr_${base}_$func:
 		if (ops->$func == NULL)
 			return MINIRPC_PROCEDURE_UNAVAIL;
+EOF
+		if ($num >= 0) {
+			print $fh wrapc(<<EOF);
 		else
 			return ops->$func(conn_data, msg$inparam$outparam);
 EOF
+		} else {
+			print $fh wrapc(<<EOF);
+		else {
+			ops->$func(conn_data, msg$inparam);
+			return MINIRPC_OK;
+		}
+EOF
+		}
 	}
 	
 	print $fh wrapc(<<EOF);
@@ -362,6 +373,7 @@ static int ${base}_${role}_${reply}_info(unsigned cmd, xdrproc_t *type, unsigned
 EOF
 	
 	foreach $num (opcodeSort($procs)) {
+		next if $isReply and $num < 0;
 		$func = @{$procs->{$num}}[2];
 		$type = @{$procs->{$num}}[$isReply ? 4 : 3];
 		$typesize = typesize($type);
@@ -409,6 +421,7 @@ sub gen_operations_struct {
 	my $out;
 	my $inarg;
 	my $outarg;
+	my $retType;
 	
 	return if (keys %$procs == 0);
 	print $fh "\nstruct ${base}_${role}_operations {\n";
@@ -416,7 +429,8 @@ sub gen_operations_struct {
 		($func, $in, $out) = @{$procs->{$num}}[2..4];
 		$inarg = argument($in, "*in");
 		$outarg = argument($out, "*out");
-		print $fh wrapc("\tint (*$func)(void *conn_data, struct mrpc_message *msg$inarg$outarg);");
+		$retType = ($num >= 0) ? "int" : "void";
+		print $fh wrapc("\t$retType (*$func)(void *conn_data, struct mrpc_message *msg$inarg$outarg);");
 	}
 	print $fh "};\n";
 }
