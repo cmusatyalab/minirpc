@@ -11,11 +11,6 @@
 #include "list.h"
 #include "hash.h"
 
-#define SET_PTR_IF_NOT_NULL(ptr, val) do { \
-		if ((ptr) != NULL) \
-			*(ptr)=(val); \
-	} while (0)
-
 struct mrpc_conn_set {
 	const struct mrpc_protocol *protocol;
 	unsigned maxbuf;

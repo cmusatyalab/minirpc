@@ -2,7 +2,7 @@ minirpc_xdr.c
 minirpc_xdr.h
 openisr_xdr.c
 openisr_xdr.h
-openisr_client.c
+openisr_minirpc.c
+openisr_minirpc.h
 openisr_client.h
-openisr_server.c
 openisr_server.h

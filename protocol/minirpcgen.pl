@@ -281,7 +281,7 @@ sub gen_free_proc_c {
 
 void free_$type($type *in, int container)
 {
-	xdr_free(xdr_$type, in);
+	xdr_free((xdrproc_t)xdr_$type, (char *)in);
 	if (container)
 		free(in);
 }
@@ -454,7 +454,7 @@ struct mrpc_protocol ${base}_$role = {
 	.is_server = $isServer,
 	.request = ${base}_${role}_request,
 	.sender_request_info = ${base}_${role}_request_info,
-	.sender_reply_info = ${base}_${role}_reply_info
+	.sender_reply_info = ${base}_${role}_reply_info,
 	.receiver_request_info = ${base}_${antirole}_request_info,
 	.receiver_reply_info = ${base}_${antirole}_reply_info
 };
