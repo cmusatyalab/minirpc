@@ -103,6 +103,17 @@ sub parameter {
 	}
 }
 
+sub opt_parameter {
+	my $type = shift;
+	my $param = shift;
+	
+	if ($type ne "void") {
+		return ", $param";
+	} else {
+		return "";
+	}
+}
+
 sub typesize {
 	my $type = shift;
 	
@@ -251,6 +262,48 @@ int ${func}(struct mrpc_connection *conn$inarg);
 EOF
 }
 
+sub gen_request_proc {
+	my $fh = shift;
+	my $role = shift;
+	my $procs = shift;
+	
+	my $num;
+	my $func;
+	my $in;
+	my $out;
+	my $inparam;
+	my $outparam;
+	
+	print $fh wrapc(<<EOF);
+
+static int ${opt_o}_${role}_request(void *p_ops, void *conn_data, struct mrpc_message *msg, int cmd, void *in, void *out)
+{
+	struct ${opt_o}_${role}_operations *ops=p_ops;
+	
+	switch (cmd) {
+EOF
+	
+	foreach $num (opcodeSort($procs)) {
+		($func, $in, $out) = @{$procs->{$num}}[2..4];
+		$inparam = opt_parameter($in, "in");
+		$outparam = opt_parameter($out, "out");
+		print $fh wrapc(<<EOF);
+	case nr_$func:
+		if (ops->$func == NULL)
+			return MINIRPC_PROCEDURE_UNAVAIL;
+		else
+			return ops->$func(conn_data, msg$inparam$outparam);
+EOF
+	}
+	
+	print $fh wrapc(<<EOF);
+	default:
+		return MINIRPC_PROCEDURE_UNAVAIL;
+	}
+}
+EOF
+}
+
 sub gen_info_proc {
 	my $fh = shift;
 	my $role = shift;
@@ -330,6 +383,57 @@ sub gen_operations_struct {
 	print $fh "};\n";
 }
 
+sub gen_set_operations_c {
+	my $fh = shift;
+	my $role = shift;
+	
+	print $fh wrapc(<<EOF);
+
+int ${opt_o}_${role}_set_operations(struct mrpc_connection *conn, struct ${opt_o}_${role}_operations *ops)
+{
+	return mrpc_conn_set_operations(conn, ${opt_o}_$role, ops);
+}
+EOF
+}
+
+sub gen_set_operations_h {
+	my $fh = shift;
+	my $role = shift;
+	
+	print $fh wrapc(<<EOF);
+int ${opt_o}_${role}_set_operations(struct mrpc_connection *conn, struct ${opt_o}_${role}_operations *ops);
+EOF
+}
+
+sub gen_protocol_struct_c {
+	my $fh = shift;
+	my $role = shift;
+	
+	my $antirole = ($role eq "client") ? "server" : "client";
+	my $isServer = ($role eq "server") ? "1" : "0";
+	
+	print $fh wrapc(<<EOF);
+
+struct mrpc_protocol ${opt_o}_$role = {
+	.is_server = $isServer,
+	.request = ${opt_o}_${role}_request,
+	.sender_request_info = ${opt_o}_${role}_request_info,
+	.sender_reply_info = ${opt_o}_${role}_reply_info
+	.receiver_request_info = ${opt_o}_${antirole}_request_info,
+	.receiver_reply_info = ${opt_o}_${antirole}_reply_info
+};
+EOF
+}
+
+sub gen_protocol_struct_h {
+	my $fh = shift;
+	my $role = shift;
+	
+	print $fh wrapc(<<EOF);
+extern struct mrpc_protocol ${opt_o}_$role;
+EOF
+}
+
 sub genstubs {
 	my $role = shift;
 	my $procs = shift;
@@ -362,8 +466,13 @@ sub genstubs {
 	# toplevel stuff
 	gen_opcode_enum($mfh->[1], $role, $procs);
 	gen_info_proc($mfh->[0], $role, 0, $procs);
-	gen_info_proc($mfh->[0], $role, 1, $procs);	
+	gen_info_proc($mfh->[0], $role, 1, $procs);
 	gen_operations_struct($rfh->[1], $role, $procs);
+	gen_set_operations_c($rfh->[0], $role);
+	gen_set_operations_h($rfh->[1], $role);
+	gen_request_proc($rfh->[0], $role, $procs);
+	gen_protocol_struct_c($rfh->[0], $role);
+	gen_protocol_struct_h($rfh->[1], $role);
 	
 	# request-reply
 	@keys = sort {$a <=> $b} grep ($_ >= 0, keys %$procs);
