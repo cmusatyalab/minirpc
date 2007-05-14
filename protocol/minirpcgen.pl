@@ -271,6 +271,30 @@ int ${func}(struct mrpc_connection *conn$inarg);
 EOF
 }
 
+sub gen_free_proc_c {
+	my $fh = shift;
+	my $type = shift;
+	
+	print $fh wrapc(<<EOF);
+
+void free_$type($type *in, int container)
+{
+	xdr_free(xdr_$type, in);
+	if (container)
+		free(in);
+}
+EOF
+}
+
+sub gen_free_proc_h {
+	my $fh = shift;
+	my $type = shift;
+	
+	print $fh wrapc(<<EOF);
+void free_$type($type *in, int container);
+EOF
+}
+
 sub gen_request_proc {
 	my $fh = shift;
 	my $role = shift;
@@ -535,6 +559,22 @@ sub genstubs_noreply {
 	}
 }
 
+sub genstubs_free {
+	my $cf = shift;
+	my $hf = shift;
+	
+	my @typelist;
+	my $type;
+	
+	@typelist = grep(!/^void$/, sort keys %types);
+	return if !@typelist;
+	print $hf "\n";
+	foreach $type (sort keys %types) {
+		gen_free_proc_c($cf, $type);
+		gen_free_proc_h($hf, $type);
+	}
+}
+
 sub genstubs {
 	my $procmap = shift;
 	my $mcf = shift;
@@ -609,6 +649,7 @@ sub genstubs {
 		$hf = ($role eq "server") ? $chf : $shf;
 		genstubs_noreply($role, $procmap->{$role}, $mcf, $hf);
 	}
+	genstubs_free($mcf, $mhf);
 }
 
 our $opt_o;
