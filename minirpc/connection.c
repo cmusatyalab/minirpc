@@ -63,27 +63,16 @@ int mrpc_conn_add(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 	memset(conn, 0, sizeof(*conn));
 	INIT_LIST_HEAD(&conn->lh_conns);
 	INIT_LIST_HEAD(&conn->send_msgs);
-	pthread_mutex_init(&conn->next_sequence_lock, NULL);
+	pthread_rwlock_init(&conn->operations_lock, NULL);
 	pthread_mutex_init(&conn->send_msgs_lock, NULL);
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
+	pthread_mutex_init(&conn->sync_wakeup_lock, NULL);
+	pthread_mutex_init(&conn->next_sequence_lock, NULL);
 	conn->set=set;
 	conn->fd=fd;
-	conn->data=data;
-	conn->send_buf=malloc(set->buflen);
-	if (conn->send_buf == NULL) {
-		free(conn);
-		return -ENOMEM;
-	}
-	conn->recv_buf=malloc(set->buflen);
-	if (conn->recv_buf == NULL) {
-		free(conn->send_buf);
-		free(conn);
-		return -ENOMEM;
-	}
+	conn->private=data;
 	conn->pending_replies=hash_alloc(set->msg_buckets, request_hash);
 	if (conn->pending_replies == NULL) {
-		free(conn->recv_buf);
-		free(conn->send_buf);
 		free(conn);
 		return -ENOMEM;
 	}
@@ -92,8 +81,6 @@ int mrpc_conn_add(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 	if (epoll_ctl(set->epoll_fd, EPOLL_CTL_ADD, fd, &event)) {
 		ret=-errno;
 		hash_free(conn->pending_replies);
-		free(conn->recv_buf);
-		free(conn->send_buf);
 		free(conn);
 		return ret;
 	}
@@ -113,8 +100,6 @@ void mrpc_conn_remove(struct mrpc_connection *conn)
 	hash_remove(set->conns, &conn->lh_conns);
 	pthread_mutex_unlock(&set->conns_lock);
 	hash_free(conn->pending_replies);
-	free(conn->recv_buf);
-	free(conn->send_buf);
 	free(conn);
 }
 
@@ -361,9 +346,10 @@ int send_message(struct mrpc_message *msg)
 	return 0;
 }
 
-int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set, request_fn *func,
-			int expected_fds, unsigned conn_buckets,
-			unsigned msg_buckets, unsigned msg_max_buf_len)
+int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
+			const struct mrpc_protocol *protocol, int expected_fds,
+			unsigned conn_buckets, unsigned msg_buckets,
+			unsigned msg_max_buf_len)
 {
 	struct mrpc_conn_set *set;
 	struct epoll_event event;
@@ -372,14 +358,18 @@ int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set, request_fn *func,
 	set=malloc(sizeof(*set));
 	if (set == NULL)
 		goto bad_alloc;
+	memset(set, 0, sizeof(*set));
 	pthread_mutex_init(&set->conns_lock, NULL);
+	pthread_mutex_init(&set->events_lock, NULL);
+	pthread_cond_init(&set->events_threads_cond, NULL);
+	INIT_LIST_HEAD(&set->events);
 	set->conns=hash_alloc(conn_buckets, conn_hash);
 	if (set->conns == NULL)
 		goto bad_conns;
+	set->protocol=protocol;
 	set->maxbuf=msg_max_buf_len;
-	set->request=func;
-	set->msg_buckets=msg_buckets;
 	set->expected_fds=expected_fds;
+	set->msg_buckets=msg_buckets;
 	if (pipe(set->shutdown_pipe)) {
 		ret=-errno;
 		goto bad_shutdown_pipe;
@@ -389,9 +379,9 @@ int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set, request_fn *func,
 		goto bad_events_pipe;
 	}
 	if (set_nonblock(set->events_notify_pipe[0]))
-		goto bad_epoll;
+		goto bad_nonblock;
 	if (set_nonblock(set->events_notify_pipe[1]))
-		goto bad_epoll;
+		goto bad_nonblock;
 	set->epoll_fd=epoll_create(expected_fds);
 	if (set->epoll_fd < 0) {
 		ret=-errno;
@@ -416,6 +406,7 @@ bad_pthread:
 bad_epoll_pipe:
 	close(set->epoll_fd);
 bad_epoll:
+bad_nonblock:
 	close(set->events_notify_pipe[0]);
 	close(set->events_notify_pipe[1]);
 bad_events_pipe:

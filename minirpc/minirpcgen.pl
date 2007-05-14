@@ -315,6 +315,9 @@ static int ${base}_${role}_request(void *p_ops, void *conn_data, struct mrpc_mes
 {
 	struct ${base}_${role}_operations *ops=p_ops;
 	
+	if (ops == NULL)
+		return MINIRPC_PROCEDURE_UNAVAIL;
+	
 	switch (cmd) {
 EOF
 	

@@ -78,10 +78,26 @@ struct mrpc_message {
 };
 
 /* connection.c */
+int send_message(struct mrpc_message *msg);
 
 /* message.c */
+unsigned request_hash(struct list_head *head, unsigned buckets);
+void process_incoming_message(struct mrpc_connection *conn);
 
 /* serialize.c */
+struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn);
+void mrpc_free_message(struct mrpc_message *msg);
+int serialize_len(xdrproc_t xdr_proc, void *in, char *out, unsigned out_len);
+int unserialize(xdrproc_t xdr_proc, char *in, unsigned in_len, void *out,
+			unsigned out_len);
+int format_request(struct mrpc_connection *conn, unsigned cmd, void *data,
+			struct mrpc_message **result);
+int format_reply(struct mrpc_message *request, void *data,
+			struct mrpc_message **result);
+int format_reply_error(struct mrpc_message *request, int err,
+			struct mrpc_message **result);
+int unformat_request(struct mrpc_message *msg, void **result);
+int unformat_reply(struct mrpc_message *msg, void **result);
 
 /* xdr_len.c */
 void xdrlen_create(XDR *xdrs);
