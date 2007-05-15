@@ -225,9 +225,9 @@ sub gen_receiver_stub_c {
 	
 	print $fh wrapc(<<EOF);
 
-mrpc_status_t ${base}_${func}_send_async_reply(struct mrpc_message *request, mrpc_status_t status$outarg)
+mrpc_status_t ${base}_${func}_send_async_reply(struct mrpc_message *request$outarg)
 {
-	return mrpc_send_reply(&${base}_$role, request, status, $outparam);
+	return mrpc_send_reply(&${base}_$role, request, $outparam);
 }
 EOF
 }
@@ -240,7 +240,32 @@ sub gen_receiver_stub_h {
 	my $outarg = argument($out, "*out");
 	
 	print $fh wrapc(<<EOF);
-mrpc_status_t ${base}_${func}_send_async_reply(struct mrpc_message *request, mrpc_status_t status$outarg);
+mrpc_status_t ${base}_${func}_send_async_reply(struct mrpc_message *request$outarg);
+EOF
+}
+
+sub gen_receiver_error_stub_c {
+	my $fh = shift;
+	my $role = shift;
+	my $func = shift;
+	my $out = shift;
+	
+	print $fh wrapc(<<EOF);
+
+mrpc_status_t ${base}_${func}_send_async_reply_error(struct mrpc_message *request, mrpc_status_t status)
+{
+	return mrpc_send_reply_error(&${base}_$role, request, status);
+}
+EOF
+}
+
+sub gen_receiver_error_stub_h {
+	my $fh = shift;
+	my $func = shift;
+	my $out = shift;
+	
+	print $fh wrapc(<<EOF);
+mrpc_status_t ${base}_${func}_send_async_reply_error(struct mrpc_message *request, mrpc_status_t status);
 EOF
 }
 
@@ -560,6 +585,28 @@ sub genstubs_receiver_async {
 	}
 }
 
+sub genstubs_receiver_async_error {
+	my $role = shift;
+	my $procs = shift;
+	my $cf = shift;
+	my $hf = shift;
+	
+	my @keys;
+	my $num;
+	my $func;
+	my $arg;
+	my $ret;
+	
+	@keys = sort {$a <=> $b} grep ($_ >= 0, keys %$procs);
+	return if !@keys;
+	print $hf "\n";
+	foreach $num (@keys) {
+		($func, $arg, $ret) = @{$procs->{$num}}[2..5];
+		gen_receiver_error_stub_c($cf, $role, $func, $ret);
+		gen_receiver_error_stub_h($hf, $func, $ret);
+	}
+}
+
 sub genstubs_noreply {
 	my $role = shift;
 	my $procs = shift;
@@ -680,6 +727,11 @@ sub genstubs {
 	foreach $role ("server", "client") {
 		$hf = ($role eq "server") ? *SHF : *CHF;
 		genstubs_receiver_async($role, $procSets{$role}, *MCF, $hf);
+	}
+	foreach $role ("server", "client") {
+		$hf = ($role eq "server") ? *SHF : *CHF;
+		genstubs_receiver_async_error($role, $procSets{$role}, *MCF,
+					$hf);
 	}
 	foreach $role ("server", "client") {
 		$hf = ($role eq "server") ? *CHF : *SHF;

@@ -123,8 +123,7 @@ static void *run_callbacks(void *ignored)
 		pthread_mutex_unlock(&lock);
 		
 		reply.num=node->num;
-		test_query_async_reply_send_async_reply(node->msg, MINIRPC_OK,
-					&reply);
+		test_query_async_reply_send_async_reply(node->msg, &reply);
 		free(node);
 	}
 }

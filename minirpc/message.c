@@ -167,21 +167,34 @@ mrpc_status_t mrpc_send_request_noreply(const struct mrpc_protocol *protocol,
 }
 
 mrpc_status_t mrpc_send_reply(const struct mrpc_protocol *protocol,
-			struct mrpc_message *request, mrpc_status_t status,
-			void *data)
+			struct mrpc_message *request, void *data)
 {
 	struct mrpc_message *reply;
 	mrpc_status_t ret;
 	
 	if (protocol != request->conn->set->protocol)
 		return MINIRPC_INVALID_PROTOCOL;
-	if (status == MINIRPC_PENDING)
-		return MINIRPC_PENDING;
-	if (status) {
-		ret=format_reply_error(request, status, &reply);
-	} else {
-		ret=format_reply(request, data, &reply);
-	}
+	ret=format_reply(request, data, &reply);
+	if (ret)
+		return ret;
+	ret=send_message(reply);
+	if (ret)
+		return ret;
+	mrpc_free_message(request);
+	return MINIRPC_OK;
+}
+
+mrpc_status_t mrpc_send_reply_error(const struct mrpc_protocol *protocol,
+			struct mrpc_message *request, mrpc_status_t status)
+{
+	struct mrpc_message *reply;
+	mrpc_status_t ret;
+	
+	if (protocol != request->conn->set->protocol)
+		return MINIRPC_INVALID_PROTOCOL;
+	if (status == MINIRPC_OK || status == MINIRPC_PENDING)
+		return MINIRPC_INVALID_ARGUMENT;
+	ret=format_reply_error(request, status, &reply);
 	if (ret)
 		return ret;
 	ret=send_message(reply);
@@ -338,8 +351,12 @@ static void dispatch_request(struct mrpc_message *request)
 			request->data=NULL;
 			return;
 		}
-		ret=mrpc_send_reply(conn->set->protocol, request, result,
-					reply_data);
+		if (result)
+			ret=mrpc_send_reply_error(conn->set->protocol, request,
+						result);
+		else
+			ret=mrpc_send_reply(conn->set->protocol, request,
+						reply_data);
 		/* XXX if this fails, the request hasn't been freed */
 		xdr_free(reply_type, reply_data);
 		free(reply_data);
