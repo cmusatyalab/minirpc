@@ -280,7 +280,7 @@ static void dispatch_request(struct mrpc_message *request)
 	void *request_data;
 	void *reply_data=NULL;
 	int ret;
-	int result;
+	int result=MINIRPC_PROCEDURE_UNAVAIL;
 	xdrproc_t request_type;
 	xdrproc_t reply_type;
 	unsigned reply_size;
@@ -310,9 +310,11 @@ static void dispatch_request(struct mrpc_message *request)
 	ret=unformat_request(request, &request_data);
 	
 	pthread_rwlock_rdlock(&conn->operations_lock);
-	result=conn->set->protocol->request(conn->operations, conn->private,
-				request, request->hdr.cmd, request_data,
-				reply_data);
+	if (conn->set->protocol->request != NULL)
+		result=conn->set->protocol->request(conn->operations,
+					conn->private, request,
+					request->hdr.cmd, request_data,
+					reply_data);
 	pthread_rwlock_unlock(&conn->operations_lock);
 	xdr_free(request_type, request_data);
 	free(request_data);

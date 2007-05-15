@@ -402,7 +402,6 @@ sub gen_opcode_enum {
 	my $num;
 	my $func;
 	
-	return if (keys %$procs == 0);
 	print $fh "\nenum ${base}_${role}_procedures {\n";
 	foreach $num (opcodeSort($procs)) {
 		$func = @{$procs->{$num}}[2];
@@ -461,15 +460,17 @@ EOF
 sub gen_protocol_struct_c {
 	my $fh = shift;
 	my $role = shift;
+	my $haveRequest = shift;
 	
 	my $antirole = ($role eq "client") ? "server" : "client";
 	my $isServer = ($role eq "server") ? "1" : "0";
+	my $requestFunc = $haveRequest ? "${base}_${role}_request" : "NULL";
 	
 	print $fh wrapc(<<EOF);
 
 struct mrpc_protocol ${base}_$role = {
 	.is_server = $isServer,
-	.request = ${base}_${role}_request,
+	.request = $requestFunc,
 	.sender_request_info = ${base}_${role}_request_info,
 	.sender_reply_info = ${base}_${role}_reply_info,
 	.receiver_request_info = ${base}_${antirole}_request_info,
@@ -646,16 +647,19 @@ sub genstubs {
 	
 	# Generate toplevel structures
 	foreach $role ("server", "client") {
-		gen_opcode_enum(*MHF, $role, $procSets{$role});
+		gen_opcode_enum(*MHF, $role, $procSets{$role})
+			if keys %{$procSets{$role}};
 		gen_info_proc(*MCF, $role, 0, $procSets{$role});
 		gen_info_proc(*MCF, $role, 1, $procSets{$role});
 	}
 	foreach $role ("server", "client") {
+		next if !keys %{$procSets{$role}};
 		gen_request_proc(*MCF, $role, $procSets{$role});
 	}
 	foreach $role ("server", "client") {
 		$hf = ($role eq "server") ? *SHF : *CHF;
-		gen_protocol_struct_c(*MCF, $role);
+		gen_protocol_struct_c(*MCF, $role,
+					scalar keys %{$procSets{$role}});
 		gen_protocol_struct_h($hf, $role);
 	}
 	foreach $role ("server", "client") {
