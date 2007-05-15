@@ -134,7 +134,7 @@ int format_request(struct mrpc_connection *conn, unsigned cmd, void *data,
 	pthread_mutex_lock(&conn->next_sequence_lock);
 	msg->hdr.sequence=conn->next_sequence++;
 	pthread_mutex_unlock(&conn->next_sequence_lock);
-	msg->hdr.status=MINIRPC_REQUEST;
+	msg->hdr.status=MINIRPC_PENDING;
 	msg->hdr.cmd=cmd;
 	*result=msg;
 	return MINIRPC_OK;

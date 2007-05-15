@@ -6,8 +6,6 @@
 #define MINIRPC_PROTOCOL_H
 
 #include <rpc/xdr.h>
-/* XXX for status enum; should move to minirpc.h */
-#include "minirpc_xdr.h"
 
 #define SET_PTR_IF_NOT_NULL(ptr, val) do { \
 		if ((ptr) != NULL) \

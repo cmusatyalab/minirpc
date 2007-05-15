@@ -1,6 +1,16 @@
 #ifndef MINIRPC_H
 #define MINIRPC_H
 
+enum mrpc_status {
+	MINIRPC_OK			=  0,
+	MINIRPC_PENDING			= -1,
+	MINIRPC_ENCODING_ERR		= -2,
+	MINIRPC_NOMEM			= -3,
+	MINIRPC_PROCEDURE_UNAVAIL	= -4,
+	MINIRPC_INVALID_ARGUMENT	= -5,
+	MINIRPC_INVALID_PROTOCOL	= -6
+};
+
 struct mrpc_protocol;
 struct mrpc_conn_set;
 struct mrpc_connection;

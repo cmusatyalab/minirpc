@@ -169,10 +169,8 @@ int mrpc_send_reply(const struct mrpc_protocol *protocol,
 	
 	if (protocol != request->conn->set->protocol)
 		return MINIRPC_INVALID_PROTOCOL;
-	if (status == MINIRPC_REQUEST)
-		return MINIRPC_INVALID_ARGUMENT;
-	if (status == MINIRPC_DEFER)
-		return MINIRPC_DEFER;
+	if (status == MINIRPC_PENDING)
+		return MINIRPC_PENDING;
 	if (status) {
 		ret=format_reply_error(request, status, &reply);
 	} else {
@@ -242,7 +240,7 @@ void process_incoming_message(struct mrpc_connection *conn)
 	struct mrpc_message *msg=conn->recv_msg;
 	struct pending_reply *pending;
 	
-	if (msg->hdr.status == MINIRPC_REQUEST) {
+	if (msg->hdr.status == MINIRPC_PENDING) {
 		queue_event(msg);
 	} else {
 		pthread_mutex_lock(&conn->pending_replies_lock);
@@ -286,7 +284,7 @@ static void dispatch_request(struct mrpc_message *request)
 	unsigned reply_size;
 	int doreply;
 	
-	/* BUG_ON(request->hdr.status != MINIRPC_REQUEST); XXX */
+	/* BUG_ON(request->hdr.status != MINIRPC_PENDING); XXX */
 	
 	if (conn->set->protocol->receiver_request_info(request->hdr.cmd,
 				&request_type, NULL)) {
@@ -320,7 +318,7 @@ static void dispatch_request(struct mrpc_message *request)
 	free(request_data);
 	
 	if (doreply) {
-		if (result == MINIRPC_DEFER) {
+		if (result == MINIRPC_PENDING) {
 			xdr_free(reply_type, reply_data);
 			free(reply_data);
 			/* This struct is going to stay around for a while,
@@ -376,7 +374,7 @@ static void dispatch_event(struct mrpc_message *msg)
 {
 	if (msg->callback) {
 		run_reply_callback(msg);
-	} else if (msg->hdr.status == MINIRPC_REQUEST) {
+	} else if (msg->hdr.status == MINIRPC_PENDING) {
 		dispatch_request(msg);
 	} else {
 		/* XXX BUG */;

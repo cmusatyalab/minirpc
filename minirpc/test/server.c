@@ -67,7 +67,7 @@ int do_query_async_reply(void *conn_data, struct mrpc_message *msg,
 	list_add(&node->lh, &pending);
 	pthread_cond_signal(&cond);
 	pthread_mutex_unlock(&lock);
-	return MINIRPC_DEFER;
+	return MINIRPC_PENDING;
 }
 
 int do_call(void *conn_data, struct mrpc_message *msg, TestRequest *req)

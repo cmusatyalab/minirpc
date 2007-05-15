@@ -1,14 +1,3 @@
-enum mrpc_status {
-	MINIRPC_OK			=  0,
-	MINIRPC_REQUEST			= -1,
-	MINIRPC_ENCODING_ERR		= -2,
-	MINIRPC_NOMEM			= -3,
-	MINIRPC_PROCEDURE_UNAVAIL	= -4,
-	MINIRPC_INVALID_ARGUMENT	= -5,
-	MINIRPC_INVALID_PROTOCOL	= -6,
-	MINIRPC_DEFER			= -7
-};
-
 struct mrpc_header {
 	unsigned sequence;
 	int status;
