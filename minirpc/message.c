@@ -1,5 +1,6 @@
 #include <sys/poll.h>
 #include <unistd.h>
+#include <assert.h>
 #include <pthread.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
@@ -84,7 +85,7 @@ static mrpc_status_t send_request_pending(struct mrpc_message *request,
 }
 
 mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
-			struct mrpc_connection *conn, unsigned cmd, void *in,
+			struct mrpc_connection *conn, int cmd, void *in,
 			void **out)
 {
 	struct mrpc_message *request;
@@ -94,6 +95,8 @@ mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
 	
 	if (protocol != conn->set->protocol)
 		return MINIRPC_INVALID_PROTOCOL;
+	if (cmd <= 0)
+		return MINIRPC_INVALID_ARGUMENT;
 	ret=format_request(conn, cmd, in, &request);
 	if (ret)
 		return ret;
@@ -122,7 +125,7 @@ mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
 }
 
 mrpc_status_t mrpc_send_request_async(const struct mrpc_protocol *protocol,
-			struct mrpc_connection *conn, unsigned cmd,
+			struct mrpc_connection *conn, int cmd,
 			reply_callback_fn *callback, void *private, void *in)
 {
 	struct mrpc_message *msg;
@@ -131,7 +134,7 @@ mrpc_status_t mrpc_send_request_async(const struct mrpc_protocol *protocol,
 	
 	if (protocol != conn->set->protocol)
 		return MINIRPC_INVALID_PROTOCOL;
-	if (callback == NULL)
+	if (callback == NULL || cmd <= 0)
 		return MINIRPC_INVALID_ARGUMENT;
 	ret=format_request(conn, cmd, in, &msg);
 	if (ret)
@@ -148,13 +151,15 @@ mrpc_status_t mrpc_send_request_async(const struct mrpc_protocol *protocol,
 }
 
 mrpc_status_t mrpc_send_request_noreply(const struct mrpc_protocol *protocol,
-			struct mrpc_connection *conn, unsigned cmd, void *in)
+			struct mrpc_connection *conn, int cmd, void *in)
 {
 	struct mrpc_message *msg;
 	mrpc_status_t ret;
 	
 	if (protocol != conn->set->protocol)
 		return MINIRPC_INVALID_PROTOCOL;
+	if (cmd >= 0)
+		return MINIRPC_INVALID_ARGUMENT;
 	ret=format_request(conn, cmd, in, &msg);
 	if (ret)
 		return ret;
@@ -288,7 +293,7 @@ static void dispatch_request(struct mrpc_message *request)
 	unsigned reply_size;
 	int doreply;
 	
-	/* BUG_ON(request->hdr.status != MINIRPC_PENDING); XXX */
+	assert(request->hdr.status == MINIRPC_PENDING);
 	
 	if (conn->set->protocol->receiver_request_info(request->hdr.cmd,
 				&request_type, NULL)) {
@@ -383,7 +388,7 @@ static void dispatch_event(struct mrpc_message *msg)
 	} else if (msg->hdr.status == MINIRPC_PENDING) {
 		dispatch_request(msg);
 	} else {
-		/* XXX BUG */;
+		assert(0);
 	}
 }
 

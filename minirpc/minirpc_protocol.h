@@ -40,13 +40,13 @@ mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
 
 /* message.c */
 mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
-			struct mrpc_connection *conn, unsigned cmd, void *in,
+			struct mrpc_connection *conn, int cmd, void *in,
 			void **out);
 mrpc_status_t mrpc_send_request_async(const struct mrpc_protocol *protocol,
-			struct mrpc_connection *conn, unsigned cmd,
+			struct mrpc_connection *conn, int cmd,
 			reply_callback_fn *callback, void *private, void *in);
 mrpc_status_t mrpc_send_request_noreply(const struct mrpc_protocol *protocol,
-			struct mrpc_connection *conn, unsigned cmd, void *in);
+			struct mrpc_connection *conn, int cmd, void *in);
 mrpc_status_t mrpc_send_reply(const struct mrpc_protocol *protocol,
 			struct mrpc_message *request, mrpc_status_t status,
 			void *data);
