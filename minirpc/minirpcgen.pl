@@ -197,7 +197,7 @@ sub gen_sender_stub_async_c {
 
 int ${base}_${func}_async(struct mrpc_connection *conn, ${base}_${func}_callback_fn *callback, void *private$inarg)
 {
-	return mrpc_send_request_async(&${base}_$role, conn, nr_${base}_$func, $inparam, callback, private);
+	return mrpc_send_request_async(&${base}_$role, conn, nr_${base}_$func, callback, private, $inparam);
 }
 EOF
 }
@@ -246,6 +246,7 @@ EOF
 
 sub gen_oneway_stub_c {
 	my $fh = shift;
+	my $role = shift;
 	my $func = shift;
 	my $in = shift;
 	
@@ -256,7 +257,7 @@ sub gen_oneway_stub_c {
 
 int ${base}_${func}(struct mrpc_connection *conn$inarg)
 {
-	return mrpc_send_request_noreply(conn, nr_${base}_$func, $inparam);
+	return mrpc_send_request_noreply(&${base}_$role, conn, nr_${base}_$func, $inparam);
 }
 EOF
 }
@@ -423,7 +424,6 @@ sub gen_operations_struct {
 	my $outarg;
 	my $retType;
 	
-	return if (keys %$procs == 0);
 	print $fh "\nstruct ${base}_${role}_operations {\n";
 	foreach $num (opcodeSort($procs)) {
 		($func, $in, $out) = @{$procs->{$num}}[2..4];
@@ -443,7 +443,7 @@ sub gen_set_operations_c {
 
 int ${base}_${role}_set_operations(struct mrpc_connection *conn, struct ${base}_${role}_operations *ops)
 {
-	return mrpc_conn_set_operations(conn, ${base}_$role, ops);
+	return mrpc_conn_set_operations(conn, &${base}_$role, ops);
 }
 EOF
 }
@@ -575,7 +575,7 @@ sub genstubs_noreply {
 	print $hf "\n";
 	foreach $num (@keys) {
 		($func, $arg) = @{$procs->{$num}}[2..4];
-		gen_oneway_stub_c($cf, $func, $arg);
+		gen_oneway_stub_c($cf, $role, $func, $arg);
 		gen_oneway_stub_h($hf, $func, $arg);
 	}
 }
@@ -647,14 +647,8 @@ sub genstubs {
 	# Generate toplevel structures
 	foreach $role ("server", "client") {
 		gen_opcode_enum(*MHF, $role, $procSets{$role});
-	}
-	foreach $role ("server", "client") {
 		gen_info_proc(*MCF, $role, 0, $procSets{$role});
 		gen_info_proc(*MCF, $role, 1, $procSets{$role});
-	}
-	foreach $role ("server", "client") {
-		$hf = ($role eq "server") ? *SHF : *CHF;
-		gen_operations_struct($hf, $role, $procSets{$role});
 	}
 	foreach $role ("server", "client") {
 		gen_request_proc(*MCF, $role, $procSets{$role});
@@ -665,7 +659,9 @@ sub genstubs {
 		gen_protocol_struct_h($hf, $role);
 	}
 	foreach $role ("server", "client") {
+		next if !keys %{$procSets{$role}};
 		$hf = ($role eq "server") ? *SHF : *CHF;
+		gen_operations_struct($hf, $role, $procSets{$role});
 		gen_set_operations_c(*MCF, $role);
 		gen_set_operations_h($hf, $role);
 	}
