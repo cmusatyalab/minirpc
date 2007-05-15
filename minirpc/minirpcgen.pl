@@ -153,7 +153,7 @@ sub gen_sender_stub_sync_c {
 
 int ${base}_$func(struct mrpc_connection *conn$inarg$outarg)
 {
-	return mrpc_send_request(&${base}_$role, conn, nr_${base}_$func, $inparam, $outparam);
+	return mrpc_send_request(&${base}_$role, conn, nr_${base}_$func, $inparam, (void **) $outparam);
 }
 EOF
 }
