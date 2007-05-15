@@ -151,7 +151,7 @@ sub gen_sender_stub_sync_c {
 	
 	print $fh wrapc(<<EOF);
 
-int ${base}_$func(struct mrpc_connection *conn$inarg$outarg)
+mrpc_status_t ${base}_$func(struct mrpc_connection *conn$inarg$outarg)
 {
 	return mrpc_send_request(&${base}_$role, conn, nr_${base}_$func, $inparam, (void **) $outparam);
 }
@@ -168,7 +168,7 @@ sub gen_sender_stub_sync_h {
 	my $outarg = argument($out, "**out");
 	
 	print $fh wrapc(<<EOF);
-int ${base}_$func(struct mrpc_connection *conn$inarg$outarg);
+mrpc_status_t ${base}_$func(struct mrpc_connection *conn$inarg$outarg);
 EOF
 }
 
@@ -180,7 +180,7 @@ sub gen_sender_stub_typedef_h {
 	my $outarg = argument($out, "*reply");
 	
 	print $fh wrapc(<<EOF);
-typedef void (${base}_${func}_callback_fn)(void *conn_private, void *msg_private, int status$outarg);
+typedef void (${base}_${func}_callback_fn)(void *conn_private, void *msg_private, mrpc_status_t status$outarg);
 EOF
 }
 
@@ -195,7 +195,7 @@ sub gen_sender_stub_async_c {
 	
 	print $fh wrapc(<<EOF);
 
-int ${base}_${func}_async(struct mrpc_connection *conn, ${base}_${func}_callback_fn *callback, void *private$inarg)
+mrpc_status_t ${base}_${func}_async(struct mrpc_connection *conn, ${base}_${func}_callback_fn *callback, void *private$inarg)
 {
 	return mrpc_send_request_async(&${base}_$role, conn, nr_${base}_$func, callback, private, $inparam);
 }
@@ -210,7 +210,7 @@ sub gen_sender_stub_async_h {
 	my $inarg = argument($in, "*in");
 	
 	print $fh wrapc(<<EOF);
-int ${base}_${func}_async(struct mrpc_connection *conn, ${base}_${func}_callback_fn *callback, void *private$inarg);
+mrpc_status_t ${base}_${func}_async(struct mrpc_connection *conn, ${base}_${func}_callback_fn *callback, void *private$inarg);
 EOF
 }
 
@@ -225,7 +225,7 @@ sub gen_receiver_stub_c {
 	
 	print $fh wrapc(<<EOF);
 
-int ${base}_${func}_send_async_reply(struct mrpc_message *request, int status$outarg)
+mrpc_status_t ${base}_${func}_send_async_reply(struct mrpc_message *request, mrpc_status_t status$outarg)
 {
 	return mrpc_send_reply(&${base}_$role, request, status, $outparam);
 }
@@ -240,7 +240,7 @@ sub gen_receiver_stub_h {
 	my $outarg = argument($out, "*out");
 	
 	print $fh wrapc(<<EOF);
-int ${base}_${func}_send_async_reply(struct mrpc_message *request, int status$outarg);
+mrpc_status_t ${base}_${func}_send_async_reply(struct mrpc_message *request, mrpc_status_t status$outarg);
 EOF
 }
 
@@ -255,7 +255,7 @@ sub gen_oneway_stub_c {
 	
 	print $fh wrapc(<<EOF);
 
-int ${base}_${func}(struct mrpc_connection *conn$inarg)
+mrpc_status_t ${base}_${func}(struct mrpc_connection *conn$inarg)
 {
 	return mrpc_send_request_noreply(&${base}_$role, conn, nr_${base}_$func, $inparam);
 }
@@ -270,7 +270,7 @@ sub gen_oneway_stub_h {
 	my $inarg = argument($in, "*in");
 	
 	print $fh wrapc(<<EOF);
-int ${base}_${func}(struct mrpc_connection *conn$inarg);
+mrpc_status_t ${base}_${func}(struct mrpc_connection *conn$inarg);
 EOF
 }
 
@@ -312,7 +312,7 @@ sub gen_request_proc {
 	
 	print $fh wrapc(<<EOF);
 
-static int ${base}_${role}_request(void *p_ops, void *conn_data, struct mrpc_message *msg, int cmd, void *in, void *out)
+static mrpc_status_t ${base}_${role}_request(void *p_ops, void *conn_data, struct mrpc_message *msg, int cmd, void *in, void *out)
 {
 	struct ${base}_${role}_operations *ops=p_ops;
 	
@@ -368,7 +368,7 @@ sub gen_info_proc {
 	
 	print $fh wrapc(<<EOF);
 
-static int ${base}_${role}_${reply}_info(unsigned cmd, xdrproc_t *type, unsigned *size)
+static mrpc_status_t ${base}_${role}_${reply}_info(unsigned cmd, xdrproc_t *type, unsigned *size)
 {
 	switch (cmd) {
 EOF
@@ -428,7 +428,7 @@ sub gen_operations_struct {
 		($func, $in, $out) = @{$procs->{$num}}[2..4];
 		$inarg = argument($in, "*in");
 		$outarg = argument($out, "*out");
-		$retType = ($num >= 0) ? "int" : "void";
+		$retType = ($num >= 0) ? "mrpc_status_t" : "void";
 		print $fh wrapc("\t$retType (*$func)(void *conn_data, struct mrpc_message *msg$inarg$outarg);");
 	}
 	print $fh "};\n";
@@ -440,7 +440,7 @@ sub gen_set_operations_c {
 	
 	print $fh wrapc(<<EOF);
 
-int ${base}_${role}_set_operations(struct mrpc_connection *conn, struct ${base}_${role}_operations *ops)
+mrpc_status_t ${base}_${role}_set_operations(struct mrpc_connection *conn, struct ${base}_${role}_operations *ops)
 {
 	return mrpc_conn_set_operations(conn, &${base}_$role, ops);
 }
@@ -453,7 +453,7 @@ sub gen_set_operations_h {
 	
 	print $fh wrapc(<<EOF);
 
-int ${base}_${role}_set_operations(struct mrpc_connection *conn, struct ${base}_${role}_operations *ops);
+mrpc_status_t ${base}_${role}_set_operations(struct mrpc_connection *conn, struct ${base}_${role}_operations *ops);
 EOF
 }
 

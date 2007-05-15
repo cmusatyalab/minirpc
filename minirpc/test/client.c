@@ -21,7 +21,7 @@ void query_sync(struct mrpc_connection *conn)
 {
 	struct TestRequest request;
 	struct TestReply *reply;
-	int ret;
+	mrpc_status_t ret;
 	
 	request.num=12;
 	ret=test_query(conn, &request, &reply);
@@ -45,7 +45,7 @@ void query_callback(void *conn_private, void *msg_private, int status,
 void query_async(struct mrpc_connection *conn)
 {
 	struct TestRequest request;
-	int ret;
+	mrpc_status_t ret;
 	int i;
 	
 	for (i=0; i<5; i++) {

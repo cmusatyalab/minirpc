@@ -103,7 +103,7 @@ void mrpc_conn_remove(struct mrpc_connection *conn)
 	free(conn);
 }
 
-int mrpc_conn_set_operations(struct mrpc_connection *conn,
+mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
 			struct mrpc_protocol *protocol, void *ops)
 {
 	if (conn->set->protocol != protocol)
@@ -131,9 +131,9 @@ static void conn_kill(struct mrpc_connection *conn)
 	/* XXX */
 }
 
-static int process_incoming_header(struct mrpc_connection *conn)
+static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
 {
-	int ret;
+	mrpc_status_t ret;
 	
 	ret=unserialize((xdrproc_t)xdr_mrpc_header, conn->recv_hdr_buf,
 				MINIRPC_HEADER_LEN, &conn->recv_msg->hdr,
@@ -151,7 +151,7 @@ static int process_incoming_header(struct mrpc_connection *conn)
 		return MINIRPC_NOMEM;
 	}
 	conn->recv_state=STATE_DATA;
-	return 0;
+	return MINIRPC_OK;
 }
 
 static void try_read_conn(struct mrpc_connection *conn)
@@ -214,15 +214,15 @@ static void try_read_conn(struct mrpc_connection *conn)
 	}
 }
 
-static int get_next_message(struct mrpc_connection *conn)
+static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 {
-	int ret;
+	mrpc_status_t ret;
 	
 	pthread_mutex_lock(&conn->send_msgs_lock);
 	if (list_is_empty(&conn->send_msgs)) {
 		need_writable(conn, 0);
 		pthread_mutex_unlock(&conn->send_msgs_lock);
-		return 0;
+		return MINIRPC_OK;
 	}
 	conn->send_msg=list_first_entry(&conn->send_msgs, struct mrpc_message,
 				lh_msgs);
@@ -239,7 +239,7 @@ static int get_next_message(struct mrpc_connection *conn)
 		return ret;
 	}
 	conn->send_offset=0;
-	return 0;
+	return MINIRPC_OK;
 }
 
 /* XXX cork would be useful here */
@@ -325,22 +325,20 @@ static void *listener(void *data)
 	}
 }
 
-int send_message(struct mrpc_message *msg)
+mrpc_status_t send_message(struct mrpc_message *msg)
 {
 	struct mrpc_connection *conn=msg->conn;
-	int ret;
 	
 	pthread_mutex_lock(&conn->send_msgs_lock);
 	/* XXX extra syscall even when we don't need it */
-	ret=need_writable(conn, 1);
-	if (ret) {
+	if (need_writable(conn, 1)) {
 		pthread_mutex_unlock(&conn->send_msgs_lock);
-		mrpc_free_message(msg);  /* XXX?? */
-		return ret;
+		mrpc_free_message(msg);
+		return MINIRPC_NETWORK_FAILURE;
 	}
 	list_add_tail(&msg->lh_msgs, &conn->send_msgs);
 	pthread_mutex_unlock(&conn->send_msgs_lock);
-	return 0;
+	return MINIRPC_OK;
 }
 
 int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,

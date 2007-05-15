@@ -48,15 +48,15 @@ void setsockoptval(int fd, int level, int optname, int value)
 		warn("Couldn't setsockopt");
 }
 
-int do_query(void *conn_data, struct mrpc_message *msg, TestRequest *in,
-			TestReply *out)
+mrpc_status_t do_query(void *conn_data, struct mrpc_message *msg,
+			TestRequest *in, TestReply *out)
 {
 	warn("Query, value %d", in->num);
 	out->num=in->num;
 	return MINIRPC_OK;
 }
 
-int do_query_async_reply(void *conn_data, struct mrpc_message *msg,
+mrpc_status_t do_query_async_reply(void *conn_data, struct mrpc_message *msg,
 			TestRequest *in, TestReply *out)
 {
 	struct message_list_node *node=malloc(sizeof(*node));
@@ -70,22 +70,23 @@ int do_query_async_reply(void *conn_data, struct mrpc_message *msg,
 	return MINIRPC_PENDING;
 }
 
-int do_call(void *conn_data, struct mrpc_message *msg, TestRequest *req)
+mrpc_status_t do_call(void *conn_data, struct mrpc_message *msg,
+			TestRequest *req)
 {
 	warn("Received call(): %d", req->num);
 	return MINIRPC_OK;
 }
 
-int do_error(void *conn_data, struct mrpc_message *msg)
+mrpc_status_t do_error(void *conn_data, struct mrpc_message *msg)
 {
 	return 1;
 }
 
-int do_invalidate_ops(void *conn_data, struct mrpc_message *msg)
+mrpc_status_t do_invalidate_ops(void *conn_data, struct mrpc_message *msg)
 {
 	if (test_server_set_operations(*(void**)conn_data, NULL))
 		warn("Couldn't set operations");
-	return 0;
+	return MINIRPC_OK;
 }
 
 void do_notify(void *conn_data, struct mrpc_message *msg, TestNotify *req)

@@ -49,7 +49,7 @@ static struct pending_reply *request_lookup(struct mrpc_connection *conn,
 	return list_entry(head, struct pending_reply, lh_pending);
 }
 
-static int pending_alloc(struct mrpc_message *request,
+static mrpc_status_t pending_alloc(struct mrpc_message *request,
 			struct pending_reply **pending_reply)
 {
 	struct pending_reply *pending;
@@ -64,11 +64,11 @@ static int pending_alloc(struct mrpc_message *request,
 	return MINIRPC_OK;
 }
 
-static int send_request_pending(struct mrpc_message *request,
+static mrpc_status_t send_request_pending(struct mrpc_message *request,
 			struct pending_reply *pending)
 {
 	struct mrpc_connection *conn=request->conn;
-	int ret;
+	mrpc_status_t ret;
 	
 	pthread_mutex_lock(&conn->pending_replies_lock);
 	hash_add(conn->pending_replies, &pending->lh_pending);
@@ -83,14 +83,14 @@ static int send_request_pending(struct mrpc_message *request,
 	return ret;
 }
 
-int mrpc_send_request(const struct mrpc_protocol *protocol,
+mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
 			struct mrpc_connection *conn, unsigned cmd, void *in,
 			void **out)
 {
 	struct mrpc_message *request;
 	struct mrpc_message *reply=NULL;
 	struct pending_reply *pending;
-	int ret;
+	mrpc_status_t ret;
 	
 	if (protocol != conn->set->protocol)
 		return MINIRPC_INVALID_PROTOCOL;
@@ -118,16 +118,16 @@ int mrpc_send_request(const struct mrpc_protocol *protocol,
 	if (!ret)
 		ret=unformat_reply(reply, out);
 	mrpc_free_message(reply);
-	return MINIRPC_OK;
+	return ret;
 }
 
-int mrpc_send_request_async(const struct mrpc_protocol *protocol,
+mrpc_status_t mrpc_send_request_async(const struct mrpc_protocol *protocol,
 			struct mrpc_connection *conn, unsigned cmd,
 			reply_callback_fn *callback, void *private, void *in)
 {
 	struct mrpc_message *msg;
 	struct pending_reply *pending;
-	int ret;
+	mrpc_status_t ret;
 	
 	if (protocol != conn->set->protocol)
 		return MINIRPC_INVALID_PROTOCOL;
@@ -147,11 +147,11 @@ int mrpc_send_request_async(const struct mrpc_protocol *protocol,
 	return send_request_pending(msg, pending);
 }
 
-int mrpc_send_request_noreply(const struct mrpc_protocol *protocol,
+mrpc_status_t mrpc_send_request_noreply(const struct mrpc_protocol *protocol,
 			struct mrpc_connection *conn, unsigned cmd, void *in)
 {
 	struct mrpc_message *msg;
-	int ret;
+	mrpc_status_t ret;
 	
 	if (protocol != conn->set->protocol)
 		return MINIRPC_INVALID_PROTOCOL;
@@ -161,11 +161,12 @@ int mrpc_send_request_noreply(const struct mrpc_protocol *protocol,
 	return send_message(msg);
 }
 
-int mrpc_send_reply(const struct mrpc_protocol *protocol,
-			struct mrpc_message *request, int status, void *data)
+mrpc_status_t mrpc_send_reply(const struct mrpc_protocol *protocol,
+			struct mrpc_message *request, mrpc_status_t status,
+			void *data)
 {
 	struct mrpc_message *reply;
-	int ret;
+	mrpc_status_t ret;
 	
 	if (protocol != request->conn->set->protocol)
 		return MINIRPC_INVALID_PROTOCOL;
@@ -176,10 +177,13 @@ int mrpc_send_reply(const struct mrpc_protocol *protocol,
 	} else {
 		ret=format_reply(request, data, &reply);
 	}
-	mrpc_free_message(request);
 	if (ret)
 		return ret;
-	return send_message(reply);
+	ret=send_message(reply);
+	if (ret)
+		return ret;
+	mrpc_free_message(request);
+	return MINIRPC_OK;
 }
 
 static void queue_event(struct mrpc_message *msg)
@@ -277,8 +281,8 @@ static void dispatch_request(struct mrpc_message *request)
 	struct mrpc_connection *conn=request->conn;
 	void *request_data;
 	void *reply_data=NULL;
-	int ret;
-	int result=MINIRPC_PROCEDURE_UNAVAIL;
+	mrpc_status_t ret;
+	mrpc_status_t result=MINIRPC_PROCEDURE_UNAVAIL;
 	xdrproc_t request_type;
 	xdrproc_t reply_type;
 	unsigned reply_size;
@@ -306,6 +310,7 @@ static void dispatch_request(struct mrpc_message *request)
 		memset(reply_data, 0, reply_size);
 	}
 	ret=unformat_request(request, &request_data);
+	/* XXX do something with ret */
 	
 	pthread_rwlock_rdlock(&conn->operations_lock);
 	if (conn->set->protocol->request != NULL)
@@ -330,6 +335,7 @@ static void dispatch_request(struct mrpc_message *request)
 		}
 		ret=mrpc_send_reply(conn->set->protocol, request, result,
 					reply_data);
+		/* XXX if this fails, the request hasn't been freed */
 		xdr_free(reply_type, reply_data);
 		free(reply_data);
 		if (ret)
@@ -344,7 +350,7 @@ static void run_reply_callback(struct mrpc_message *reply)
 	long_reply_callback_fn *longfn = reply->callback;
 	short_reply_callback_fn *shortfn = reply->callback;
 	unsigned size;
-	int ret;
+	mrpc_status_t ret;
 	
 	ret=reply->conn->set->protocol->sender_reply_info(reply->hdr.cmd,
 				NULL, &size);
@@ -419,7 +425,7 @@ int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 		msg=unqueue_event(set);
 		if (msg == NULL) {
 			if (poll(poll_s, 2, -1) == -1 && errno != EINTR) {
-				ret=errno;
+				ret=-errno;
 				break;
 			}
 		} else {
