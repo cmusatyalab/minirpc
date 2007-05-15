@@ -15,6 +15,7 @@
 	} while (0)
 
 struct mrpc_message;
+struct mrpc_connection;  /* XXX? */
 
 struct mrpc_protocol {
 	int is_server;
@@ -30,8 +31,11 @@ struct mrpc_protocol {
 				unsigned *size);
 };
 
-typedef void (reply_callback_fn)(void *conn_private, void *msg_private,
+typedef void reply_callback_fn;
+typedef void (long_reply_callback_fn)(void *conn_private, void *msg_private,
 			int status, void *data);
+typedef void (short_reply_callback_fn)(void *conn_private, void *msg_private,
+			int status);
 
 /* connection.c */
 int mrpc_conn_set_operations(struct mrpc_connection *conn,

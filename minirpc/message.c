@@ -341,12 +341,32 @@ static void dispatch_request(struct mrpc_message *request)
 static void run_reply_callback(struct mrpc_message *reply)
 {
 	void *out=NULL;
+	long_reply_callback_fn *longfn = reply->callback;
+	short_reply_callback_fn *shortfn = reply->callback;
+	unsigned size;
 	int ret;
 	
+	ret=reply->conn->set->protocol->sender_reply_info(reply->hdr.cmd,
+				NULL, &size);
+	if (ret) {
+		/* XXX */
+		mrpc_free_message(reply);
+		return;
+	}
 	ret=reply->hdr.status;
 	if (!ret)
 		ret=unformat_request(reply, &out);
-	reply->callback(reply->conn->private, reply->private, ret, out);
+	/* On x86, we could unconditionally call the four-argument form, even
+	   if the function we're calling only expects three arguments, since
+	   the extra argument would merely languish on the stack.  But I don't
+	   want to make assumptions about the calling convention of the machine
+	   architecture.  This should ensure that a function expecting three
+	   arguments gets three, and a function expecting four arguments gets
+	   four. */
+	if (size)
+		longfn(reply->conn->private, reply->private, ret, out);
+	else
+		shortfn(reply->conn->private, reply->private, ret);
 	mrpc_free_message(reply);
 }
 
