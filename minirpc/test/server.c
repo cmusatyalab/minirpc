@@ -12,7 +12,8 @@
 #include <time.h>
 #include <errno.h>
 #include <pthread.h>
-#include "protocol.h"
+#include "minirpc.h"
+#include "test_server.h"
 #include "list.h"
 
 #define BACKLOG 16
@@ -31,13 +32,15 @@
 
 struct message_list_node {
 	struct list_head lh;
-	struct isr_connection *conn;
-	struct ISRMessage *msg;
+	struct mrpc_message *msg;
+	int num;
 };
 
 static struct list_head pending;
 static pthread_mutex_t lock;
-static pthread_t thread;
+static pthread_cond_t cond;
+static pthread_t runner_thread;
+static pthread_t callback_thread;
 
 void setsockoptval(int fd, int level, int optname, int value)
 {
@@ -45,87 +48,82 @@ void setsockoptval(int fd, int level, int optname, int value)
 		warn("Couldn't setsockopt");
 }
 
-static void fill_listreply(struct ISRMessage *ret)
+int do_query(void *conn_data, struct mrpc_message *msg, TestRequest *in,
+			TestReply *out)
 {
-	struct ParcelInfo *cur;
-	char *names[]={"one", "two", "three", "four", "five", 0};
-	char **name;
-	time_t curtime;
-	
-	sleep(2);
-	ret->body.present=MessageBody_PR_listreply;
-	for (name=names; *name != 0; name++) {
-		cur=malloc(sizeof(*cur));
-		memset(cur, 0, sizeof(*cur));
-		if (cur == NULL)
-			die("Malloc failure");
-		OCTET_STRING_fromString(&cur->name, *name);
-		cur->current.version=12;
-		curtime=time(NULL);
-		asn_time2GT(&cur->current.checkin, gmtime(&curtime), 1);
-		cur->current.chunks=65000;
-		asn_sequence_add(&ret->body.listreply.list, cur);
-	}
+	warn("Query, value %d", in->num);
+	out->num=in->num;
+	return MINIRPC_OK;
 }
 
-static void request(struct isr_connection *conn, void *data,
-			struct ISRMessage *msg)
+int do_query_async_reply(void *conn_data, struct mrpc_message *msg,
+			TestRequest *in, TestReply *out)
 {
-	struct ISRMessage *reply;
-	struct message_list_node *node;
-	
-	warn("Received request");
-	switch(msg->body.present) {
-	case MessageBody_PR_list:
-		reply=isr_alloc_message();
-		if (reply == NULL)
-			die("malloc failed");
-		fill_listreply(reply);
-		break;
-	case MessageBody_PR_chunkrequest:
-		node=malloc(sizeof(*node));
-		if (node == NULL)
-			die("Couldn't malloc");
-		INIT_LIST_HEAD(&node->lh);
-		node->msg=msg;
-		node->conn=conn;
-		pthread_mutex_lock(&lock);
-		list_add(&node->lh, &pending);
-		pthread_mutex_unlock(&lock);
-		return;
-	default:
-		reply=isr_alloc_message();
-		if (reply == NULL)
-			die("malloc failed");
-		reply->body.present=MessageBody_PR_status;
-		reply->body.status=Status_message_unknown;
-		break;
-	}
-	warn("Sending response");
-	if (isr_send_reply(conn, msg, reply))
-		warn("Couldn't send reply");
+	struct message_list_node *node=malloc(sizeof(*node));
+	INIT_LIST_HEAD(&node->lh);
+	node->msg=msg;
+	node->num=in->num;
+	pthread_mutex_lock(&lock);
+	list_add(&node->lh, &pending);
+	pthread_cond_signal(&cond);
+	pthread_mutex_unlock(&lock);
+	return MINIRPC_DEFER;
 }
 
-static void *runner(void *ignored)
+int do_call(void *conn_data, struct mrpc_message *msg, TestRequest *req)
+{
+	warn("Received call(): %d", req->num);
+	return MINIRPC_OK;
+}
+
+int do_error(void *conn_data, struct mrpc_message *msg)
+{
+	return 1;
+}
+
+int do_invalidate_ops(void *conn_data, struct mrpc_message *msg)
+{
+	if (test_server_set_operations(*(void**)conn_data, NULL))
+		warn("Couldn't set operations");
+	return 0;
+}
+
+void do_notify(void *conn_data, struct mrpc_message *msg, TestNotify *req)
+{
+	warn("Received notify(): %d", req->num);
+}
+
+struct test_server_operations ops = {
+	.query = do_query,
+	.query_async_reply = do_query_async_reply,
+	.call = do_call,
+	.error = do_error,
+	.invalidate_ops = do_invalidate_ops,
+	.notify = do_notify
+};
+
+static void *runner(void *set)
+{
+	mrpc_dispatch_loop(set);
+	return NULL;
+}
+
+static void *run_callbacks(void *ignored)
 {
 	struct message_list_node *node;
-	struct ISRMessage *reply;
+	struct TestReply reply;
 	
 	while (1) {
-		sleep(1);
 		pthread_mutex_lock(&lock);
-		if (list_is_empty(&pending)) {
-			pthread_mutex_unlock(&lock);
-			continue;
-		}
-		node=list_entry(pending.next, struct message_list_node, lh);
+		while (list_is_empty(&pending))
+			pthread_cond_wait(&cond, &lock);
+		node=list_first_entry(&pending, struct message_list_node, lh);
 		list_del_init(&node->lh);
 		pthread_mutex_unlock(&lock);
-		reply=isr_alloc_message();
-		if (reply == NULL)
-			die("Alloc failed");
-		reply->body.present=MessageBody_PR_data;
-		isr_send_reply(node->conn, node->msg, reply);
+		
+		reply.num=node->num;
+		test_query_async_reply_send_async_reply(node->msg, MINIRPC_OK,
+					&reply);
 		free(node);
 	}
 }
@@ -135,8 +133,9 @@ int main(int argc, char **argv)
 	int listenfd;
 	int fd;
 	struct sockaddr_in addr;
-	struct isr_conn_set *set;
-	struct isr_connection *conn;
+	struct mrpc_conn_set *set;
+	struct mrpc_connection *conn;
+	void **ptrbuf;
 	
 	listenfd=socket(PF_INET, SOCK_STREAM, 0);
 	if (listenfd == -1)
@@ -150,12 +149,15 @@ int main(int argc, char **argv)
 	if (listen(listenfd, BACKLOG))
 		die("Couldn't listen on socket");
 	
-	if (isr_conn_set_alloc(&set, 1, request, 16, 16, 16, 140000))
+	if (mrpc_conn_set_alloc(&set, &test_server, 16, 16, 16, 140000))
 		die("Couldn't allocate connection set");
 	INIT_LIST_HEAD(&pending);
 	pthread_mutex_init(&lock, NULL);
-	if (pthread_create(&thread, NULL, runner, NULL))
+	pthread_cond_init(&cond, NULL);
+	if (pthread_create(&runner_thread, NULL, runner, set))
 		die("Couldn't start runner thread");
+	if (pthread_create(&callback_thread, NULL, run_callbacks, NULL))
+		die("Couldn't start callback thread");
 	
 	while (1) {
 		fd=accept(listenfd, NULL, 0);
@@ -165,12 +167,19 @@ int main(int argc, char **argv)
 		}
 		setsockoptval(fd, SOL_SOCKET, SO_KEEPALIVE, 1);
 		warn("Accepted connection");
-		if (isr_conn_add(&conn, set, fd, NULL)) {
+		/* XXX shouldn't be necessary */
+		ptrbuf=malloc(sizeof(*ptrbuf));
+		if (mrpc_conn_add(&conn, set, fd, (void*)ptrbuf)) {
 			warn("Error adding connection");
 			close(fd);
 			continue;
 		}
+		*ptrbuf=conn;
 		warn("Added connection");
+		if (test_server_set_operations(conn, &ops)) {
+			warn("Error setting operations struct");
+			continue;
+		}
 	}
 	return 0;
 }

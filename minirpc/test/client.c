@@ -8,7 +8,8 @@
 #include <string.h>
 #include <errno.h>
 #include <netdb.h>
-#include "protocol.h"
+#include "minirpc.h"
+#include "test_client.h"
 
 #define SRVPORTSTR "58000"
 
@@ -16,68 +17,50 @@
 #define warn(s, args...) fprintf(stderr, s "\n", ## args)
 #define die(s, args...) do { warn(s, ## args); exit(1); } while (0)
 
-static void request(struct isr_connection *conn, void *conn_data,
-			struct ISRMessage *msg) {
-	die("Received request from server");
-}
-
-static void getchunk_callback(struct isr_connection *conn, void *conn_data,
-			struct ISRMessage *request, struct ISRMessage *reply,
-			void *msg_data)
+void query_sync(struct mrpc_connection *conn)
 {
-	if (reply->body.present == MessageBody_PR_status) {
-		warn("Received error status from server");
-		return;
-	}
-	warn("==== Received reply to request for chunk %ld",
-				request->body.chunkrequest.by.chunk.cid);
-}
-
-void list_parcels(struct isr_connection *conn)
-{
-	struct ISRMessage *request=isr_alloc_message();
-	struct ISRMessage *reply;
-	int i;
+	struct TestRequest request;
+	struct TestReply *reply;
+	int ret;
 	
-	if (request == NULL)
-		die("Couldn't allocate message");
-	request->body.present=MessageBody_PR_list;
-	isr_send_request(conn, request, &reply);
-	warn("Received response");
-	if (reply == NULL)
-		die("Received invalid reply");
-	for (i=0; i<reply->body.listreply.list.count; i++) {
-		warn("== %.*s", reply->body.listreply.list.array[i]->name.size,
-				reply->body.listreply.list.array[i]->name.buf);
-	}
+	request.num=12;
+	ret=test_query(conn, &request, &reply);
+	if (ret)
+		die("query returned %d", ret);
+	if (reply->num != 12)
+		die("reply body contained %d", reply->num);
+	free_TestRequest(&request, 0);
+	free_TestReply(reply, 1);
 }
 
-void request_chunks(struct isr_connection *conn)
+void query_callback(void *conn_private, void *msg_private, int status,
+			TestReply *reply)
 {
-	struct ISRMessage *request;
+	int request=(int)msg_private;
+	
+	warn("Request %d returned reply %d", request, reply->num);
+	free_TestReply(reply, 1);
+}
+
+void query_async(struct mrpc_connection *conn)
+{
+	struct TestRequest request;
+	int ret;
 	int i;
 	
 	for (i=0; i<5; i++) {
-		request=isr_alloc_message();
-		if (request == NULL)
-			die("Couldn't allocate message");
-		
-		request->body.present=MessageBody_PR_chunkrequest;
-		request->body.chunkrequest.by.present=ChunkLookupKey_PR_chunk;
-		request->body.chunkrequest.by.chunk.cid=i;
-		request->body.chunkrequest.by.chunk.plane=ChunkPlane_disk;
-		request->body.chunkrequest.want.buf=malloc(1);
-		memset(request->body.chunkrequest.want.buf, 0, 1);
-		request->body.chunkrequest.want.size=1;
-		request->body.chunkrequest.want.bits_unused=8;
-		isr_send_request_async(conn, request, getchunk_callback, NULL);
+		request.num=i;
+		ret=test_query_async(conn, query_callback, (void*)i, &request);
+		if (ret)
+			die("query iteration %d returned %d", i, ret);
 	}
+	free_TestRequest(&request, 0);
 }
 
 int main(int argc, char **argv)
 {
-	struct isr_conn_set *set;
-	struct isr_connection *conn;
+	struct mrpc_conn_set *set;
+	struct mrpc_connection *conn;
 	int fd;
 	int ret;
 	struct addrinfo *info;
@@ -86,7 +69,7 @@ int main(int argc, char **argv)
 	if (argc != 2)
 		die("Usage: %s hostname", argv[0]);
 	
-	if (isr_conn_set_alloc(&set, 0, request, 16, 16, 16, 140000))
+	if (mrpc_conn_set_alloc(&set, &test_client, 16, 16, 16, 16000))
 		die("Couldn't allocate conn set");
 	
 	hints.ai_family=PF_INET;
@@ -102,10 +85,10 @@ int main(int argc, char **argv)
 		die("Couldn't connect to host: %s", strerror(errno));
 	freeaddrinfo(info);
 	
-	isr_conn_add(&conn, set, fd, NULL);
-	warn("Sending message");
-	list_parcels(conn);
-	request_chunks(conn);
+	mrpc_conn_add(&conn, set, fd, NULL);
+	warn("Sending messages");
+	query_sync(conn);
+	query_async(conn);
 	pause();
 	return 0;
 }

@@ -1,0 +1,23 @@
+struct TestRequest {
+	int num;
+};
+
+struct TestReply {
+	int num;
+};
+
+struct TestNotify {
+	int num;
+};
+
+serverprocs {
+	query(TestRequest, TestReply) = 1;
+	query_async_reply(TestRequest, TestReply) = 2;
+	call(TestRequest) = 3;
+	error() = 4;
+	invalidate_ops() = 5;
+}
+
+servermsgs {
+	notify(TestNotify) = 1;
+}
