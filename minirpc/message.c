@@ -294,6 +294,18 @@ void process_incoming_message(struct mrpc_connection *conn)
 	}
 }
 
+static void fail_request(struct mrpc_message *request, mrpc_status_t err)
+{
+	if (request->hdr.cmd >= 0) {
+		if (mrpc_send_reply_error(request->conn->set->protocol,
+					request, err))
+			mrpc_free_message(request);
+	} else {
+		mrpc_free_message(request);
+	}
+}
+
+/* XXX notifications to application */
 static void dispatch_request(struct mrpc_message *request)
 {
 	struct mrpc_connection *conn=request->conn;
@@ -310,25 +322,35 @@ static void dispatch_request(struct mrpc_message *request)
 	
 	if (conn->set->protocol->receiver_request_info(request->hdr.cmd,
 				&request_type, NULL)) {
-		/* XXX invalid message */
-		mrpc_free_message(request);
+		/* Unknown opcode */
+		fail_request(request, MINIRPC_PROCEDURE_UNAVAIL);
 		return;
 	}
+	
 	doreply=(request->hdr.cmd >= 0);
 	if (doreply) {
 		if (conn->set->protocol->receiver_reply_info(request->hdr.cmd,
 					&reply_type, &reply_size)) {
-			/* XXX */
+			/* Can't happen if the info tables are well-formed */
+			fail_request(request, MINIRPC_ENCODING_ERR);
+			return;
 		}
 		
 		reply_data=malloc(reply_size);
 		if (reply_data == NULL) {
-			/* XXX */
+			fail_request(request, MINIRPC_NOMEM);
+			return;
 		}
 		memset(reply_data, 0, reply_size);
 	}
 	ret=unformat_request(request, &request_data);
-	/* XXX do something with ret */
+	if (ret) {
+		/* Invalid datalen, etc. */
+		fail_request(request, ret);
+		if (reply_data)
+			free(reply_data);
+		return;
+	}
 	
 	pthread_rwlock_rdlock(&conn->operations_lock);
 	if (conn->set->protocol->request != NULL)
@@ -357,13 +379,15 @@ static void dispatch_request(struct mrpc_message *request)
 		else
 			ret=mrpc_send_reply(conn->set->protocol, request,
 						reply_data);
-		/* XXX if this fails, the request hasn't been freed */
 		xdr_free(reply_type, reply_data);
 		free(reply_data);
-		if (ret)
-			/* XXX */;
+		if (ret) {
+			/* XXX reply failed! */
+			mrpc_free_message(request);
+		}
+	} else {
+		mrpc_free_message(request);
 	}
-	mrpc_free_message(request);
 }
 
 static void run_reply_callback(struct mrpc_message *reply)
