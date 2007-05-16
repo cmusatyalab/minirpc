@@ -165,7 +165,6 @@ static void try_read_conn(struct mrpc_connection *conn)
 	char *buf;
 	unsigned len;
 	
-	printf("try_read_conn\n");
 	while (1) {
 		if (conn->recv_msg == NULL) {
 			conn->recv_msg=mrpc_alloc_message(conn);
@@ -186,8 +185,6 @@ static void try_read_conn(struct mrpc_connection *conn)
 		}
 		
 		if (conn->recv_offset < len) {
-			printf("Read, start %d, count %d\n", conn->recv_offset,
-						len - conn->recv_offset);
 			count=read(conn->fd, buf + conn->recv_offset,
 						len - conn->recv_offset);
 			if (count == -1 && errno == EINTR) {
@@ -198,6 +195,7 @@ static void try_read_conn(struct mrpc_connection *conn)
 				conn_kill(conn);
 				return;
 			}
+			printf("Read %d bytes\n", count);
 			conn->recv_offset += count;
 		}
 		
@@ -256,7 +254,6 @@ static void try_write_conn(struct mrpc_connection *conn)
 	char *buf;
 	unsigned len;
 	
-	printf("try_write_conn\n");
 	while (1) {
 		if (conn->send_msg == NULL) {
 			if (get_next_message(conn)) {

@@ -23,6 +23,7 @@ void query_sync(struct mrpc_connection *conn)
 	struct TestReply *reply;
 	mrpc_status_t ret;
 	
+	warn("Sending sync query");
 	request.num=12;
 	ret=test_query(conn, &request, &reply);
 	if (ret)
@@ -31,6 +32,7 @@ void query_sync(struct mrpc_connection *conn)
 		die("reply body contained %d", reply->num);
 	free_TestRequest(&request, 0);
 	free_TestReply(reply, 1);
+	warn("...success");
 }
 
 void query_callback(void *conn_private, void *msg_private, int status,
@@ -48,6 +50,7 @@ void query_async(struct mrpc_connection *conn)
 	mrpc_status_t ret;
 	int i;
 	
+	warn("Sending async queries");
 	for (i=0; i<5; i++) {
 		request.num=i;
 		ret=test_query_async(conn, query_callback, (void*)i, &request);
@@ -55,6 +58,7 @@ void query_async(struct mrpc_connection *conn)
 			die("query iteration %d returned %d", i, ret);
 	}
 	free_TestRequest(&request, 0);
+	warn("...success");
 }
 
 int main(int argc, char **argv)

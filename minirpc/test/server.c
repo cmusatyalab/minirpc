@@ -21,7 +21,7 @@
 #define SRVPORT 58000
 
 /* XXX copied from libvdisk */
-#define warn(s, args...) fprintf(stderr, s ": %s\n", ## args, strerror(errno))
+#define warn(s, args...) fprintf(stderr, s "\n", ## args)
 #define ndebug(s, args...) do {} while (0)
 #define die(s, args...) do { warn(s, ## args); exit(1); } while (0)
 #ifdef DEBUG
