@@ -14,8 +14,9 @@ serverprocs {
 	query(TestRequest, TestReply) = 1;
 	query_async_reply(TestRequest, TestReply) = 2;
 	call(TestRequest) = 3;
-	error() = 4;
+	error(void, TestReply) = 4;
 	invalidate_ops() = 5;
+	ping() = 6;
 }
 
 servermsgs {

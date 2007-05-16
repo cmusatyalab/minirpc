@@ -60,6 +60,7 @@ mrpc_status_t do_query_async_reply(void *conn_data, struct mrpc_message *msg,
 			TestRequest *in, TestReply *out)
 {
 	struct message_list_node *node=malloc(sizeof(*node));
+	warn("Query, value %d, pending", in->num);
 	INIT_LIST_HEAD(&node->lh);
 	node->msg=msg;
 	node->num=in->num;
@@ -77,9 +78,17 @@ mrpc_status_t do_call(void *conn_data, struct mrpc_message *msg,
 	return MINIRPC_OK;
 }
 
-mrpc_status_t do_error(void *conn_data, struct mrpc_message *msg)
+mrpc_status_t do_error(void *conn_data, struct mrpc_message *msg,
+			TestReply *out)
 {
+	warn("Received error call");
 	return 1;
+}
+
+mrpc_status_t do_ping(void *conn_data, struct mrpc_message *msg)
+{
+	warn("Received ping");
+	return MINIRPC_OK;
 }
 
 mrpc_status_t do_invalidate_ops(void *conn_data, struct mrpc_message *msg)
@@ -100,7 +109,8 @@ struct test_server_operations ops = {
 	.call = do_call,
 	.error = do_error,
 	.invalidate_ops = do_invalidate_ops,
-	.notify = do_notify
+	.notify = do_notify,
+	.ping = do_ping
 };
 
 static void *runner(void *set)
@@ -122,6 +132,7 @@ static void *run_callbacks(void *ignored)
 		list_del_init(&node->lh);
 		pthread_mutex_unlock(&lock);
 		
+		warn("Sending async reply, value %d", node->num);
 		reply.num=node->num;
 		test_query_async_reply_send_async_reply(node->msg, &reply);
 		free(node);

@@ -38,6 +38,32 @@ void query_sync(struct mrpc_connection *conn)
 	warn("...success");
 }
 
+void call_sync(struct mrpc_connection *conn)
+{
+	struct TestRequest request;
+	mrpc_status_t ret;
+	
+	warn("Sending sync call");
+	request.num=12;
+	ret=test_call(conn, &request);
+	if (ret)
+		die("query returned %d", ret);
+	free_TestRequest(&request, 0);
+	warn("...success");
+}
+
+void error_sync(struct mrpc_connection *conn)
+{
+	struct TestReply *reply;
+	mrpc_status_t ret;
+	
+	warn("Sending sync error");
+	ret=test_error(conn, &reply);
+	if (ret != 1)
+		die("query returned %d", ret);
+	warn("...success");
+}
+
 void query_callback(void *conn_private, void *msg_private, int status,
 			TestReply *reply)
 {
@@ -50,13 +76,13 @@ void query_callback(void *conn_private, void *msg_private, int status,
 	free_TestReply(reply, 1);
 }
 
-void query_async(struct mrpc_connection *conn)
+void query_client_async(struct mrpc_connection *conn)
 {
 	struct TestRequest request;
 	mrpc_status_t ret;
 	int i;
 	
-	warn("Sending async queries");
+	warn("Sending client-async queries");
 	for (i=0; i<5; i++) {
 		request.num=i;
 		ret=test_query_async(conn, query_callback, (void*)i, &request);
@@ -65,6 +91,56 @@ void query_async(struct mrpc_connection *conn)
 	}
 	free_TestRequest(&request, 0);
 	warn("...success");
+}
+
+void query_server_async(struct mrpc_connection *conn)
+{
+	struct TestRequest request;
+	struct TestReply *reply;
+	mrpc_status_t ret;
+	
+	warn("Sending server-async query");
+	request.num=12;
+	ret=test_query_async_reply(conn, &request, &reply);
+	if (ret)
+		die("query returned %d", ret);
+	if (reply->num != 12)
+		die("reply body contained %d", reply->num);
+	free_TestRequest(&request, 0);
+	free_TestReply(reply, 1);
+	warn("...success");
+}
+
+void notify(struct mrpc_connection *conn)
+{
+	struct TestNotify notify;
+	mrpc_status_t ret;
+	
+	warn("Sending notify");
+	notify.num=12;
+	ret=test_notify(conn, &notify);
+	if (ret)
+		die("notify returned %d", ret);
+	free_TestNotify(&notify, 0);
+	warn("...success");
+}
+
+void invalidate(struct mrpc_connection *conn)
+{
+	int ret;
+	
+	warn("Testing connectivity");
+	ret=test_ping(conn);
+	if (ret)
+		die("Ping returned %d", ret);
+	warn("Sending invalidate");
+	ret=test_invalidate_ops(conn);
+	if (ret)
+		die("Invalidate returned %d", ret);
+	warn("Testing invalidation");
+	ret=test_ping(conn);
+	if (ret != MINIRPC_PROCEDURE_UNAVAIL)
+		die("Ping returned %d", ret);
 }
 
 void *runner(void *set)
@@ -108,7 +184,11 @@ int main(int argc, char **argv)
 	mrpc_conn_add(&conn, set, fd, NULL);
 	warn("Sending messages");
 	query_sync(conn);
-	query_async(conn);
-	pause();
+	query_client_async(conn);
+	query_server_async(conn);
+	call_sync(conn);
+	error_sync(conn);
+	notify(conn);
+	invalidate(conn);
 	return 0;
 }
