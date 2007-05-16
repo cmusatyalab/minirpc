@@ -8,6 +8,7 @@
 #include <string.h>
 #include <errno.h>
 #include <netdb.h>
+#include <pthread.h>
 #include "minirpc.h"
 #include "test_client.h"
 
@@ -16,6 +17,8 @@
 /* XXX copied from libvdisk */
 #define warn(s, args...) fprintf(stderr, s "\n", ## args)
 #define die(s, args...) do { warn(s, ## args); exit(1); } while (0)
+
+static pthread_t thread;
 
 void query_sync(struct mrpc_connection *conn)
 {
@@ -40,7 +43,10 @@ void query_callback(void *conn_private, void *msg_private, int status,
 {
 	int request=(int)msg_private;
 	
-	warn("Request %d returned reply %d", request, reply->num);
+	if (status)
+		warn("Request %d returned error %d", request, status);
+	else
+		warn("Request %d returned reply %d", request, reply->num);
 	free_TestReply(reply, 1);
 }
 
@@ -59,6 +65,12 @@ void query_async(struct mrpc_connection *conn)
 	}
 	free_TestRequest(&request, 0);
 	warn("...success");
+}
+
+void *runner(void *set)
+{
+	mrpc_dispatch_loop(set);
+	return NULL;
 }
 
 int main(int argc, char **argv)
@@ -88,6 +100,10 @@ int main(int argc, char **argv)
 	if (ret)
 		die("Couldn't connect to host: %s", strerror(errno));
 	freeaddrinfo(info);
+	
+	ret=pthread_create(&thread, NULL, runner, set);
+	if (ret)
+		die("Couldn't create runner thread: %s", strerror(errno));
 	
 	mrpc_conn_add(&conn, set, fd, NULL);
 	warn("Sending messages");

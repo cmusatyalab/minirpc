@@ -12,7 +12,7 @@ struct pending_reply {
 	int async;
 	union {
 		struct {
-			pthread_cond_t cond;
+			pthread_cond_t *cond;
 			struct mrpc_message **reply;
 		} sync;
 		struct {
@@ -91,6 +91,7 @@ mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
 	struct mrpc_message *request;
 	struct mrpc_message *reply=NULL;
 	struct pending_reply *pending;
+	pthread_cond_t cond=PTHREAD_COND_INITIALIZER;
 	mrpc_status_t ret;
 	
 	if (protocol != conn->set->protocol)
@@ -106,7 +107,7 @@ mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
 		return ret;
 	}
 	pending->async=0;
-	pthread_cond_init(&pending->data.sync.cond, NULL);
+	pending->data.sync.cond=&cond;
 	pending->data.sync.reply=&reply;
 	ret=send_request_pending(request, pending);
 	if (ret)
@@ -114,8 +115,7 @@ mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
 	
 	pthread_mutex_lock(&conn->sync_wakeup_lock);
 	while (reply == NULL)
-		pthread_cond_wait(&pending->data.sync.cond,
-					&conn->sync_wakeup_lock);
+		pthread_cond_wait(&cond, &conn->sync_wakeup_lock);
 	pthread_mutex_unlock(&conn->sync_wakeup_lock);
 	ret=reply->hdr.status;
 	if (!ret)
@@ -287,8 +287,8 @@ void process_incoming_message(struct mrpc_message *msg)
 		} else {
 			pthread_mutex_lock(&conn->sync_wakeup_lock);
 			*pending->data.sync.reply=msg;
-			pthread_cond_signal(&pending->data.sync.cond);
 			pthread_mutex_unlock(&conn->sync_wakeup_lock);
+			pthread_cond_signal(pending->data.sync.cond);
 		}
 		free(pending);
 	}
@@ -408,7 +408,7 @@ static void run_reply_callback(struct mrpc_message *reply)
 	}
 	ret=reply->hdr.status;
 	if (!ret)
-		ret=unformat_request(reply, &out);
+		ret=unformat_reply(reply, &out);
 	/* On x86, we could unconditionally call the four-argument form, even
 	   if the function we're calling only expects three arguments, since
 	   the extra argument would merely languish on the stack.  But I don't
