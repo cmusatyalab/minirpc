@@ -5,6 +5,8 @@ AM_LDFLAGS = -L.. -lminirpc -lpthread
 GEN_C = test_minirpc.c test_xdr.c
 GEN_H = test_minirpc.h test_client.h test_server.h test_xdr.h
 GEN = $(GEN_C) $(GEN_H)
+MAINTAINERCLEANFILES = $(GEN)
+BUILT_SOURCES = $(GEN_H)
 
 EXTRA_PROGRAMS = client server
 client_SOURCES = client.c $(GEN)
