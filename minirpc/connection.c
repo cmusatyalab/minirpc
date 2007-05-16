@@ -145,10 +145,14 @@ static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
   		return MINIRPC_ENCODING_ERR;
 	}
 	
-	conn->recv_msg->data=malloc(conn->recv_msg->hdr.datalen);
-	if (conn->recv_msg->data == NULL) {
-		/* XXX */
-		return MINIRPC_NOMEM;
+	if (conn->recv_msg->hdr.datalen) {
+		conn->recv_msg->data=malloc(conn->recv_msg->hdr.datalen);
+		if (conn->recv_msg->data == NULL) {
+			/* XXX */
+			return MINIRPC_NOMEM;
+		}
+	} else {
+		conn->recv_msg->data=NULL;
 	}
 	conn->recv_state=STATE_DATA;
 	return MINIRPC_OK;
@@ -272,17 +276,20 @@ static void try_write_conn(struct mrpc_connection *conn)
 			break;
 		}
 		
-		count=write(conn->fd, buf + conn->send_offset,
-					len - conn->send_offset);
-		if (count == 0 || (count == -1 && errno == EAGAIN)) {
-			break;
-		} else if (count == -1 && errno == EINTR) {
-			continue;
-		} else if (count == -1) {
-			conn_kill(conn);
-			break;
+		if (conn->send_offset < len) {
+			count=write(conn->fd, buf + conn->send_offset,
+						len - conn->send_offset);
+			if (count == 0 || (count == -1 && errno == EAGAIN)) {
+				break;
+			} else if (count == -1 && errno == EINTR) {
+				continue;
+			} else if (count == -1) {
+				conn_kill(conn);
+				break;
+			}
+			conn->send_offset += count;
 		}
-		conn->send_offset += count;
+		
 		if (conn->send_offset == len) {
 			switch (conn->send_state) {
 			case STATE_HEADER:

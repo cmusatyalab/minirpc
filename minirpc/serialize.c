@@ -15,11 +15,16 @@ struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn)
 	return msg;
 }
 
+void cond_free(void *ptr)
+{
+	if (ptr)
+		free(ptr);
+}
+
 void mrpc_free_message(struct mrpc_message *msg)
 {
 	/* XXX make sure list is empty */
-	if (msg->data != NULL)
-		free(msg->data);
+	cond_free(msg->data);
 	free(msg);
 }
 
@@ -60,7 +65,7 @@ static mrpc_status_t serialize(xdrproc_t xdr_proc, void *in, char **out,
 			unsigned *out_len)
 {
 	XDR xdrs;
-	char *buf;
+	char *buf=NULL;
 	unsigned len;
 	mrpc_status_t ret;
 	
@@ -72,13 +77,15 @@ static mrpc_status_t serialize(xdrproc_t xdr_proc, void *in, char **out,
 	len=xdr_getpos(&xdrs);
 	xdr_destroy(&xdrs);
 	
-	buf=malloc(len);
-	if (buf == NULL)
-		return MINIRPC_NOMEM;
-	ret=serialize_len(xdr_proc, in, buf, len);
-	if (ret) {
-		free(buf);
-		return ret;
+	if (len) {
+		buf=malloc(len);
+		if (buf == NULL)
+			return MINIRPC_NOMEM;
+		ret=serialize_len(xdr_proc, in, buf, len);
+		if (ret) {
+			free(buf);
+			return ret;
+		}
 	}
 	*out=buf;
 	*out_len=len;
@@ -107,15 +114,17 @@ static mrpc_status_t format_message(struct mrpc_connection *conn,
 static mrpc_status_t unformat_message(xdrproc_t type, unsigned size,
 			struct mrpc_message *msg, void **result)
 {
-	void *buf;
+	void *buf=NULL;
 	mrpc_status_t ret;
 	
-	buf=malloc(size);
-	if (buf == NULL)
-		return MINIRPC_NOMEM;
+	if (size) {
+		buf=malloc(size);
+		if (buf == NULL)
+			return MINIRPC_NOMEM;
+	}
 	ret=unserialize(type, msg->data, msg->hdr.datalen, buf, size);
 	if (ret) {
-		free(buf);
+		cond_free(buf);
 		return ret;
 	}
 	*result=buf;

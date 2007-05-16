@@ -336,19 +336,20 @@ static void dispatch_request(struct mrpc_message *request)
 			return;
 		}
 		
-		reply_data=malloc(reply_size);
-		if (reply_data == NULL) {
-			fail_request(request, MINIRPC_NOMEM);
-			return;
+		if (reply_size) {
+			reply_data=malloc(reply_size);
+			if (reply_data == NULL) {
+				fail_request(request, MINIRPC_NOMEM);
+				return;
+			}
+			memset(reply_data, 0, reply_size);
 		}
-		memset(reply_data, 0, reply_size);
 	}
 	ret=unformat_request(request, &request_data);
 	if (ret) {
 		/* Invalid datalen, etc. */
 		fail_request(request, ret);
-		if (reply_data)
-			free(reply_data);
+		cond_free(reply_data);
 		return;
 	}
 	
@@ -360,16 +361,16 @@ static void dispatch_request(struct mrpc_message *request)
 					reply_data);
 	pthread_rwlock_unlock(&conn->operations_lock);
 	xdr_free(request_type, request_data);
-	free(request_data);
+	cond_free(request_data);
 	
 	if (doreply) {
 		if (result == MINIRPC_PENDING) {
 			xdr_free(reply_type, reply_data);
-			free(reply_data);
+			cond_free(reply_data);
 			/* This struct is going to stay around for a while,
 			   but we won't need the serialized request data
 			   anymore.  Free up some memory. */
-			free(request->data);
+			cond_free(request->data);
 			request->data=NULL;
 			return;
 		}
@@ -380,7 +381,7 @@ static void dispatch_request(struct mrpc_message *request)
 			ret=mrpc_send_reply(conn->set->protocol, request,
 						reply_data);
 		xdr_free(reply_type, reply_data);
-		free(reply_data);
+		cond_free(reply_data);
 		if (ret) {
 			/* XXX reply failed! */
 			mrpc_free_message(request);
