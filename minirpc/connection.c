@@ -68,6 +68,8 @@ int mrpc_conn_add(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
 	pthread_mutex_init(&conn->sync_wakeup_lock, NULL);
 	pthread_mutex_init(&conn->next_sequence_lock, NULL);
+	conn->send_state=STATE_HEADER;
+	conn->recv_state=STATE_HEADER;
 	conn->set=set;
 	conn->fd=fd;
 	conn->private=data;
@@ -154,7 +156,6 @@ static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
 	} else {
 		conn->recv_msg->data=NULL;
 	}
-	conn->recv_state=STATE_DATA;
 	return MINIRPC_OK;
 }
 
@@ -206,11 +207,15 @@ static void try_read_conn(struct mrpc_connection *conn)
 				if (process_incoming_header(conn)) {
 					/* XXX */
 					;
+				} else {
+					conn->recv_state=STATE_DATA;
 				}
+				conn->recv_offset=0;
 				break;
 			case STATE_DATA:
-				process_incoming_message(conn);
+				process_incoming_message(conn->recv_msg);
 				conn->recv_state=STATE_HEADER;
+				conn->recv_offset=0;
 				conn->recv_msg=NULL;
 				break;
 			}
@@ -233,7 +238,6 @@ static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 	list_del_init(&conn->send_msg->lh_msgs);
 	pthread_mutex_unlock(&conn->send_msgs_lock);
 	
-	conn->send_state=STATE_HEADER;
 	ret=serialize_len((xdrproc_t)xdr_mrpc_header, &conn->send_msg->hdr,
 				conn->send_hdr_buf, MINIRPC_HEADER_LEN);
 	if (ret) {
@@ -242,7 +246,6 @@ static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 		conn->send_msg=NULL;
 		return ret;
 	}
-	conn->send_offset=0;
 	return MINIRPC_OK;
 }
 
@@ -298,6 +301,7 @@ static void try_write_conn(struct mrpc_connection *conn)
 				break;
 			case STATE_DATA:
 				conn->send_state=STATE_HEADER;
+				conn->send_offset=0;
 				mrpc_free_message(conn->send_msg);
 				conn->send_msg=NULL;
 				break;

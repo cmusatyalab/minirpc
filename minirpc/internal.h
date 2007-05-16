@@ -83,7 +83,7 @@ mrpc_status_t send_message(struct mrpc_message *msg);
 
 /* message.c */
 unsigned request_hash(struct list_head *head, unsigned buckets);
-void process_incoming_message(struct mrpc_connection *conn);
+void process_incoming_message(struct mrpc_message *msg);
 
 /* serialize.c */
 struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn);

@@ -257,9 +257,9 @@ int mrpc_get_event_fd(struct mrpc_conn_set *set)
 }
 
 /* XXX what happens if we get a bad reply?  close the connection? */
-void process_incoming_message(struct mrpc_connection *conn)
+void process_incoming_message(struct mrpc_message *msg)
 {
-	struct mrpc_message *msg=conn->recv_msg;
+	struct mrpc_connection *conn=msg->conn;
 	struct pending_reply *pending;
 	
 	if (msg->hdr.status == MINIRPC_PENDING) {
