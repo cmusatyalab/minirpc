@@ -206,7 +206,7 @@ mrpc_status_t unformat_reply(struct mrpc_message *msg, void **result)
 	
 	if (msg->hdr.status)
 		return msg->hdr.status;
-	if (msg->conn->set->protocol->receiver_reply_info(msg->hdr.cmd, &type,
+	if (msg->conn->set->protocol->sender_reply_info(msg->hdr.cmd, &type,
 				&size))
 		return MINIRPC_ENCODING_ERR;
 	return unformat_message(type, size, msg, result);

@@ -126,6 +126,12 @@ sub typesize {
 	}
 }
 
+sub antirole {
+	my $role = shift;
+	
+	return ($role eq "client") ? "server" : "client";
+}
+
 # Sort hash keys numerically: 0..MAX, -1..MIN
 sub opcodeSort {
 	my $hash = shift;
@@ -148,12 +154,13 @@ sub gen_sender_stub_sync_c {
 	my $outarg = argument($out, "**out");
 	my $inparam = parameter($in, "in");
 	my $outparam = parameter($out, "out");
+	my $antirole = antirole($role);
 	
 	print $fh wrapc(<<EOF);
 
 mrpc_status_t ${base}_$func(struct mrpc_connection *conn$inarg$outarg)
 {
-	return mrpc_send_request(&${base}_$role, conn, nr_${base}_$func, $inparam, (void **) $outparam);
+	return mrpc_send_request(&${base}_$antirole, conn, nr_${base}_$func, $inparam, (void **) $outparam);
 }
 EOF
 }
@@ -192,12 +199,13 @@ sub gen_sender_stub_async_c {
 	
 	my $inarg = argument($in, "*in");
 	my $inparam = parameter($in, "in");
+	my $antirole = antirole($role);
 	
 	print $fh wrapc(<<EOF);
 
 mrpc_status_t ${base}_${func}_async(struct mrpc_connection *conn, ${base}_${func}_callback_fn *callback, void *private$inarg)
 {
-	return mrpc_send_request_async(&${base}_$role, conn, nr_${base}_$func, callback, private, $inparam);
+	return mrpc_send_request_async(&${base}_$antirole, conn, nr_${base}_$func, callback, private, $inparam);
 }
 EOF
 }
@@ -277,12 +285,13 @@ sub gen_oneway_stub_c {
 	
 	my $inarg = argument($in, "*in");
 	my $inparam = parameter($in, "in");
+	my $antirole = antirole($role);
 	
 	print $fh wrapc(<<EOF);
 
 mrpc_status_t ${base}_${func}(struct mrpc_connection *conn$inarg)
 {
-	return mrpc_send_request_noreply(&${base}_$role, conn, nr_${base}_$func, $inparam);
+	return mrpc_send_request_noreply(&${base}_$antirole, conn, nr_${base}_$func, $inparam);
 }
 EOF
 }
@@ -496,10 +505,10 @@ sub gen_protocol_struct_c {
 struct mrpc_protocol ${base}_$role = {
 	.is_server = $isServer,
 	.request = $requestFunc,
-	.sender_request_info = ${base}_${role}_request_info,
-	.sender_reply_info = ${base}_${role}_reply_info,
-	.receiver_request_info = ${base}_${antirole}_request_info,
-	.receiver_reply_info = ${base}_${antirole}_reply_info
+	.sender_request_info = ${base}_${antirole}_request_info,
+	.sender_reply_info = ${base}_${antirole}_reply_info,
+	.receiver_request_info = ${base}_${role}_request_info,
+	.receiver_reply_info = ${base}_${role}_reply_info
 };
 EOF
 }
