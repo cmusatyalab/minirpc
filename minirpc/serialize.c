@@ -118,6 +118,8 @@ static mrpc_status_t unformat_message(xdrproc_t type, unsigned size,
 	mrpc_status_t ret;
 	
 	if (size) {
+		if (result == NULL)
+			return MINIRPC_ENCODING_ERR;
 		buf=malloc(size);
 		if (buf == NULL)
 			return MINIRPC_NOMEM;
@@ -127,7 +129,8 @@ static mrpc_status_t unformat_message(xdrproc_t type, unsigned size,
 		cond_free(buf);
 		return ret;
 	}
-	*result=buf;
+	if (result != NULL)
+		*result=buf;
 	return MINIRPC_OK;
 }
 

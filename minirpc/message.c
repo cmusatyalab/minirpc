@@ -117,9 +117,7 @@ mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
 	while (reply == NULL)
 		pthread_cond_wait(&cond, &conn->sync_wakeup_lock);
 	pthread_mutex_unlock(&conn->sync_wakeup_lock);
-	ret=reply->hdr.status;
-	if (!ret)
-		ret=unformat_reply(reply, out);
+	ret=unformat_reply(reply, out);
 	mrpc_free_message(reply);
 	return ret;
 }
@@ -406,9 +404,7 @@ static void run_reply_callback(struct mrpc_message *reply)
 		mrpc_free_message(reply);
 		return;
 	}
-	ret=reply->hdr.status;
-	if (!ret)
-		ret=unformat_reply(reply, &out);
+	ret=unformat_reply(reply, &out);
 	/* On x86, we could unconditionally call the four-argument form, even
 	   if the function we're calling only expects three arguments, since
 	   the extra argument would merely languish on the stack.  But I don't
