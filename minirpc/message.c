@@ -84,7 +84,7 @@ static mrpc_status_t send_request_pending(struct mrpc_message *request,
 	return ret;
 }
 
-mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
+exported mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
 			struct mrpc_connection *conn, int cmd, void *in,
 			void **out)
 {
@@ -122,7 +122,8 @@ mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
 	return ret;
 }
 
-mrpc_status_t mrpc_send_request_async(const struct mrpc_protocol *protocol,
+exported mrpc_status_t mrpc_send_request_async(
+			const struct mrpc_protocol *protocol,
 			struct mrpc_connection *conn, int cmd,
 			reply_callback_fn *callback, void *private, void *in)
 {
@@ -148,7 +149,8 @@ mrpc_status_t mrpc_send_request_async(const struct mrpc_protocol *protocol,
 	return send_request_pending(msg, pending);
 }
 
-mrpc_status_t mrpc_send_request_noreply(const struct mrpc_protocol *protocol,
+exported mrpc_status_t mrpc_send_request_noreply(
+			const struct mrpc_protocol *protocol,
 			struct mrpc_connection *conn, int cmd, void *in)
 {
 	struct mrpc_message *msg;
@@ -164,7 +166,7 @@ mrpc_status_t mrpc_send_request_noreply(const struct mrpc_protocol *protocol,
 	return send_message(msg);
 }
 
-mrpc_status_t mrpc_send_reply(const struct mrpc_protocol *protocol,
+exported mrpc_status_t mrpc_send_reply(const struct mrpc_protocol *protocol,
 			struct mrpc_message *request, void *data)
 {
 	struct mrpc_message *reply;
@@ -182,7 +184,8 @@ mrpc_status_t mrpc_send_reply(const struct mrpc_protocol *protocol,
 	return MINIRPC_OK;
 }
 
-mrpc_status_t mrpc_send_reply_error(const struct mrpc_protocol *protocol,
+exported mrpc_status_t mrpc_send_reply_error(
+			const struct mrpc_protocol *protocol,
 			struct mrpc_message *request, mrpc_status_t status)
 {
 	struct mrpc_message *reply;
@@ -249,7 +252,7 @@ static struct mrpc_message *unqueue_event(struct mrpc_conn_set *set)
    the connection set is destroyed.  The application must close the fd when
    done with it.  The application must not read or write the fd, only select()
    on it.  When an event is ready to be processed, the fd will be readable. */
-int mrpc_get_event_fd(struct mrpc_conn_set *set)
+exported int mrpc_get_event_fd(struct mrpc_conn_set *set)
 {
 	return dup(set->events_notify_pipe[0]);
 }
@@ -430,7 +433,7 @@ static void dispatch_event(struct mrpc_message *msg)
 	}
 }
 
-int mrpc_dispatch_one(struct mrpc_conn_set *set)
+exported int mrpc_dispatch_one(struct mrpc_conn_set *set)
 {
 	struct mrpc_message *msg;
 	
@@ -440,7 +443,7 @@ int mrpc_dispatch_one(struct mrpc_conn_set *set)
 	return (msg != NULL);
 }
 
-int mrpc_dispatch_all(struct mrpc_conn_set *set)
+exported int mrpc_dispatch_all(struct mrpc_conn_set *set)
 {
 	int i;
 	
@@ -448,7 +451,7 @@ int mrpc_dispatch_all(struct mrpc_conn_set *set)
 	return i;
 }
 
-int mrpc_dispatch_loop(struct mrpc_conn_set *set)
+exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 {
 	struct mrpc_message *msg;
 	struct pollfd poll_s[2] = {{0}};

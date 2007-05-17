@@ -47,8 +47,8 @@ static int set_nonblock(int fd)
 	return 0;
 }
 
-int mrpc_conn_add(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
-			int fd, void *data)
+exported int mrpc_conn_add(struct mrpc_connection **new_conn,
+			struct mrpc_conn_set *set, int fd, void *data)
 {
 	struct mrpc_connection *conn;
 	struct epoll_event event;
@@ -93,7 +93,7 @@ int mrpc_conn_add(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 	return 0;
 }
 
-void mrpc_conn_remove(struct mrpc_connection *conn)
+exported void mrpc_conn_remove(struct mrpc_connection *conn)
 {
 	struct mrpc_conn_set *set=conn->set;
 	
@@ -105,7 +105,7 @@ void mrpc_conn_remove(struct mrpc_connection *conn)
 	free(conn);
 }
 
-mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
+exported mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
 			struct mrpc_protocol *protocol, void *ops)
 {
 	if (conn->set->protocol != protocol)
@@ -349,7 +349,7 @@ mrpc_status_t send_message(struct mrpc_message *msg)
 	return MINIRPC_OK;
 }
 
-int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
+exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 			const struct mrpc_protocol *protocol, int expected_fds,
 			unsigned conn_buckets, unsigned msg_buckets,
 			unsigned msg_max_buf_len)
@@ -424,7 +424,7 @@ bad_alloc:
 }
 
 /* XXX drops lots of stuff on the floor */
-void mrpc_conn_set_free(struct mrpc_conn_set *set)
+exported void mrpc_conn_set_free(struct mrpc_conn_set *set)
 {
 	write(set->shutdown_pipe[1], "s", 1);
 	pthread_mutex_lock(&set->events_lock);
