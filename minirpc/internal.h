@@ -40,6 +40,7 @@ struct mrpc_conn_set {
 };
 
 enum conn_state {
+	STATE_IDLE,
 	STATE_HEADER,
 	STATE_DATA
 };

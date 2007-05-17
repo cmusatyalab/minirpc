@@ -1,3 +1,7 @@
+#include <sys/types.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
 #include <sys/epoll.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -35,6 +39,11 @@ static struct mrpc_connection *conn_lookup(struct mrpc_conn_set *set, int fd)
 	return list_entry(head, struct mrpc_connection, lh_conns);
 }
 
+static int setsockoptval(int fd, int level, int optname, int value)
+{
+	return setsockopt(fd, level, optname, &value, sizeof(value));
+}
+
 static int set_nonblock(int fd)
 {
 	int flags;
@@ -68,7 +77,7 @@ exported int mrpc_conn_add(struct mrpc_connection **new_conn,
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
 	pthread_mutex_init(&conn->sync_wakeup_lock, NULL);
 	pthread_mutex_init(&conn->next_sequence_lock, NULL);
-	conn->send_state=STATE_HEADER;
+	conn->send_state=STATE_IDLE;
 	conn->recv_state=STATE_HEADER;
 	conn->set=set;
 	conn->fd=fd;
@@ -182,6 +191,8 @@ static void try_read_conn(struct mrpc_connection *conn)
 			buf=conn->recv_msg->data;
 			len=conn->recv_msg->hdr.datalen;
 			break;
+		default:
+			assert(0);
 		}
 		
 		if (conn->recv_offset < len) {
@@ -216,6 +227,8 @@ static void try_read_conn(struct mrpc_connection *conn)
 				conn->recv_offset=0;
 				conn->recv_msg=NULL;
 				break;
+			default:
+				assert(0);
 			}
 		}
 	}
@@ -261,8 +274,18 @@ static void try_write_conn(struct mrpc_connection *conn)
 				conn_kill(conn);
 				break;
 			}
-			if (conn->send_msg == NULL)
+			if (conn->send_msg == NULL) {
+				if (conn->send_state != STATE_IDLE) {
+					setsockoptval(conn->fd, SOL_TCP,
+								TCP_CORK, 0);
+					conn->send_state=STATE_IDLE;
+				}
 				break;
+			}
+			if (conn->send_state == STATE_IDLE) {
+				setsockoptval(conn->fd, SOL_TCP, TCP_CORK, 1);
+				conn->send_state=STATE_HEADER;
+			}
 		}
 		
 		switch (conn->send_state) {
@@ -274,6 +297,8 @@ static void try_write_conn(struct mrpc_connection *conn)
 			buf=conn->send_msg->data;
 			len=conn->send_msg->hdr.datalen;
 			break;
+		default:
+			assert(0);
 		}
 		
 		if (conn->send_offset < len) {
@@ -302,6 +327,8 @@ static void try_write_conn(struct mrpc_connection *conn)
 				mrpc_free_message(conn->send_msg);
 				conn->send_msg=NULL;
 				break;
+			default:
+				assert(0);
 			}
 		}
 	}
