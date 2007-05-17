@@ -6,7 +6,7 @@
 #define MINIRPC_PROTOCOL_H
 
 #include <rpc/xdr.h>
-#include "minirpc.h"
+#include <minirpc/minirpc.h>
 
 #define SET_PTR_IF_NOT_NULL(ptr, val) do { \
 		if ((ptr) != NULL) \

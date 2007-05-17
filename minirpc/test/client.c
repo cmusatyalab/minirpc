@@ -9,7 +9,7 @@
 #include <errno.h>
 #include <netdb.h>
 #include <pthread.h>
-#include "minirpc.h"
+#include <minirpc/minirpc.h>
 #include "test_client.h"
 
 #define SRVPORTSTR "58000"

@@ -688,7 +688,7 @@ sub genstubs {
 	
 	# Generate cpp directives
 	print MCF "#define MINIRPC_PROTOCOL\n";
-	print MCF "#include \"minirpc_protocol.h\"\n";
+	print MCF "#include <minirpc/protocol.h>\n";
 	print MCF "#include \"${base}_client.h\"\n";
 	print MCF "#include \"${base}_server.h\"\n";
 	print MHF "#ifndef " . uc $base . "_MINIRPC_H\n";

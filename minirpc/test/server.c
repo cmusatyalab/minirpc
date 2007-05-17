@@ -12,9 +12,9 @@
 #include <time.h>
 #include <errno.h>
 #include <pthread.h>
-#include "minirpc.h"
+#include <minirpc/minirpc.h>
+#include <minirpc/list.h>
 #include "test_server.h"
-#include "list.h"
 
 #define BACKLOG 16
 #define DEBUG

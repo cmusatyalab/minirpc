@@ -6,11 +6,11 @@
 #define MINIRPC_INTERNAL_H
 #define MINIRPC_PROTOCOL
 
-#include "minirpc.h"
-#include "minirpc_protocol.h"
+#include <minirpc/minirpc.h>
+#include <minirpc/protocol.h>
+#include <minirpc/list.h>
+#include <minirpc/hash.h>
 #include "minirpc_xdr.h"
-#include "list.h"
-#include "hash.h"
 
 #include "config.h"
 #ifdef HAVE_VISIBILITY
