@@ -12,6 +12,13 @@
 #include "list.h"
 #include "hash.h"
 
+#include "config.h"
+#ifdef HAVE_VISIBILITY
+#define exported __attribute__ ((visibility ("default")))
+#else
+#define exported
+#endif
+
 struct mrpc_conn_set {
 	const struct mrpc_protocol *protocol;
 	unsigned maxbuf;

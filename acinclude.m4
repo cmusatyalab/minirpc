@@ -59,3 +59,21 @@ AC_DEFUN([CHECK_COMPILE], [
 		AC_MSG_RESULT([no])
 	fi
 ])
+
+# CHECK_COMPILER_OPTION([OPTION], [DEFINE_IF_SUCCEEDS],
+#		[SUBST_OPTION_IF_SUCCEEDS])
+# -----------------------------------------------------------------------
+AC_DEFUN([CHECK_COMPILER_OPTION], [
+	AC_MSG_CHECKING([if compiler supports $1])
+	saved_cflags="$CFLAGS"
+	CFLAGS="$saved_cflags $1"
+	AC_COMPILE_IFELSE([AC_LANG_SOURCE([])], [result=ok], [result=bad])
+	if test z$result = zok ; then
+		AC_MSG_RESULT([yes])
+		AC_DEFINE([$2], 1, [Define to 1 if your compiler supports the $1 option.])
+		AC_SUBST([$3], [$1])
+	else
+		AC_MSG_RESULT([no])
+	fi
+	CFLAGS="$saved_cflags"
+])

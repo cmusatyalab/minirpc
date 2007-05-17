@@ -27,6 +27,10 @@ AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 AC_PROG_LIBTOOL
 
+# Checks for supported compiler options.
+CHECK_COMPILER_OPTION([-fvisibility=hidden], [HAVE_VISIBILITY],
+			[VISIBILITY_FLAG])
+
 AC_CONFIG_FILES([Makefile
 		minirpc/Makefile
 		minirpc/test/Makefile
