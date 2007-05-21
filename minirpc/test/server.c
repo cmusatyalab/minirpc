@@ -93,7 +93,7 @@ mrpc_status_t do_ping(void *conn_data, struct mrpc_message *msg)
 
 mrpc_status_t do_invalidate_ops(void *conn_data, struct mrpc_message *msg)
 {
-	if (test_server_set_operations(*(void**)conn_data, NULL))
+	if (test_server_set_operations(conn_data, NULL))
 		warn("Couldn't set operations");
 	return MINIRPC_OK;
 }
@@ -146,7 +146,6 @@ int main(int argc, char **argv)
 	struct sockaddr_in addr;
 	struct mrpc_conn_set *set;
 	struct mrpc_connection *conn;
-	void **ptrbuf;
 	
 	listenfd=socket(PF_INET, SOCK_STREAM, 0);
 	if (listenfd == -1)
@@ -178,14 +177,11 @@ int main(int argc, char **argv)
 		}
 		setsockoptval(fd, SOL_SOCKET, SO_KEEPALIVE, 1);
 		warn("Accepted connection");
-		/* XXX shouldn't be necessary */
-		ptrbuf=malloc(sizeof(*ptrbuf));
-		if (mrpc_conn_add(&conn, set, fd, (void*)ptrbuf)) {
+		if (mrpc_conn_add(&conn, set, fd, NULL)) {
 			warn("Error adding connection");
 			close(fd);
 			continue;
 		}
-		*ptrbuf=conn;
 		warn("Added connection");
 		if (test_server_set_operations(conn, &ops)) {
 			warn("Error setting operations struct");

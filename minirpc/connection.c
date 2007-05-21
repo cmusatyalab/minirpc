@@ -86,7 +86,7 @@ exported int mrpc_conn_add(struct mrpc_connection **new_conn,
 	conn->recv_state=STATE_HEADER;
 	conn->set=set;
 	conn->fd=fd;
-	conn->private=data;
+	conn->private = (data != NULL) ? data : conn;
 	conn->pending_replies=hash_alloc(set->msg_buckets, request_hash);
 	if (conn->pending_replies == NULL) {
 		free(conn);
