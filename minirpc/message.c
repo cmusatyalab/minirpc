@@ -354,13 +354,13 @@ static void dispatch_request(struct mrpc_message *request)
 		return;
 	}
 	
-	pthread_rwlock_rdlock(&conn->operations_lock);
+	pthread_mutex_lock(&conn->operations_lock);
 	if (conn->set->protocol->request != NULL)
 		result=conn->set->protocol->request(conn->operations,
 					conn->private, request,
 					request->hdr.cmd, request_data,
 					reply_data);
-	pthread_rwlock_unlock(&conn->operations_lock);
+	pthread_mutex_unlock(&conn->operations_lock);
 	xdr_free(request_type, request_data);
 	cond_free(request_data);
 	

@@ -7,6 +7,7 @@
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
+#include <assert.h>
 #include <pthread.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
@@ -61,6 +62,7 @@ exported int mrpc_conn_add(struct mrpc_connection **new_conn,
 {
 	struct mrpc_connection *conn;
 	struct epoll_event event;
+	pthread_mutexattr_t attr;
 	int ret;
 	
 	ret=set_nonblock(fd);
@@ -72,7 +74,10 @@ exported int mrpc_conn_add(struct mrpc_connection **new_conn,
 	memset(conn, 0, sizeof(*conn));
 	INIT_LIST_HEAD(&conn->lh_conns);
 	INIT_LIST_HEAD(&conn->send_msgs);
-	pthread_rwlock_init(&conn->operations_lock, NULL);
+	pthread_mutexattr_init(&attr);
+	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
+	pthread_mutex_init(&conn->operations_lock, &attr);
+	pthread_mutexattr_destroy(&attr);
 	pthread_mutex_init(&conn->send_msgs_lock, NULL);
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
 	pthread_mutex_init(&conn->sync_wakeup_lock, NULL);
@@ -119,9 +124,9 @@ exported mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
 {
 	if (conn->set->protocol != protocol)
 		return MINIRPC_INVALID_ARGUMENT;
-	pthread_rwlock_wrlock(&conn->operations_lock);
+	pthread_mutex_lock(&conn->operations_lock);
 	conn->operations=ops;
-	pthread_rwlock_unlock(&conn->operations_lock);
+	pthread_mutex_unlock(&conn->operations_lock);
 	return MINIRPC_OK;
 }
 

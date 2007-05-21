@@ -63,7 +63,7 @@ struct mrpc_connection {
 	void *private;
 	
 	void *operations;
-	pthread_rwlock_t operations_lock;
+	pthread_mutex_t operations_lock;
 	
 	struct list_head send_msgs;
 	pthread_mutex_t send_msgs_lock;
