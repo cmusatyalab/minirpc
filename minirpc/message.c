@@ -353,6 +353,12 @@ static void dispatch_request(struct mrpc_message *request)
 		cond_free(reply_data);
 		return;
 	}
+	/* We don't need the serialized request data anymore.  The request
+	   struct may stay around for a while, so free up some memory.  We
+	   need to do this before the request function is called to prevent
+	   a race leading to double-free(). */
+	cond_free(request->data);
+	request->data=NULL;
 	
 	pthread_mutex_lock(&conn->operations_lock);
 	if (conn->set->protocol->request != NULL)
@@ -368,11 +374,6 @@ static void dispatch_request(struct mrpc_message *request)
 		if (result == MINIRPC_PENDING) {
 			xdr_free(reply_type, reply_data);
 			cond_free(reply_data);
-			/* This struct is going to stay around for a while,
-			   but we won't need the serialized request data
-			   anymore.  Free up some memory. */
-			cond_free(request->data);
-			request->data=NULL;
 			return;
 		}
 		if (result)
