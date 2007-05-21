@@ -5,6 +5,16 @@
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
+static int empty_pipe(int fd)
+{
+	char buf[8];
+	int count;
+	ssize_t ret;
+	
+	for (count=0; (ret=read(fd, buf, sizeof(buf))) >= 0; count += ret);
+	return count;
+}
+
 static int conn_is_plugged(struct mrpc_connection *conn)
 {
 	return (conn->plugged_event != NULL || conn->plugged_user != 0);
@@ -31,16 +41,6 @@ void queue_event(struct mrpc_message *msg)
 	list_add_tail(&msg->lh_msgs, &conn->event_msgs);
 	try_queue_conn(conn);
 	pthread_mutex_unlock(&conn->set->events_lock);
-}
-
-static int empty_pipe(int fd)
-{
-	char buf[8];
-	int count;
-	ssize_t ret;
-	
-	for (count=0; (ret=read(fd, buf, sizeof(buf))) >= 0; count += ret);
-	return count;
 }
 
 static struct mrpc_message *unqueue_event(struct mrpc_conn_set *set)
