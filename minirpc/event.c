@@ -69,10 +69,10 @@ static struct mrpc_message *unqueue_event(struct mrpc_conn_set *set)
 	return msg;
 }
 
-exported mrpc_status_t mrpc_unplug_event(struct mrpc_message *msg)
+/* This is safe even if msg has already been freed */
+static mrpc_status_t _mrpc_unplug_event(struct mrpc_connection *conn,
+			struct mrpc_message *msg)
 {
-	struct mrpc_connection *conn=msg->conn;
-	
 	pthread_mutex_lock(&conn->set->events_lock);
 	if (conn->plugged_event == NULL || conn->plugged_event != msg)
 		return MINIRPC_INVALID_ARGUMENT;
@@ -81,6 +81,12 @@ exported mrpc_status_t mrpc_unplug_event(struct mrpc_message *msg)
 	try_queue_conn(conn);
 	pthread_mutex_unlock(&conn->set->events_lock);
 	return MINIRPC_OK;
+}
+
+/* This is not safe if msg has been freed */
+exported mrpc_status_t mrpc_unplug_event(struct mrpc_message *msg)
+{
+	return _mrpc_unplug_event(msg->conn, msg);
 }
 
 /* Will not affect events already in processing */
@@ -181,9 +187,7 @@ static void dispatch_request(struct mrpc_message *request)
 		return;
 	}
 	/* We don't need the serialized request data anymore.  The request
-	   struct may stay around for a while, so free up some memory.  We
-	   need to do this before the request function is called to prevent
-	   a race leading to double-free(). */
+	   struct may stay around for a while, so free up some memory. */
 	cond_free(request->data);
 	request->data=NULL;
 	
@@ -193,8 +197,13 @@ static void dispatch_request(struct mrpc_message *request)
 					conn->private, request,
 					request->hdr.cmd, request_data,
 					reply_data);
+	/* Note: if the application returned MINIRPC_PENDING and then
+	   immediately sent its reply from another thread, the request has
+	   already been freed.  So, if result == MINIRPC_PENDING, we can't
+	   access @request anymore. */
 	pthread_mutex_unlock(&conn->operations_lock);
-	mrpc_unplug_event(request);
+	/* This is safe even if request is invalid */
+	_mrpc_unplug_event(conn, request);
 	xdr_free(request_type, request_data);
 	cond_free(request_data);
 	
