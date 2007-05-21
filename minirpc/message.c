@@ -446,9 +446,9 @@ static void run_reply_callback(struct mrpc_message *reply)
 	   arguments gets three, and a function expecting four arguments gets
 	   four. */
 	if (size)
-		longfn(reply->conn->private, reply->private, ret, out);
+		longfn(reply->conn->private, reply->private, reply, ret, out);
 	else
-		shortfn(reply->conn->private, reply->private, ret);
+		shortfn(reply->conn->private, reply->private, reply, ret);
 	mrpc_unplug_event(reply);
 	mrpc_free_message(reply);
 }

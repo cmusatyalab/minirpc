@@ -64,8 +64,8 @@ void error_sync(struct mrpc_connection *conn)
 	warn("...success");
 }
 
-void query_callback(void *conn_private, void *msg_private, int status,
-			TestReply *reply)
+void query_callback(void *conn_private, void *msg_private,
+			struct mrpc_message *msg, int status, TestReply *reply)
 {
 	int request=(int)msg_private;
 	
