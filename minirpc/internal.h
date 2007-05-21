@@ -28,7 +28,7 @@ struct mrpc_conn_set {
 	struct htable *conns;
 	pthread_mutex_t conns_lock;
 	
-	struct list_head events;
+	struct list_head event_conns;
 	int events_notify_pipe[2];
 	pthread_mutex_t events_lock;
 	
@@ -82,9 +82,16 @@ struct mrpc_connection {
 	pthread_mutex_t pending_replies_lock;
 	pthread_mutex_t sync_wakeup_lock;
 	
+	struct list_head lh_event_conns;
+	struct list_head event_msgs;	/* protected by set->events_lock */
+	unsigned events_plugged;
+	struct mrpc_message *current_event; /* when PLUGGED_BUSY */
+	
 	int next_sequence;
 	pthread_mutex_t next_sequence_lock;
 };
+
+#define PLUGGED_BUSY 0x1
 
 /* connection.c */
 mrpc_status_t send_message(struct mrpc_message *msg);

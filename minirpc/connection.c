@@ -74,6 +74,8 @@ exported int mrpc_conn_add(struct mrpc_connection **new_conn,
 	memset(conn, 0, sizeof(*conn));
 	INIT_LIST_HEAD(&conn->lh_conns);
 	INIT_LIST_HEAD(&conn->send_msgs);
+	INIT_LIST_HEAD(&conn->lh_event_conns);
+	INIT_LIST_HEAD(&conn->event_msgs);
 	pthread_mutexattr_init(&attr);
 	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
 	pthread_mutex_init(&conn->operations_lock, &attr);
@@ -397,7 +399,7 @@ exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 	pthread_mutex_init(&set->conns_lock, NULL);
 	pthread_mutex_init(&set->events_lock, NULL);
 	pthread_cond_init(&set->events_threads_cond, NULL);
-	INIT_LIST_HEAD(&set->events);
+	INIT_LIST_HEAD(&set->event_conns);
 	set->conns=hash_alloc(conn_buckets, conn_hash);
 	if (set->conns == NULL)
 		goto bad_conns;
