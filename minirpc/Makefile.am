@@ -21,7 +21,7 @@ BUILT_SOURCES = $(GEN_H)
 SUBDIRS = test
 
 lib_LTLIBRARIES = libminirpc.la
-libminirpc_la_SOURCES = connection.c message.c serialize.c xdr_len.c
+libminirpc_la_SOURCES = connection.c message.c event.c serialize.c xdr_len.c
 libminirpc_la_SOURCES += internal.h $(GEN)
 EXTHEADERS = minirpc.h protocol.h list.h hash.h
 nobase_include_HEADERS = $(foreach hf,$(EXTHEADERS),minirpc/$(hf))
