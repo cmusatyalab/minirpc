@@ -61,7 +61,7 @@ exported int mrpc_conn_add(struct mrpc_connection **new_conn,
 			struct mrpc_conn_set *set, int fd, void *data)
 {
 	struct mrpc_connection *conn;
-	struct epoll_event event;
+	struct epoll_event event={0};
 	pthread_mutexattr_t attr;
 	int ret;
 	
@@ -134,7 +134,7 @@ exported mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
 
 static int need_writable(struct mrpc_connection *conn, int writable)
 {
-	struct epoll_event event;
+	struct epoll_event event={0};
 	
 	event.data.ptr=conn;
 	event.events=POLLEVENTS;
@@ -389,7 +389,7 @@ exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 			unsigned msg_max_buf_len)
 {
 	struct mrpc_conn_set *set;
-	struct epoll_event event;
+	struct epoll_event event={0};
 	int ret=-ENOMEM;
 	
 	set=malloc(sizeof(*set));
