@@ -13,16 +13,22 @@ enum mrpc_status_codes {
 };
 typedef int mrpc_status_t;
 
+struct mrpc_config {
+	const struct mrpc_protocol *protocol;
+	unsigned expected_fds;
+	unsigned conn_buckets;
+	unsigned msg_buckets;
+	unsigned msg_max_buf_len;
+};
+
 struct mrpc_protocol;
 struct mrpc_conn_set;
 struct mrpc_connection;
 struct mrpc_message;
 
 /* connection.c */
-int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
-			const struct mrpc_protocol *protocol, int expected_fds,
-			unsigned conn_buckets, unsigned msg_buckets,
-			unsigned msg_max_buf_len);
+int mrpc_conn_set_alloc(const struct mrpc_config *config,
+			struct mrpc_conn_set **new_set);
 void mrpc_conn_set_free(struct mrpc_conn_set *set);
 int mrpc_conn_add(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 			int fd, void *data);

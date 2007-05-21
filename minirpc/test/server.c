@@ -42,6 +42,10 @@ static pthread_cond_t cond;
 static pthread_t runner_thread;
 static pthread_t callback_thread;
 
+static const struct mrpc_config config = {
+	.protocol = &test_server
+};
+
 void setsockoptval(int fd, int level, int optname, int value)
 {
 	if (setsockopt(fd, level, optname, &value, sizeof(value)))
@@ -159,7 +163,7 @@ int main(int argc, char **argv)
 	if (listen(listenfd, BACKLOG))
 		die("Couldn't listen on socket");
 	
-	if (mrpc_conn_set_alloc(&set, &test_server, 16, 16, 16, 140000))
+	if (mrpc_conn_set_alloc(&config, &set))
 		die("Couldn't allocate connection set");
 	INIT_LIST_HEAD(&pending);
 	pthread_mutex_init(&lock, NULL);

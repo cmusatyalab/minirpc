@@ -124,7 +124,7 @@ static void fail_request(struct mrpc_message *request, mrpc_status_t err)
 {
 	mrpc_unplug_event(request);
 	if (request->hdr.cmd >= 0) {
-		if (mrpc_send_reply_error(request->conn->set->protocol,
+		if (mrpc_send_reply_error(request->conn->set->config.protocol,
 					request, err))
 			mrpc_free_message(request);
 	} else {
@@ -147,7 +147,7 @@ static void dispatch_request(struct mrpc_message *request)
 	
 	assert(request->hdr.status == MINIRPC_PENDING);
 	
-	if (conn->set->protocol->receiver_request_info(request->hdr.cmd,
+	if (conn->set->config.protocol->receiver_request_info(request->hdr.cmd,
 				&request_type, NULL)) {
 		/* Unknown opcode */
 		fail_request(request, MINIRPC_PROCEDURE_UNAVAIL);
@@ -156,7 +156,8 @@ static void dispatch_request(struct mrpc_message *request)
 	
 	doreply=(request->hdr.cmd >= 0);
 	if (doreply) {
-		if (conn->set->protocol->receiver_reply_info(request->hdr.cmd,
+		if (conn->set->config.protocol->
+					receiver_reply_info(request->hdr.cmd,
 					&reply_type, &reply_size)) {
 			/* Can't happen if the info tables are well-formed */
 			fail_request(request, MINIRPC_ENCODING_ERR);
@@ -187,8 +188,8 @@ static void dispatch_request(struct mrpc_message *request)
 	request->data=NULL;
 	
 	pthread_mutex_lock(&conn->operations_lock);
-	if (conn->set->protocol->request != NULL)
-		result=conn->set->protocol->request(conn->operations,
+	if (conn->set->config.protocol->request != NULL)
+		result=conn->set->config.protocol->request(conn->operations,
 					conn->private, request,
 					request->hdr.cmd, request_data,
 					reply_data);
@@ -204,10 +205,10 @@ static void dispatch_request(struct mrpc_message *request)
 			return;
 		}
 		if (result)
-			ret=mrpc_send_reply_error(conn->set->protocol, request,
-						result);
+			ret=mrpc_send_reply_error(conn->set->config.protocol,
+						request, result);
 		else
-			ret=mrpc_send_reply(conn->set->protocol, request,
+			ret=mrpc_send_reply(conn->set->config.protocol, request,
 						reply_data);
 		xdr_free(reply_type, reply_data);
 		cond_free(reply_data);
@@ -228,7 +229,7 @@ static void run_reply_callback(struct mrpc_message *reply)
 	unsigned size;
 	mrpc_status_t ret;
 	
-	ret=reply->conn->set->protocol->sender_reply_info(reply->hdr.cmd,
+	ret=reply->conn->set->config.protocol->sender_reply_info(reply->hdr.cmd,
 				NULL, &size);
 	if (ret) {
 		/* XXX */

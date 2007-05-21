@@ -20,10 +20,7 @@
 #endif
 
 struct mrpc_conn_set {
-	const struct mrpc_protocol *protocol;
-	unsigned maxbuf;
-	unsigned expected_fds;
-	unsigned msg_buckets;
+	struct mrpc_config config;
 	
 	struct htable *conns;
 	pthread_mutex_t conns_lock;

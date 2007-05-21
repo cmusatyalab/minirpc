@@ -20,6 +20,10 @@
 
 static pthread_t thread;
 
+static const struct mrpc_config config = {
+	.protocol = &test_client
+};
+
 void query_sync(struct mrpc_connection *conn)
 {
 	struct TestRequest request;
@@ -161,7 +165,7 @@ int main(int argc, char **argv)
 	if (argc != 2)
 		die("Usage: %s hostname", argv[0]);
 	
-	if (mrpc_conn_set_alloc(&set, &test_client, 16, 16, 16, 16000))
+	if (mrpc_conn_set_alloc(&config, &set))
 		die("Couldn't allocate conn set");
 	
 	hints.ai_family=PF_INET;

@@ -89,7 +89,7 @@ exported int mrpc_conn_add(struct mrpc_connection **new_conn,
 	conn->set=set;
 	conn->fd=fd;
 	conn->private = (data != NULL) ? data : conn;
-	conn->pending_replies=hash_alloc(set->msg_buckets, request_hash);
+	conn->pending_replies=hash_alloc(set->config.msg_buckets, request_hash);
 	if (conn->pending_replies == NULL) {
 		free(conn);
 		return -ENOMEM;
@@ -124,7 +124,7 @@ exported void mrpc_conn_remove(struct mrpc_connection *conn)
 exported mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
 			struct mrpc_protocol *protocol, void *ops)
 {
-	if (conn->set->protocol != protocol)
+	if (conn->set->config.protocol != protocol)
 		return MINIRPC_INVALID_ARGUMENT;
 	pthread_mutex_lock(&conn->operations_lock);
 	conn->operations=ops;
@@ -158,7 +158,7 @@ static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
 				sizeof(conn->recv_msg->hdr));
 	if (ret)
 		return ret;
-	if (conn->recv_msg->hdr.datalen > conn->set->maxbuf) {
+	if (conn->recv_msg->hdr.datalen > conn->set->config.msg_max_buf_len) {
 		/* XXX doesn't get returned to client if request */
   		return MINIRPC_ENCODING_ERR;
 	}
@@ -346,12 +346,13 @@ static void try_write_conn(struct mrpc_connection *conn)
 static void *listener(void *data)
 {
 	struct mrpc_conn_set *set=data;
-	struct epoll_event events[set->expected_fds];
+	struct epoll_event events[set->config.expected_fds];
 	int count;
 	int i;
 	
 	while (1) {
-		count=epoll_wait(set->epoll_fd, events, set->expected_fds, -1);
+		count=epoll_wait(set->epoll_fd, events,
+					set->config.expected_fds, -1);
 		for (i=0; i<count; i++) {
 			if (events[i].data.ptr == set)
 				return NULL;
@@ -383,10 +384,22 @@ mrpc_status_t send_message(struct mrpc_message *msg)
 	return MINIRPC_OK;
 }
 
-exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
-			const struct mrpc_protocol *protocol, int expected_fds,
-			unsigned conn_buckets, unsigned msg_buckets,
-			unsigned msg_max_buf_len)
+#define copy_default(from, to, field, default) do { \
+		to->field=from->field ? from->field : default; \
+	} while (0)
+static void validate_copy_config(const struct mrpc_config *from,
+			struct mrpc_config *to)
+{
+	copy_default(from, to, protocol, from->protocol);
+	copy_default(from, to, expected_fds, 16);
+	copy_default(from, to, conn_buckets, 16);
+	copy_default(from, to, msg_buckets, 16);
+	copy_default(from, to, msg_max_buf_len, 16000);
+}
+#undef copy_default
+
+exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
+			struct mrpc_conn_set **new_set)
 {
 	struct mrpc_conn_set *set;
 	struct epoll_event event={0};
@@ -396,17 +409,14 @@ exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 	if (set == NULL)
 		goto bad_alloc;
 	memset(set, 0, sizeof(*set));
+	validate_copy_config(config, &set->config);
 	pthread_mutex_init(&set->conns_lock, NULL);
 	pthread_mutex_init(&set->events_lock, NULL);
 	pthread_cond_init(&set->events_threads_cond, NULL);
 	INIT_LIST_HEAD(&set->event_conns);
-	set->conns=hash_alloc(conn_buckets, conn_hash);
+	set->conns=hash_alloc(set->config.conn_buckets, conn_hash);
 	if (set->conns == NULL)
 		goto bad_conns;
-	set->protocol=protocol;
-	set->maxbuf=msg_max_buf_len;
-	set->expected_fds=expected_fds;
-	set->msg_buckets=msg_buckets;
 	if (pipe(set->shutdown_pipe)) {
 		ret=-errno;
 		goto bad_shutdown_pipe;
@@ -419,7 +429,7 @@ exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 		goto bad_nonblock;
 	if (set_nonblock(set->events_notify_pipe[1]))
 		goto bad_nonblock;
-	set->epoll_fd=epoll_create(expected_fds);
+	set->epoll_fd=epoll_create(set->config.expected_fds);
 	if (set->epoll_fd < 0) {
 		ret=-errno;
 		goto bad_epoll;
