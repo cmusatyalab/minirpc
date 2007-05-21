@@ -205,19 +205,32 @@ exported mrpc_status_t mrpc_send_reply_error(
 	return MINIRPC_OK;
 }
 
+static int conn_is_plugged(struct mrpc_connection *conn)
+{
+	return (conn->plugged_event != NULL || conn->plugged_user != 0);
+}
+
+/* set->events_lock must be held */
+static void try_queue_conn(struct mrpc_connection *conn)
+{
+	struct mrpc_conn_set *set=conn->set;
+	
+	if (conn_is_plugged(conn) || list_is_empty(&conn->event_msgs) ||
+				!list_is_empty(&conn->lh_event_conns))
+		return;
+	if (list_is_empty(&set->event_conns))
+		write(set->events_notify_pipe[1], "a", 1);
+	list_add_tail(&conn->lh_event_conns, &set->event_conns);
+}
+
 static void queue_event(struct mrpc_message *msg)
 {
 	struct mrpc_connection *conn=msg->conn;
-	struct mrpc_conn_set *set=conn->set;
 	
-	pthread_mutex_lock(&set->events_lock);
+	pthread_mutex_lock(&conn->set->events_lock);
 	list_add_tail(&msg->lh_msgs, &conn->event_msgs);
-	if (!conn->events_plugged && list_is_empty(&conn->lh_event_conns)) {
-		if (list_is_empty(&set->event_conns))
-			write(set->events_notify_pipe[1], "a", 1);
-		list_add_tail(&conn->lh_event_conns, &set->event_conns);
-	}
-	pthread_mutex_unlock(&set->events_lock);
+	try_queue_conn(conn);
+	pthread_mutex_unlock(&conn->set->events_lock);
 }
 
 static int empty_pipe(int fd)
@@ -250,27 +263,50 @@ static struct mrpc_message *unqueue_event(struct mrpc_conn_set *set)
 		msg=list_first_entry(&conn->event_msgs, struct mrpc_message,
 					lh_msgs);
 		list_del_init(&msg->lh_msgs);
-		conn->events_plugged |= PLUGGED_BUSY;
-		conn->current_event=msg;
+		conn->plugged_event=msg;
 	}
 	pthread_mutex_unlock(&set->events_lock);
 	return msg;
 }
 
-exported int mrpc_unplug_event(struct mrpc_message *msg)
+exported mrpc_status_t mrpc_unplug_event(struct mrpc_message *msg)
 {
 	struct mrpc_connection *conn=msg->conn;
 	
 	pthread_mutex_lock(&conn->set->events_lock);
-	if (!(conn->events_plugged & PLUGGED_BUSY) ||
-				conn->current_event != msg)
+	if (conn->plugged_event == NULL || conn->plugged_event != msg)
 		return MINIRPC_INVALID_ARGUMENT;
 	assert(list_is_empty(&conn->lh_event_conns));
-	conn->events_plugged &= ~PLUGGED_BUSY;
-	if (!conn->events_plugged && !list_is_empty(&conn->event_msgs))
-		list_add_tail(&conn->lh_event_conns, &conn->set->event_conns);
+	conn->plugged_event=NULL;
+	try_queue_conn(conn);
 	pthread_mutex_unlock(&conn->set->events_lock);
 	return MINIRPC_OK;
+}
+
+/* Will not affect events already in processing */
+exported mrpc_status_t mrpc_plug_conn(struct mrpc_connection *conn)
+{
+	pthread_mutex_lock(&conn->set->events_lock);
+	conn->plugged_user++;
+	if (!list_is_empty(&conn->lh_event_conns))
+		list_del_init(&conn->lh_event_conns);
+	pthread_mutex_unlock(&conn->set->events_lock);
+	return MINIRPC_OK;
+}
+
+exported mrpc_status_t mrpc_unplug_conn(struct mrpc_connection *conn)
+{
+	mrpc_status_t ret=MINIRPC_OK;
+	
+	pthread_mutex_lock(&conn->set->events_lock);
+	if (conn->plugged_user) {
+		conn->plugged_user--;
+		try_queue_conn(conn);
+	} else {
+		ret=MINIRPC_INVALID_ARGUMENT;
+	}
+	pthread_mutex_unlock(&conn->set->events_lock);
+	return ret;
 }
 
 /* Return a copy of the notify fd.  This ensures that the application can never

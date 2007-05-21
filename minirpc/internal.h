@@ -84,14 +84,12 @@ struct mrpc_connection {
 	
 	struct list_head lh_event_conns;
 	struct list_head event_msgs;	/* protected by set->events_lock */
-	unsigned events_plugged;
-	struct mrpc_message *current_event; /* when PLUGGED_BUSY */
+	struct mrpc_message *plugged_event;
+	unsigned plugged_user;
 	
 	int next_sequence;
 	pthread_mutex_t next_sequence_lock;
 };
-
-#define PLUGGED_BUSY 0x1
 
 /* connection.c */
 mrpc_status_t send_message(struct mrpc_message *msg);

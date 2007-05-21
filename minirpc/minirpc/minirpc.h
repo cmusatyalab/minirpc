@@ -33,6 +33,8 @@ int mrpc_get_event_fd(struct mrpc_conn_set *set);
 int mrpc_dispatch_one(struct mrpc_conn_set *set);
 int mrpc_dispatch_all(struct mrpc_conn_set *set);
 int mrpc_dispatch_loop(struct mrpc_conn_set *set);
-int mrpc_unplug_event(struct mrpc_message *msg);
+mrpc_status_t mrpc_plug_conn(struct mrpc_connection *conn);
+mrpc_status_t mrpc_unplug_conn(struct mrpc_connection *conn);
+mrpc_status_t mrpc_unplug_event(struct mrpc_message *msg);
 
 #endif
