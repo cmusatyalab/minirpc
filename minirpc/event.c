@@ -316,6 +316,11 @@ static void dispatch_event(struct mrpc_event *event)
 	case EVENT_DISCONNECT:
 		run_disconnect_method(event);
 		break;
+	case EVENT_IOERR:
+		if (event->conn->set->ops->ioerr)
+			event->conn->set->ops->ioerr(event->conn->private,
+						event->errstring);
+		break;
 	default:
 		assert(0);
 	}

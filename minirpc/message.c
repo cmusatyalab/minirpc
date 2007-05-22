@@ -223,7 +223,17 @@ void process_incoming_message(struct mrpc_message *msg)
 		if (pending == NULL || pending->cmd != msg->hdr.cmd ||
 					(msg->hdr.status != 0 &&
 					msg->hdr.datalen != 0)) {
-			/* XXX what is this thing we received? */
+			event=mrpc_alloc_event(conn, EVENT_IOERR);
+			if (event) {
+				if (asprintf(&event->errstring,
+						"Unmatched reply, seq %u cmd "
+						"%d status %d len %u",
+						msg->hdr.sequence,
+						msg->hdr.cmd, msg->hdr.status,
+						msg->hdr.datalen))
+					event->errstring=NULL;
+				queue_event(event);
+			}
 			mrpc_free_message(msg);
 			if (pending != NULL)
 				free(pending);

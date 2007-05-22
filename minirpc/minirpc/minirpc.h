@@ -35,8 +35,7 @@ enum mrpc_disc_reason {
 struct mrpc_set_operations {
 	void (*accept)(void *set_data, struct mrpc_connection *conn);
 	void (*disconnect)(void *conn_data, enum mrpc_disc_reason reason);
-	void (*transmit_error)(void *conn_data, unsigned sequence);
-	void (*receive_error)(void *conn_data, unsigned sequence);
+	void (*ioerr)(void *conn_data, char *message);
 };
 
 /* connection.c */

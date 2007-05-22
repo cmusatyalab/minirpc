@@ -41,7 +41,8 @@ struct mrpc_conn_set {
 enum event_type {
 	EVENT_REQUEST,
 	EVENT_REPLY,
-	EVENT_DISCONNECT
+	EVENT_DISCONNECT,
+	EVENT_IOERR
 };
 
 struct mrpc_event {
@@ -58,6 +59,9 @@ struct mrpc_event {
 	
 	/* disconnect */
 	enum mrpc_disc_reason disc_reason;
+	
+	/* message errors */
+	char *errstring;
 };
 
 struct mrpc_message {

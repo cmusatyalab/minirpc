@@ -278,7 +278,6 @@ static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 	return MINIRPC_OK;
 }
 
-/* XXX cork would be useful here */
 static void try_write_conn(struct mrpc_connection *conn)
 {
 	ssize_t count;
@@ -353,7 +352,6 @@ static void try_write_conn(struct mrpc_connection *conn)
 }
 
 /* XXX signal handling */
-/* XXX need provisions for connection timeout */
 static void *listener(void *data)
 {
 	struct mrpc_conn_set *set=data;
