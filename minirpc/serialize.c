@@ -1,3 +1,4 @@
+#include <assert.h>
 #include <pthread.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
@@ -23,7 +24,7 @@ void cond_free(void *ptr)
 
 void mrpc_free_message(struct mrpc_message *msg)
 {
-	/* XXX make sure list is empty */
+	assert(list_is_empty(&msg->lh_msgs));
 	cond_free(msg->data);
 	free(msg);
 }

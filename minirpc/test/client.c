@@ -20,10 +20,6 @@
 
 static pthread_t thread;
 
-static const struct mrpc_config config = {
-	.protocol = &test_client
-};
-
 void query_sync(struct mrpc_connection *conn)
 {
 	struct TestRequest request;
@@ -153,6 +149,19 @@ void *runner(void *set)
 	return NULL;
 }
 
+void ops_disconnect(void *conn_data, enum mrpc_disc_reason reason)
+{
+	warn("Disconnect: %d", reason);
+}
+
+static const struct mrpc_config config = {
+	.protocol = &test_client
+};
+
+static const struct mrpc_set_operations set_ops = {
+	.disconnect = ops_disconnect
+};
+
 int main(int argc, char **argv)
 {
 	struct mrpc_conn_set *set;
@@ -165,7 +174,7 @@ int main(int argc, char **argv)
 	if (argc != 2)
 		die("Usage: %s hostname", argv[0]);
 	
-	if (mrpc_conn_set_alloc(&config, &set))
+	if (mrpc_conn_set_alloc(&config, &set_ops, NULL, &set))
 		die("Couldn't allocate conn set");
 	
 	hints.ai_family=PF_INET;

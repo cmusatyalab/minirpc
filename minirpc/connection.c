@@ -75,7 +75,7 @@ exported int mrpc_conn_add(struct mrpc_connection **new_conn,
 	INIT_LIST_HEAD(&conn->lh_conns);
 	INIT_LIST_HEAD(&conn->send_msgs);
 	INIT_LIST_HEAD(&conn->lh_event_conns);
-	INIT_LIST_HEAD(&conn->event_msgs);
+	INIT_LIST_HEAD(&conn->events);
 	pthread_mutexattr_init(&attr);
 	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
 	pthread_mutex_init(&conn->operations_lock, &attr);
@@ -143,10 +143,18 @@ static int need_writable(struct mrpc_connection *conn, int writable)
 	return epoll_ctl(conn->set->epoll_fd, EPOLL_CTL_MOD, conn->fd, &event);
 }
 
-static void conn_kill(struct mrpc_connection *conn)
+static void conn_close(struct mrpc_connection *conn,
+			enum mrpc_disc_reason reason)
 {
-	close(conn->fd);
+	struct mrpc_event *event;
+	
 	/* XXX */
+	close(conn->fd);
+	event=mrpc_alloc_event(conn, EVENT_DISCONNECT);
+	if (event != NULL) {
+		event->disc_reason=reason;
+		queue_event(event);
+	}
 }
 
 static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
@@ -209,8 +217,11 @@ static void try_read_conn(struct mrpc_connection *conn)
 				continue;
 			} else if (count == -1 && errno == EAGAIN) {
 				return;
-			} else if (count == 0 || count == -1) {
-				conn_kill(conn);
+			} else if (count == 0) {
+				conn_close(conn, MRPC_DISC_CLOSED);
+				return;
+			} else if (count == -1) {
+				conn_close(conn, MRPC_DISC_IOERR);
 				return;
 			}
 			printf("Read %d bytes\n", count);
@@ -277,9 +288,9 @@ static void try_write_conn(struct mrpc_connection *conn)
 	while (1) {
 		if (conn->send_msg == NULL) {
 			if (get_next_message(conn)) {
-				/* XXX */
-				conn_kill(conn);
-				break;
+				/* Message dropped on floor.  Better luck
+				   next time? */
+				continue;
 			}
 			if (conn->send_msg == NULL) {
 				if (conn->send_state != STATE_IDLE) {
@@ -316,7 +327,7 @@ static void try_write_conn(struct mrpc_connection *conn)
 			} else if (count == -1 && errno == EINTR) {
 				continue;
 			} else if (count == -1) {
-				conn_kill(conn);
+				conn_close(conn, MRPC_DISC_IOERR);
 				break;
 			}
 			conn->send_offset += count;
@@ -356,8 +367,13 @@ static void *listener(void *data)
 		for (i=0; i<count; i++) {
 			if (events[i].data.ptr == set)
 				return NULL;
-			if (events[i].events & (EPOLLERR | EPOLLHUP)) {
-				conn_kill(events[i].data.ptr);
+			if (events[i].events & EPOLLERR) {
+				conn_close(events[i].data.ptr, MRPC_DISC_IOERR);
+				continue;
+			}
+			if (events[i].events & EPOLLHUP) {
+				conn_close(events[i].data.ptr,
+							MRPC_DISC_CLOSED);
 				continue;
 			}
 			if (events[i].events & EPOLLOUT)
@@ -399,12 +415,15 @@ static void validate_copy_config(const struct mrpc_config *from,
 #undef copy_default
 
 exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
-			struct mrpc_conn_set **new_set)
+			const struct mrpc_set_operations *ops,
+			void *set_data,	struct mrpc_conn_set **new_set)
 {
 	struct mrpc_conn_set *set;
 	struct epoll_event event={0};
 	int ret=-ENOMEM;
 	
+	if (config == NULL || ops == NULL || new_set == NULL)
+		return -EINVAL;
 	set=malloc(sizeof(*set));
 	if (set == NULL)
 		goto bad_alloc;
@@ -414,6 +433,8 @@ exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
 	pthread_mutex_init(&set->events_lock, NULL);
 	pthread_cond_init(&set->events_threads_cond, NULL);
 	INIT_LIST_HEAD(&set->event_conns);
+	set->ops=ops;
+	set->private = (set_data != NULL) ? set_data : set;
 	set->conns=hash_alloc(set->config.conn_buckets, conn_hash);
 	if (set->conns == NULL)
 		goto bad_conns;

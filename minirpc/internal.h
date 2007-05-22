@@ -21,6 +21,8 @@
 
 struct mrpc_conn_set {
 	struct mrpc_config config;
+	const struct mrpc_set_operations *ops;
+	void *private;
 	
 	struct htable *conns;
 	pthread_mutex_t conns_lock;
@@ -36,21 +38,40 @@ struct mrpc_conn_set {
 	pthread_cond_t events_threads_cond;
 };
 
-enum conn_state {
-	STATE_IDLE,
-	STATE_HEADER,
-	STATE_DATA
+enum event_type {
+	EVENT_REQUEST,
+	EVENT_REPLY,
+	EVENT_DISCONNECT
+};
+
+struct mrpc_event {
+	struct list_head lh_events;
+	enum event_type type;
+	struct mrpc_connection *conn;
+	
+	/* request/reply */
+	struct mrpc_message *msg;
+	
+	/* reply */
+	reply_callback_fn *callback;
+	void *private;
+	
+	/* disconnect */
+	enum mrpc_disc_reason disc_reason;
 };
 
 struct mrpc_message {
 	struct mrpc_connection *conn;
+	struct mrpc_event *event;
 	struct list_head lh_msgs;
 	struct mrpc_header hdr;
 	char *data;
-	
-	/* For async callbacks */
-	reply_callback_fn *callback;
-	void *private;
+};
+
+enum conn_state {
+	STATE_IDLE,
+	STATE_HEADER,
+	STATE_DATA
 };
 
 struct mrpc_connection {
@@ -80,8 +101,8 @@ struct mrpc_connection {
 	pthread_mutex_t sync_wakeup_lock;
 	
 	struct list_head lh_event_conns;
-	struct list_head event_msgs;	/* protected by set->events_lock */
-	struct mrpc_message *plugged_event;
+	struct list_head events;	/* protected by set->events_lock */
+	struct mrpc_event *plugged_event;
 	unsigned plugged_user;
 	
 	int next_sequence;
@@ -96,7 +117,11 @@ unsigned request_hash(struct list_head *head, unsigned buckets);
 void process_incoming_message(struct mrpc_message *msg);
 
 /* event.c */
-void queue_event(struct mrpc_message *msg);
+struct mrpc_event *mrpc_alloc_event(struct mrpc_connection *conn,
+			enum event_type type);
+struct mrpc_event *mrpc_alloc_message_event(struct mrpc_message *msg,
+			enum event_type type);
+void queue_event(struct mrpc_event *event);
 
 /* serialize.c */
 struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn);

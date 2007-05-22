@@ -42,10 +42,6 @@ static pthread_cond_t cond;
 static pthread_t runner_thread;
 static pthread_t callback_thread;
 
-static const struct mrpc_config config = {
-	.protocol = &test_server
-};
-
 void setsockoptval(int fd, int level, int optname, int value)
 {
 	if (setsockopt(fd, level, optname, &value, sizeof(value)))
@@ -107,6 +103,11 @@ void do_notify(void *conn_data, struct mrpc_message *msg, TestNotify *req)
 	warn("Received notify(): %d", req->num);
 }
 
+void ops_disconnect(void *conn_data, enum mrpc_disc_reason reason)
+{
+	warn("Disconnect: %d", reason);
+}
+
 struct test_server_operations ops = {
 	.query = do_query,
 	.query_async_reply = do_query_async_reply,
@@ -115,6 +116,14 @@ struct test_server_operations ops = {
 	.invalidate_ops = do_invalidate_ops,
 	.notify = do_notify,
 	.ping = do_ping
+};
+
+static const struct mrpc_config config = {
+	.protocol = &test_server
+};
+
+static const struct mrpc_set_operations set_ops = {
+	.disconnect = ops_disconnect
 };
 
 static void *runner(void *set)
@@ -163,7 +172,7 @@ int main(int argc, char **argv)
 	if (listen(listenfd, BACKLOG))
 		die("Couldn't listen on socket");
 	
-	if (mrpc_conn_set_alloc(&config, &set))
+	if (mrpc_conn_set_alloc(&config, &set_ops, NULL, &set))
 		die("Couldn't allocate connection set");
 	INIT_LIST_HEAD(&pending);
 	pthread_mutex_init(&lock, NULL);

@@ -1,6 +1,11 @@
 #ifndef MINIRPC_H
 #define MINIRPC_H
 
+struct mrpc_protocol;
+struct mrpc_conn_set;
+struct mrpc_connection;
+struct mrpc_message;
+
 enum mrpc_status_codes {
 	MINIRPC_OK			=  0,
 	MINIRPC_PENDING			= -1,
@@ -21,14 +26,23 @@ struct mrpc_config {
 	unsigned msg_max_buf_len;
 };
 
-struct mrpc_protocol;
-struct mrpc_conn_set;
-struct mrpc_connection;
-struct mrpc_message;
+enum mrpc_disc_reason {
+	MRPC_DISC_CLOSED,
+	MRPC_DISC_IOERR,
+	MRPC_DISC_DESYNC
+};
+
+struct mrpc_set_operations {
+	void (*accept)(void *set_data, struct mrpc_connection *conn);
+	void (*disconnect)(void *conn_data, enum mrpc_disc_reason reason);
+	void (*transmit_error)(void *conn_data, unsigned sequence);
+	void (*receive_error)(void *conn_data, unsigned sequence);
+};
 
 /* connection.c */
 int mrpc_conn_set_alloc(const struct mrpc_config *config,
-			struct mrpc_conn_set **new_set);
+			const struct mrpc_set_operations *ops,
+			void *set_data,	struct mrpc_conn_set **new_set);
 void mrpc_conn_set_free(struct mrpc_conn_set *set);
 int mrpc_conn_add(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 			int fd, void *data);
@@ -41,6 +55,6 @@ int mrpc_dispatch_all(struct mrpc_conn_set *set);
 int mrpc_dispatch_loop(struct mrpc_conn_set *set);
 mrpc_status_t mrpc_plug_conn(struct mrpc_connection *conn);
 mrpc_status_t mrpc_unplug_conn(struct mrpc_connection *conn);
-mrpc_status_t mrpc_unplug_event(struct mrpc_message *msg);
+mrpc_status_t mrpc_unplug_message(struct mrpc_message *msg);
 
 #endif

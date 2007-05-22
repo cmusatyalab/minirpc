@@ -206,9 +206,13 @@ void process_incoming_message(struct mrpc_message *msg)
 {
 	struct mrpc_connection *conn=msg->conn;
 	struct pending_reply *pending;
+	struct mrpc_event *event;
 	
 	if (msg->hdr.status == MINIRPC_PENDING) {
-		queue_event(msg);
+		event=mrpc_alloc_message_event(msg, EVENT_REQUEST);
+		if (event == NULL)
+			/* XXX */;
+		queue_event(event);
 	} else {
 		pthread_mutex_lock(&conn->pending_replies_lock);
 		pending=request_lookup(conn, msg->hdr.sequence);
@@ -226,9 +230,12 @@ void process_incoming_message(struct mrpc_message *msg)
 			return;
 		}
 		if (pending->async) {
-			msg->callback=pending->data.async.callback;
-			msg->private=pending->data.async.private;
-			queue_event(msg);
+			event=mrpc_alloc_message_event(msg, EVENT_REPLY);
+			if (event == NULL)
+				/* XXX */;
+			event->callback=pending->data.async.callback;
+			event->private=pending->data.async.private;
+			queue_event(event);
 		} else {
 			pthread_mutex_lock(&conn->sync_wakeup_lock);
 			*pending->data.sync.reply=msg;

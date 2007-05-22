@@ -5,6 +5,35 @@
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
+struct mrpc_event *mrpc_alloc_event(struct mrpc_connection *conn,
+			enum event_type type)
+{
+	struct mrpc_event *event;
+	
+	event=malloc(sizeof(*event));
+	if (event == NULL)
+		return NULL;
+	memset(event, 0, sizeof(*event));
+	INIT_LIST_HEAD(&event->lh_events);
+	event->type=type;
+	event->conn=conn;
+	return event;
+}
+
+struct mrpc_event *mrpc_alloc_message_event(struct mrpc_message *msg,
+			enum event_type type)
+{
+	struct mrpc_event *event;
+	
+	assert(msg->event == NULL);
+	event=mrpc_alloc_event(msg->conn, type);
+	if (event == NULL)
+		return NULL;
+	event->msg=msg;
+	msg->event=event;
+	return event;
+}
+
 static int empty_pipe(int fd)
 {
 	char buf[8];
@@ -25,7 +54,7 @@ static void try_queue_conn(struct mrpc_connection *conn)
 {
 	struct mrpc_conn_set *set=conn->set;
 	
-	if (conn_is_plugged(conn) || list_is_empty(&conn->event_msgs) ||
+	if (conn_is_plugged(conn) || list_is_empty(&conn->events) ||
 				!list_is_empty(&conn->lh_event_conns))
 		return;
 	if (list_is_empty(&set->event_conns))
@@ -33,20 +62,21 @@ static void try_queue_conn(struct mrpc_connection *conn)
 	list_add_tail(&conn->lh_event_conns, &set->event_conns);
 }
 
-void queue_event(struct mrpc_message *msg)
+void queue_event(struct mrpc_event *event)
 {
-	struct mrpc_connection *conn=msg->conn;
+	struct mrpc_connection *conn=event->conn;
 	
+	assert(list_is_empty(&event->lh_events));
 	pthread_mutex_lock(&conn->set->events_lock);
-	list_add_tail(&msg->lh_msgs, &conn->event_msgs);
+	list_add_tail(&event->lh_events, &conn->events);
 	try_queue_conn(conn);
 	pthread_mutex_unlock(&conn->set->events_lock);
 }
 
-static struct mrpc_message *unqueue_event(struct mrpc_conn_set *set)
+static struct mrpc_event *unqueue_event(struct mrpc_conn_set *set)
 {
 	struct mrpc_connection *conn;
-	struct mrpc_message *msg=NULL;
+	struct mrpc_event *event=NULL;
 	
 	pthread_mutex_lock(&set->events_lock);
 	if (list_is_empty(&set->event_conns)) {
@@ -59,23 +89,24 @@ static struct mrpc_message *unqueue_event(struct mrpc_conn_set *set)
 		if (list_is_empty(&set->event_conns))
 			if (empty_pipe(set->events_notify_pipe[0]) != 1)
 				/* XXX */;
-		assert(!list_is_empty(&conn->event_msgs));
-		msg=list_first_entry(&conn->event_msgs, struct mrpc_message,
-					lh_msgs);
-		list_del_init(&msg->lh_msgs);
-		conn->plugged_event=msg;
+		assert(!list_is_empty(&conn->events));
+		event=list_first_entry(&conn->events, struct mrpc_event,
+					lh_events);
+		list_del_init(&event->lh_events);
+		conn->plugged_event=event;
 	}
 	pthread_mutex_unlock(&set->events_lock);
-	return msg;
+	return event;
 }
 
-/* This is safe even if msg has already been freed */
 static mrpc_status_t _mrpc_unplug_event(struct mrpc_connection *conn,
-			struct mrpc_message *msg)
+			struct mrpc_event *event)
 {
 	pthread_mutex_lock(&conn->set->events_lock);
-	if (conn->plugged_event == NULL || conn->plugged_event != msg)
+	if (conn->plugged_event == NULL || conn->plugged_event != event) {
+		pthread_mutex_unlock(&conn->set->events_lock);
 		return MINIRPC_INVALID_ARGUMENT;
+	}
 	assert(list_is_empty(&conn->lh_event_conns));
 	conn->plugged_event=NULL;
 	try_queue_conn(conn);
@@ -83,10 +114,14 @@ static mrpc_status_t _mrpc_unplug_event(struct mrpc_connection *conn,
 	return MINIRPC_OK;
 }
 
-/* This is not safe if msg has been freed */
-exported mrpc_status_t mrpc_unplug_event(struct mrpc_message *msg)
+static mrpc_status_t mrpc_unplug_event(struct mrpc_event *event)
 {
-	return _mrpc_unplug_event(msg->conn, msg);
+	return _mrpc_unplug_event(event->conn, event);
+}
+
+exported mrpc_status_t mrpc_unplug_message(struct mrpc_message *msg)
+{
+	return _mrpc_unplug_event(msg->conn, msg->event);
 }
 
 /* Will not affect events already in processing */
@@ -128,7 +163,7 @@ exported int mrpc_get_event_fd(struct mrpc_conn_set *set)
 
 static void fail_request(struct mrpc_message *request, mrpc_status_t err)
 {
-	mrpc_unplug_event(request);
+	mrpc_unplug_message(request);
 	if (request->hdr.cmd >= 0) {
 		if (mrpc_send_reply_error(request->conn->set->config.protocol,
 					request, err))
@@ -139,9 +174,10 @@ static void fail_request(struct mrpc_message *request, mrpc_status_t err)
 }
 
 /* XXX notifications to application */
-static void dispatch_request(struct mrpc_message *request)
+static void dispatch_request(struct mrpc_event *event)
 {
-	struct mrpc_connection *conn=request->conn;
+	struct mrpc_connection *conn=event->conn;
+	struct mrpc_message *request=event->msg;
 	void *request_data;
 	void *reply_data=NULL;
 	mrpc_status_t ret;
@@ -202,8 +238,7 @@ static void dispatch_request(struct mrpc_message *request)
 	   already been freed.  So, if result == MINIRPC_PENDING, we can't
 	   access @request anymore. */
 	pthread_mutex_unlock(&conn->operations_lock);
-	/* This is safe even if request is invalid */
-	_mrpc_unplug_event(conn, request);
+	mrpc_unplug_event(event);
 	xdr_free(request_type, request_data);
 	cond_free(request_data);
 	
@@ -230,11 +265,12 @@ static void dispatch_request(struct mrpc_message *request)
 	}
 }
 
-static void run_reply_callback(struct mrpc_message *reply)
+static void run_reply_callback(struct mrpc_event *event)
 {
+	struct mrpc_message *reply=event->msg;
+	long_reply_callback_fn *longfn=event->callback;
+	short_reply_callback_fn *shortfn=event->callback;
 	void *out=NULL;
-	long_reply_callback_fn *longfn = reply->callback;
-	short_reply_callback_fn *shortfn = reply->callback;
 	unsigned size;
 	mrpc_status_t ret;
 	
@@ -254,32 +290,47 @@ static void run_reply_callback(struct mrpc_message *reply)
 	   arguments gets three, and a function expecting four arguments gets
 	   four. */
 	if (size)
-		longfn(reply->conn->private, reply->private, reply, ret, out);
+		longfn(reply->conn->private, event->private, reply, ret, out);
 	else
-		shortfn(reply->conn->private, reply->private, reply, ret);
-	mrpc_unplug_event(reply);
+		shortfn(reply->conn->private, event->private, reply, ret);
 	mrpc_free_message(reply);
 }
 
-static void dispatch_event(struct mrpc_message *msg)
+static void run_disconnect_method(struct mrpc_event *event)
 {
-	if (msg->callback) {
-		run_reply_callback(msg);
-	} else if (msg->hdr.status == MINIRPC_PENDING) {
-		dispatch_request(msg);
-	} else {
+	if (event->conn->set->ops->disconnect)
+		event->conn->set->ops->disconnect(event->conn->private,
+					event->disc_reason);
+	/* XXX free conn? */
+}
+
+static void dispatch_event(struct mrpc_event *event)
+{
+	switch (event->type) {
+	case EVENT_REQUEST:
+		dispatch_request(event);
+		break;
+	case EVENT_REPLY:
+		run_reply_callback(event);
+		break;
+	case EVENT_DISCONNECT:
+		run_disconnect_method(event);
+		break;
+	default:
 		assert(0);
 	}
+	mrpc_unplug_event(event);
+	free(event);
 }
 
 exported int mrpc_dispatch_one(struct mrpc_conn_set *set)
 {
-	struct mrpc_message *msg;
+	struct mrpc_event *event;
 	
-	msg=unqueue_event(set);
-	if (msg != NULL)
-		dispatch_event(msg);
-	return (msg != NULL);
+	event=unqueue_event(set);
+	if (event != NULL)
+		dispatch_event(event);
+	return (event != NULL);
 }
 
 exported int mrpc_dispatch_all(struct mrpc_conn_set *set)
@@ -292,7 +343,7 @@ exported int mrpc_dispatch_all(struct mrpc_conn_set *set)
 
 exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 {
-	struct mrpc_message *msg;
+	struct mrpc_event *event;
 	struct pollfd poll_s[2] = {{0}};
 	int ret=0;
 	
@@ -307,14 +358,14 @@ exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 	poll_s[1].events=POLLIN;
 	
 	while (poll_s[1].revents == 0) {
-		msg=unqueue_event(set);
-		if (msg == NULL) {
+		event=unqueue_event(set);
+		if (event == NULL) {
 			if (poll(poll_s, 2, -1) == -1 && errno != EINTR) {
 				ret=-errno;
 				break;
 			}
 		} else {
-			dispatch_event(msg);
+			dispatch_event(event);
 		}
 	}
 	
