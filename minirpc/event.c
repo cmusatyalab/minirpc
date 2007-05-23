@@ -296,16 +296,11 @@ static void run_reply_callback(struct mrpc_event *event)
 	mrpc_free_message(reply);
 }
 
-static void run_disconnect_method(struct mrpc_event *event)
-{
-	if (event->conn->set->ops->disconnect)
-		event->conn->set->ops->disconnect(event->conn->private,
-					event->disc_reason);
-	/* XXX free conn? */
-}
-
 static void dispatch_event(struct mrpc_event *event)
 {
+	struct mrpc_connection *conn=event->conn;
+	const struct mrpc_set_operations *ops=conn->set->ops;
+	
 	switch (event->type) {
 	case EVENT_REQUEST:
 		dispatch_request(event);
@@ -314,12 +309,13 @@ static void dispatch_event(struct mrpc_event *event)
 		run_reply_callback(event);
 		break;
 	case EVENT_DISCONNECT:
-		run_disconnect_method(event);
+		if (ops->disconnect)
+			ops->disconnect(conn->private, event->disc_reason);
+		/* XXX free conn? */
 		break;
 	case EVENT_IOERR:
-		if (event->conn->set->ops->ioerr)
-			event->conn->set->ops->ioerr(event->conn->private,
-						event->errstring);
+		if (ops->ioerr)
+			ops->ioerr(conn->private, event->errstring);
 		break;
 	default:
 		assert(0);
