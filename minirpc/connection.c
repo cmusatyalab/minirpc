@@ -29,7 +29,6 @@ static int conn_match(struct list_head *entry, void *data)
 	return (*fd == conn->fd);
 }
 
-/* XXX unused since epoll provides a data pointer */
 static struct mrpc_connection *conn_lookup(struct mrpc_conn_set *set, int fd)
 {
 	struct list_head *head;
@@ -95,7 +94,7 @@ exported int mrpc_conn_add(struct mrpc_connection **new_conn,
 		return -ENOMEM;
 	}
 	event.events=POLLEVENTS;
-	event.data.ptr=conn;
+	event.data.fd=fd;
 	if (epoll_ctl(set->epoll_fd, EPOLL_CTL_ADD, fd, &event)) {
 		ret=-errno;
 		hash_free(conn->pending_replies);
@@ -136,7 +135,7 @@ static int need_writable(struct mrpc_connection *conn, int writable)
 {
 	struct epoll_event event={0};
 	
-	event.data.ptr=conn;
+	event.data.fd=conn->fd;
 	event.events=POLLEVENTS;
 	if (writable)
 		event.events |= EPOLLOUT;
@@ -355,6 +354,7 @@ static void try_write_conn(struct mrpc_connection *conn)
 static void *listener(void *data)
 {
 	struct mrpc_conn_set *set=data;
+	struct mrpc_connection *conn;
 	struct epoll_event events[set->config.expected_fds];
 	int count;
 	int i;
@@ -363,21 +363,28 @@ static void *listener(void *data)
 		count=epoll_wait(set->epoll_fd, events,
 					set->config.expected_fds, -1);
 		for (i=0; i<count; i++) {
-			if (events[i].data.ptr == set)
+			if (events[i].data.fd == set->shutdown_pipe[0])
 				return NULL;
+			
+			pthread_mutex_lock(&set->conns_lock);
+			conn=conn_lookup(set, events[i].data.fd);
+			pthread_mutex_unlock(&set->conns_lock);
+			if (conn == NULL) {
+				/* XXX */
+				continue;
+			}
 			if (events[i].events & EPOLLERR) {
-				conn_close(events[i].data.ptr, MRPC_DISC_IOERR);
+				conn_close(conn, MRPC_DISC_IOERR);
 				continue;
 			}
 			if (events[i].events & EPOLLHUP) {
-				conn_close(events[i].data.ptr,
-							MRPC_DISC_CLOSED);
+				conn_close(conn, MRPC_DISC_CLOSED);
 				continue;
 			}
 			if (events[i].events & EPOLLOUT)
-				try_write_conn(events[i].data.ptr);
+				try_write_conn(conn);
 			if (events[i].events & EPOLLIN)
-				try_read_conn(events[i].data.ptr);
+				try_read_conn(conn);
 		}
 	}
 }
@@ -454,7 +461,7 @@ exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
 		goto bad_epoll;
 	}
 	event.events=EPOLLIN;
-	event.data.ptr=set;
+	event.data.fd=set->shutdown_pipe[0];
 	if (epoll_ctl(set->epoll_fd, EPOLL_CTL_ADD, set->shutdown_pipe[0],
 				&event)) {
 		ret=-errno;
