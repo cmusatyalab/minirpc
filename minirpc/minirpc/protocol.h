@@ -15,7 +15,7 @@
 
 struct mrpc_protocol {
 	int is_server;
-	mrpc_status_t (*request)(void *ops, void *conn_data,
+	mrpc_status_t (*request)(const void *ops, void *conn_data,
 				struct mrpc_message *msg, int cmd, void *in,
 				void *out);
 	mrpc_status_t (*sender_request_info)(unsigned cmd, xdrproc_t *type,
@@ -37,7 +37,7 @@ typedef void (short_reply_callback_fn)(void *conn_private, void *msg_private,
 
 /* connection.c */
 mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
-			struct mrpc_protocol *protocol, void *ops);
+			struct mrpc_protocol *protocol, const void *ops);
 
 /* message.c */
 mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,

@@ -346,9 +346,9 @@ sub gen_request_proc {
 	
 	print $fh wrapc(<<EOF);
 
-static mrpc_status_t ${base}_${role}_request(void *p_ops, void *conn_data, struct mrpc_message *msg, int cmd, void *in, void *out)
+static mrpc_status_t ${base}_${role}_request(const void *p_ops, void *conn_data, struct mrpc_message *msg, int cmd, void *in, void *out)
 {
-	struct ${base}_${role}_operations *ops=p_ops;
+	const struct ${base}_${role}_operations *ops=p_ops;
 	
 	if (ops == NULL)
 		return MINIRPC_PROCEDURE_UNAVAIL;
@@ -474,7 +474,7 @@ sub gen_set_operations_c {
 	
 	print $fh wrapc(<<EOF);
 
-mrpc_status_t ${base}_${role}_set_operations(struct mrpc_connection *conn, struct ${base}_${role}_operations *ops)
+mrpc_status_t ${base}_${role}_set_operations(struct mrpc_connection *conn, const struct ${base}_${role}_operations *ops)
 {
 	return mrpc_conn_set_operations(conn, &${base}_$role, ops);
 }
@@ -487,7 +487,7 @@ sub gen_set_operations_h {
 	
 	print $fh wrapc(<<EOF);
 
-mrpc_status_t ${base}_${role}_set_operations(struct mrpc_connection *conn, struct ${base}_${role}_operations *ops);
+mrpc_status_t ${base}_${role}_set_operations(struct mrpc_connection *conn, const struct ${base}_${role}_operations *ops);
 EOF
 }
 

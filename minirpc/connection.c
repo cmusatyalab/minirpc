@@ -122,7 +122,7 @@ exported void mrpc_conn_remove(struct mrpc_connection *conn)
 }
 
 exported mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
-			struct mrpc_protocol *protocol, void *ops)
+			struct mrpc_protocol *protocol, const void *ops)
 {
 	if (conn->set->config.protocol != protocol)
 		return MINIRPC_INVALID_ARGUMENT;
