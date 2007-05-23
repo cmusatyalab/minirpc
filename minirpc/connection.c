@@ -2,6 +2,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <netdb.h>
 #include <sys/epoll.h>
 #include <unistd.h>
 #include <fcntl.h>
@@ -56,14 +57,15 @@ static int set_nonblock(int fd)
 	return 0;
 }
 
-exported int mrpc_conn_add(struct mrpc_connection **new_conn,
-			struct mrpc_conn_set *set, int fd, void *data)
+static int mrpc_conn_add(struct mrpc_conn_set *set, int fd,
+			struct mrpc_connection **new_conn)
 {
 	struct mrpc_connection *conn;
 	struct epoll_event event={0};
 	pthread_mutexattr_t attr;
 	int ret;
 	
+	setsockoptval(fd, SOL_SOCKET, SO_KEEPALIVE, 1);
 	ret=set_nonblock(fd);
 	if (ret)
 		return ret;
@@ -87,7 +89,6 @@ exported int mrpc_conn_add(struct mrpc_connection **new_conn,
 	conn->recv_state=STATE_HEADER;
 	conn->set=set;
 	conn->fd=fd;
-	conn->private = (data != NULL) ? data : conn;
 	conn->pending_replies=hash_alloc(set->config.msg_buckets, request_hash);
 	if (conn->pending_replies == NULL) {
 		free(conn);
@@ -108,7 +109,7 @@ exported int mrpc_conn_add(struct mrpc_connection **new_conn,
 	return 0;
 }
 
-exported void mrpc_conn_remove(struct mrpc_connection *conn)
+static void mrpc_conn_remove(struct mrpc_connection *conn)
 {
 	struct mrpc_conn_set *set=conn->set;
 	
@@ -118,6 +119,160 @@ exported void mrpc_conn_remove(struct mrpc_connection *conn)
 	pthread_mutex_unlock(&set->conns_lock);
 	hash_free(conn->pending_replies);
 	free(conn);
+}
+
+/* returns error description or NULL on success */
+exported const char *mrpc_connect(struct mrpc_conn_set *set, char *host,
+			unsigned port, void *data,
+			struct mrpc_connection **new_conn)
+{
+	struct mrpc_connection *conn;
+	struct addrinfo *info;
+	struct addrinfo *curinfo;
+	struct addrinfo hints={0};
+	char portbuf[8];
+	int fd=-1;
+	int ret;
+	
+	if (set->config.protocol->is_server)
+		return "Servers cannot make outbound connections";
+	
+	ret=snprintf(portbuf, sizeof(portbuf), "%u", port);
+	if (ret == -1 || ret >= sizeof(portbuf))
+		return "Port number too long for buffer";
+	hints.ai_socktype=SOCK_STREAM;
+	ret=getaddrinfo(host, portbuf, &hints, &info);
+	if (ret)
+		return gai_strerror(ret);
+	
+	for (curinfo=info; curinfo != NULL; curinfo=curinfo->ai_next) {
+		fd=socket(info->ai_family, info->ai_socktype,
+					info->ai_protocol);
+		if (fd == -1) {
+			ret=errno;
+			continue;
+		}
+		ret=connect(fd, info->ai_addr, info->ai_addrlen);
+		if (ret == 0)
+			break;
+		ret=errno;
+		close(fd);
+		fd=-1;
+	}
+	freeaddrinfo(info);
+	if (fd == -1)
+		return strerror(ret);
+	ret=mrpc_conn_add(set, fd, &conn);
+	if (ret)
+		return strerror(-ret);
+	conn->private = (data != NULL) ? data : conn;
+	*new_conn=conn;
+	return NULL;
+}
+
+/* returns number of successfully bound listening sockets */
+exported int mrpc_listen(struct mrpc_conn_set *set, char *listenaddr,
+			unsigned port, const char **err)
+{
+	struct addrinfo *info;
+	struct addrinfo *curinfo;
+	struct addrinfo hints={0};
+	struct epoll_event event={0};
+	char portbuf[8];
+	int fd;
+	int ret;
+	int count=0;
+	
+	if (!set->config.protocol->is_server) {
+		if (err != NULL)
+			*err="Clients cannot accept inbound connections";
+		return 0;
+	}
+	
+	ret=snprintf(portbuf, sizeof(portbuf), "%u", port);
+	if (ret == -1 || ret >= sizeof(portbuf)) {
+		if (err != NULL)
+			*err="Port number too long for buffer";
+		return 0;
+	}
+	hints.ai_flags=AI_PASSIVE;
+	hints.ai_socktype=SOCK_STREAM;
+	ret=getaddrinfo(listenaddr, portbuf, &hints, &info);
+	if (ret) {
+		if (err != NULL)
+			*err=gai_strerror(ret);
+		return 0;
+	}
+	
+	event.events=EPOLLIN;
+	for (curinfo=info; curinfo != NULL; curinfo=curinfo->ai_next) {
+		fd=socket(curinfo->ai_family, curinfo->ai_socktype,
+					curinfo->ai_protocol);
+		if (fd == -1) {
+			ret=errno;
+			continue;
+		}
+		setsockoptval(fd, SOL_SOCKET, SO_REUSEADDR, 1);
+		ret=set_nonblock(fd);
+		if (ret) {
+			ret=-ret;
+			close(fd);
+			continue;
+		}
+		if (bind(fd, curinfo->ai_addr, curinfo->ai_addrlen)) {
+			ret=errno;
+			close(fd);
+			continue;
+		}
+		if (listen(fd, set->config.listen_backlog)) {
+			ret=errno;
+			close(fd);
+			continue;
+		}
+		event.data.fd=fd;
+		if (epoll_ctl(set->epoll_fd, EPOLL_CTL_ADD, fd, &event)) {
+			ret=errno;
+			close(fd);
+			continue;
+		}
+		count++;
+	}
+	if (count == 0 && err != NULL)
+		*err=strerror(ret);
+	return count;
+}
+
+/* returns -errno */
+exported int mrpc_bind_fd(struct mrpc_conn_set *set, int fd, void *data,
+			struct mrpc_connection **new_conn)
+{
+	struct mrpc_connection *conn;
+	int accepting;
+	socklen_t arglen=sizeof(accepting);
+	int ret;
+	
+	if (getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &accepting, &arglen))
+		return -errno;
+	if (accepting)
+		return -EINVAL;
+	ret=mrpc_conn_add(set, fd, &conn);
+	if (ret)
+		return ret;
+	conn->private = (data != NULL) ? data : conn;
+	*new_conn=conn;
+	return 0;
+}
+
+static void _conn_close(struct mrpc_connection *conn)
+{
+	/* XXX */
+	close(conn->fd);
+}
+
+exported void mrpc_conn_close(struct mrpc_connection *conn)
+{
+	_conn_close(conn);
+	mrpc_conn_remove(conn);
 }
 
 exported mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
@@ -147,8 +302,7 @@ static void conn_kill(struct mrpc_connection *conn,
 {
 	struct mrpc_event *event;
 	
-	/* XXX */
-	close(conn->fd);
+	mrpc_conn_close(conn);
 	event=mrpc_alloc_event(conn, EVENT_DISCONNECT);
 	if (event != NULL) {
 		event->disc_reason=reason;
@@ -350,6 +504,49 @@ static void try_write_conn(struct mrpc_connection *conn)
 	}
 }
 
+static void try_accept(struct mrpc_conn_set *set, int listenfd)
+{
+	struct mrpc_connection *conn;
+	struct mrpc_event *event;
+	struct sockaddr *addr;
+	socklen_t addrlen;
+	int fd;
+	
+	while (1) {
+		addrlen=sizeof(struct sockaddr_storage);
+		addr=malloc(addrlen);
+		if (addr == NULL)
+			/* XXX */;
+		fd=accept(listenfd, addr, &addrlen);
+		if (fd < 0) {
+			switch (errno) {
+			case EAGAIN:
+				free(addr);
+				return;
+			case EMFILE:
+			case ENFILE:
+			case ENOMEM:
+				/* XXX fail */
+				break;
+			default:
+				continue;
+			}
+		}
+		if (mrpc_conn_add(set, fd, &conn)) {
+			/* XXX */
+			close(fd);
+			free(addr);
+			continue;
+		}
+		event=mrpc_alloc_event(conn, EVENT_ACCEPT);
+		if (event == NULL)
+			/* XXX */;
+		event->addr=addr;
+		event->addrlen=addrlen;
+		queue_event(event);
+	}
+}
+
 /* XXX signal handling */
 static void *listener(void *data)
 {
@@ -370,7 +567,8 @@ static void *listener(void *data)
 			conn=conn_lookup(set, events[i].data.fd);
 			pthread_mutex_unlock(&set->conns_lock);
 			if (conn == NULL) {
-				/* XXX */
+				/* Assume this is a listening socket */
+				try_accept(set, events[i].data.fd);
 				continue;
 			}
 			if (events[i].events & EPOLLERR) {
@@ -411,11 +609,12 @@ mrpc_status_t send_message(struct mrpc_message *msg)
 static void validate_copy_config(const struct mrpc_config *from,
 			struct mrpc_config *to)
 {
-	copy_default(from, to, protocol, from->protocol);
+	to->protocol=from->protocol;
 	copy_default(from, to, expected_fds, 16);
 	copy_default(from, to, conn_buckets, 16);
 	copy_default(from, to, msg_buckets, 16);
 	copy_default(from, to, msg_max_buf_len, 16000);
+	copy_default(from, to, listen_backlog, 16);
 }
 #undef copy_default
 
@@ -427,8 +626,23 @@ exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
 	struct epoll_event event={0};
 	int ret=-ENOMEM;
 	
-	if (config == NULL || ops == NULL || new_set == NULL)
+	if (config == NULL || config->protocol == NULL || ops == NULL ||
+				new_set == NULL)
 		return -EINVAL;
+	if (config->protocol->is_server) {
+		/* We require the accept method to exist.  Without it, the
+		   connection will never have a non-NULL operations pointer and
+		   the application will never be aware that the connection
+		   exists, so the connecting client will be forever stuck in
+		   PROCEDURE_UNAVAIL limbo. */
+		if (ops->accept == NULL)
+			return -EINVAL;
+	} else {
+		/* The accept method is irrelevant for clients.  Tell the
+		   application if its assumptions are wrong. */
+		if (ops->accept != NULL)
+			return -EINVAL;
+	}
 	set=malloc(sizeof(*set));
 	if (set == NULL)
 		goto bad_alloc;

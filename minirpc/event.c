@@ -302,6 +302,12 @@ static void dispatch_event(struct mrpc_event *event)
 	const struct mrpc_set_operations *ops=conn->set->ops;
 	
 	switch (event->type) {
+	case EVENT_ACCEPT:
+		assert(ops->accept != NULL);
+		conn->private=ops->accept(conn->set->private, conn,
+					event->addr, event->addrlen);
+		free(event->addr);
+		break;
 	case EVENT_REQUEST:
 		dispatch_request(event);
 		break;

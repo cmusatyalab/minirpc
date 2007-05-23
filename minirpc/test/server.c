@@ -1,8 +1,5 @@
 #include <sys/types.h>
-#include <sys/socket.h>
 #include <sys/stat.h>
-#include <netinet/in.h>
-#include <netinet/tcp.h>
 #include <fcntl.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -16,9 +13,7 @@
 #include <minirpc/list.h>
 #include "test_server.h"
 
-#define BACKLOG 16
 #define DEBUG
-#define SRVPORT 58000
 
 /* XXX copied from libvdisk */
 #define warn(s, args...) fprintf(stderr, s "\n", ## args)
@@ -39,14 +34,7 @@ struct message_list_node {
 static struct list_head pending;
 static pthread_mutex_t lock;
 static pthread_cond_t cond;
-static pthread_t runner_thread;
 static pthread_t callback_thread;
-
-void setsockoptval(int fd, int level, int optname, int value)
-{
-	if (setsockopt(fd, level, optname, &value, sizeof(value)))
-		warn("Couldn't setsockopt");
-}
 
 mrpc_status_t do_query(void *conn_data, struct mrpc_message *msg,
 			TestRequest *in, TestReply *out)
@@ -103,12 +91,7 @@ void do_notify(void *conn_data, struct mrpc_message *msg, TestNotify *req)
 	warn("Received notify(): %d", req->num);
 }
 
-void ops_disconnect(void *conn_data, enum mrpc_disc_reason reason)
-{
-	warn("Disconnect: %d", reason);
-}
-
-struct test_server_operations ops = {
+static const struct test_server_operations ops = {
 	.query = do_query,
 	.query_async_reply = do_query_async_reply,
 	.call = do_call,
@@ -118,19 +101,28 @@ struct test_server_operations ops = {
 	.ping = do_ping
 };
 
+void ops_disconnect(void *conn_data, enum mrpc_disc_reason reason)
+{
+	warn("Disconnect: %d", reason);
+}
+
+void *ops_accept(void *set_data, struct mrpc_connection *conn,
+			struct sockaddr *from, socklen_t fromlen)
+{
+	warn("New connection");
+	if (test_server_set_operations(conn, &ops))
+		warn("Error setting operations struct");
+	return conn;
+}
+
 static const struct mrpc_config config = {
 	.protocol = &test_server
 };
 
 static const struct mrpc_set_operations set_ops = {
+	.accept = ops_accept,
 	.disconnect = ops_disconnect
 };
-
-static void *runner(void *set)
-{
-	mrpc_dispatch_loop(set);
-	return NULL;
-}
 
 static void *run_callbacks(void *ignored)
 {
@@ -154,52 +146,18 @@ static void *run_callbacks(void *ignored)
 
 int main(int argc, char **argv)
 {
-	int listenfd;
-	int fd;
-	struct sockaddr_in addr;
 	struct mrpc_conn_set *set;
-	struct mrpc_connection *conn;
-	
-	listenfd=socket(PF_INET, SOCK_STREAM, 0);
-	if (listenfd == -1)
-		die("Couldn't create socket");
-	setsockoptval(listenfd, SOL_SOCKET, SO_REUSEADDR, 1);
-	addr.sin_family=AF_INET;
-	addr.sin_addr.s_addr=htonl(INADDR_ANY);
-	addr.sin_port=htons(SRVPORT);
-	if (bind(listenfd, (struct sockaddr*)&addr, sizeof(addr)))
-		die("Couldn't bind socket to port %d", SRVPORT);
-	if (listen(listenfd, BACKLOG))
-		die("Couldn't listen on socket");
+	const char *err;
 	
 	if (mrpc_conn_set_alloc(&config, &set_ops, NULL, &set))
 		die("Couldn't allocate connection set");
 	INIT_LIST_HEAD(&pending);
 	pthread_mutex_init(&lock, NULL);
 	pthread_cond_init(&cond, NULL);
-	if (pthread_create(&runner_thread, NULL, runner, set))
-		die("Couldn't start runner thread");
 	if (pthread_create(&callback_thread, NULL, run_callbacks, NULL))
 		die("Couldn't start callback thread");
-	
-	while (1) {
-		fd=accept(listenfd, NULL, 0);
-		if (fd < 0) {
-			warn("Error accepting connection");
-			continue;
-		}
-		setsockoptval(fd, SOL_SOCKET, SO_KEEPALIVE, 1);
-		warn("Accepted connection");
-		if (mrpc_conn_add(&conn, set, fd, NULL)) {
-			warn("Error adding connection");
-			close(fd);
-			continue;
-		}
-		warn("Added connection");
-		if (test_server_set_operations(conn, &ops)) {
-			warn("Error setting operations struct");
-			continue;
-		}
-	}
+	if (!mrpc_listen(set, NULL, 58000, &err))
+		die("%s", err);
+	mrpc_dispatch_loop(set);
 	return 0;
 }

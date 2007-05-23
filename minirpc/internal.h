@@ -6,6 +6,8 @@
 #define MINIRPC_INTERNAL_H
 #define MINIRPC_PROTOCOL
 
+#include <sys/types.h>
+#include <sys/socket.h>
 #include <minirpc/minirpc.h>
 #include <minirpc/protocol.h>
 #include <minirpc/list.h>
@@ -39,6 +41,7 @@ struct mrpc_conn_set {
 };
 
 enum event_type {
+	EVENT_ACCEPT,
 	EVENT_REQUEST,
 	EVENT_REPLY,
 	EVENT_DISCONNECT,
@@ -49,6 +52,10 @@ struct mrpc_event {
 	struct list_head lh_events;
 	enum event_type type;
 	struct mrpc_connection *conn;
+	
+	/* accept */
+	struct sockaddr *addr;
+	socklen_t addrlen;
 	
 	/* request/reply */
 	struct mrpc_message *msg;

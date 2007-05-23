@@ -1,6 +1,9 @@
 #ifndef MINIRPC_H
 #define MINIRPC_H
 
+#include <sys/types.h>
+#include <sys/socket.h>
+
 struct mrpc_protocol;
 struct mrpc_conn_set;
 struct mrpc_connection;
@@ -24,6 +27,7 @@ struct mrpc_config {
 	unsigned conn_buckets;
 	unsigned msg_buckets;
 	unsigned msg_max_buf_len;
+	unsigned listen_backlog;
 };
 
 enum mrpc_disc_reason {
@@ -33,7 +37,8 @@ enum mrpc_disc_reason {
 };
 
 struct mrpc_set_operations {
-	void (*accept)(void *set_data, struct mrpc_connection *conn);
+	void *(*accept)(void *set_data, struct mrpc_connection *conn,
+				struct sockaddr *from, socklen_t fromlen);
 	void (*disconnect)(void *conn_data, enum mrpc_disc_reason reason);
 	void (*ioerr)(void *conn_data, char *message);
 };
@@ -43,9 +48,13 @@ int mrpc_conn_set_alloc(const struct mrpc_config *config,
 			const struct mrpc_set_operations *ops,
 			void *set_data,	struct mrpc_conn_set **new_set);
 void mrpc_conn_set_free(struct mrpc_conn_set *set);
-int mrpc_conn_add(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
-			int fd, void *data);
-void mrpc_conn_remove(struct mrpc_connection *conn);
+const char *mrpc_connect(struct mrpc_conn_set *set, char *host, unsigned port,
+			void *data, struct mrpc_connection **new_conn);
+int mrpc_listen(struct mrpc_conn_set *set, char *listenaddr, unsigned port,
+			const char **err);
+int mrpc_bind_fd(struct mrpc_conn_set *set, int fd, void *data,
+			struct mrpc_connection **new_conn);
+void mrpc_conn_close(struct mrpc_connection *conn);
 
 /* event.c */
 int mrpc_get_event_fd(struct mrpc_conn_set *set);
