@@ -142,7 +142,7 @@ static int need_writable(struct mrpc_connection *conn, int writable)
 	return epoll_ctl(conn->set->epoll_fd, EPOLL_CTL_MOD, conn->fd, &event);
 }
 
-static void conn_close(struct mrpc_connection *conn,
+static void conn_kill(struct mrpc_connection *conn,
 			enum mrpc_disc_reason reason)
 {
 	struct mrpc_event *event;
@@ -217,10 +217,10 @@ static void try_read_conn(struct mrpc_connection *conn)
 			} else if (count == -1 && errno == EAGAIN) {
 				return;
 			} else if (count == 0) {
-				conn_close(conn, MRPC_DISC_CLOSED);
+				conn_kill(conn, MRPC_DISC_CLOSED);
 				return;
 			} else if (count == -1) {
-				conn_close(conn, MRPC_DISC_IOERR);
+				conn_kill(conn, MRPC_DISC_IOERR);
 				return;
 			}
 			printf("Read %d bytes\n", count);
@@ -325,7 +325,7 @@ static void try_write_conn(struct mrpc_connection *conn)
 			} else if (count == -1 && errno == EINTR) {
 				continue;
 			} else if (count == -1) {
-				conn_close(conn, MRPC_DISC_IOERR);
+				conn_kill(conn, MRPC_DISC_IOERR);
 				break;
 			}
 			conn->send_offset += count;
@@ -374,11 +374,11 @@ static void *listener(void *data)
 				continue;
 			}
 			if (events[i].events & EPOLLERR) {
-				conn_close(conn, MRPC_DISC_IOERR);
+				conn_kill(conn, MRPC_DISC_IOERR);
 				continue;
 			}
 			if (events[i].events & EPOLLHUP) {
-				conn_close(conn, MRPC_DISC_CLOSED);
+				conn_kill(conn, MRPC_DISC_CLOSED);
 				continue;
 			}
 			if (events[i].events & EPOLLOUT)
