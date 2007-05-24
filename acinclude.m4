@@ -60,8 +60,10 @@ AC_DEFUN([CHECK_COMPILE], [
 	fi
 ])
 
-# CHECK_COMPILER_OPTION([OPTION], [DEFINE_IF_SUCCEEDS],
-#		[SUBST_OPTION_IF_SUCCEEDS])
+# CHECK_COMPILER_OPTION([OPTION], [SYMBOL])
+# If the compiler supports the command line option OPTION, define the cpp
+# symbol SYMBOL to 1.  Also, define an automake conditional named SYMBOL
+# indicating whether the option is supported.
 # -----------------------------------------------------------------------
 AC_DEFUN([CHECK_COMPILER_OPTION], [
 	AC_MSG_CHECKING([if compiler supports $1])
@@ -71,9 +73,9 @@ AC_DEFUN([CHECK_COMPILER_OPTION], [
 	if test z$result = zok ; then
 		AC_MSG_RESULT([yes])
 		AC_DEFINE([$2], 1, [Define to 1 if your compiler supports the $1 option.])
-		AC_SUBST([$3], [$1])
 	else
 		AC_MSG_RESULT([no])
 	fi
+	AM_CONDITIONAL([$2], [test z$result = zok])
 	CFLAGS="$saved_cflags"
 ])

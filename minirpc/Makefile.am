@@ -1,6 +1,10 @@
 AM_CPPFLAGS = -D_GNU_SOURCE
-AM_CFLAGS = -Wall -Wstrict-prototypes -Wmissing-prototypes $(VISIBILITY_FLAG)
+AM_CFLAGS = -Wall -Wstrict-prototypes -Wmissing-prototypes
 AM_LDFLAGS = -lpthread
+
+if HAVE_VISIBILITY
+AM_CFLAGS += -fvisibility=hidden
+endif
 
 GEN_C = minirpc_xdr.c
 GEN_H = minirpc_xdr.h
