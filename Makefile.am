@@ -1,4 +1,4 @@
-SUBDIRS = minirpc protocol
+SUBDIRS = minirpc
 EXTRA_DIST  = LICENSE CHANGES
 #EXTRA_DIST += debian openisr.spec
 
