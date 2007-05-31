@@ -31,6 +31,5 @@ AC_PROG_LIBTOOL
 CHECK_COMPILER_OPTION([-fvisibility=hidden], [HAVE_VISIBILITY])
 
 AC_CONFIG_FILES([Makefile
-		minirpc/Makefile
-		minirpc/test/Makefile])
+		test/Makefile])
 AC_OUTPUT
