@@ -6,11 +6,19 @@ if HAVE_VISIBILITY
 AM_CFLAGS += -fvisibility=hidden
 endif
 
-GEN_C = minirpc_xdr.c
-GEN_H = minirpc_xdr.h
-GEN = $(GEN_C) $(GEN_H)
-MAINTAINERCLEANFILES = $(GEN)
-BUILT_SOURCES = $(GEN_H)
+MAINTAINERCLEANFILES = minirpc_xdr.c minirpc_xdr.h
+BUILT_SOURCES = minirpc_xdr.h
+
+lib_LTLIBRARIES = libminirpc.la
+libminirpc_la_SOURCES = connection.c message.c event.c serialize.c xdr_len.c
+libminirpc_la_SOURCES += internal.h minirpc.x minirpc_xdr.c minirpc_xdr.h
+
+EXTHEADERS = minirpc.h protocol.h list.h hash.h
+nobase_include_HEADERS = $(foreach hf,$(EXTHEADERS),minirpc/$(hf))
+
+dist_bin_SCRIPTS = minirpcgen.pl
+
+SUBDIRS = test
 EXTRA_DIST = LICENSE CHANGES
 
 %_xdr.c: %.x
@@ -23,10 +31,9 @@ EXTRA_DIST = LICENSE CHANGES
 	rm -f $@
 	rpcgen -h -o $@ $^
 
-SUBDIRS = test
-
-lib_LTLIBRARIES = libminirpc.la
-libminirpc_la_SOURCES = connection.c message.c event.c serialize.c xdr_len.c
-libminirpc_la_SOURCES += internal.h $(GEN)
-EXTHEADERS = minirpc.h protocol.h list.h hash.h
-nobase_include_HEADERS = $(foreach hf,$(EXTHEADERS),minirpc/$(hf))
+# Libtool sets the .la and .so files executable, for reasons passing
+# understanding.
+install-exec-hook:
+	chmod -x $(DESTDIR)$(libdir)/libminirpc.so
+	chmod -x $(DESTDIR)$(libdir)/libminirpc.la
+	mv $(DESTDIR)$(bindir)/minirpcgen.pl $(DESTDIR)$(bindir)/minirpcgen
