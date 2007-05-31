@@ -25,8 +25,8 @@ AC_DEFUN([FIND_LIBRARY], [
 	do
 		if test -r $path/include/$firsthdr ; then
 			found_lib=1
-			CPPFLAGS="$CPPFLAGS -I${path}"
-			LDFLAGS="$LDFLAGS -L${path}"
+			CPPFLAGS="$CPPFLAGS -I${path}/include"
+			LDFLAGS="$LDFLAGS -L${path}/lib"
 			AC_MSG_RESULT([$path])
 			break
 		fi
