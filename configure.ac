@@ -27,6 +27,12 @@ AC_PROG_INSTALL
 AC_PROG_MAKE_SET
 AC_PROG_LIBTOOL
 
+AC_PATH_PROG([RPCGEN], [rpcgen])
+AC_ARG_VAR([RPCGEN], [RPC compiler command])
+if test z$RPCGEN = z ; then
+	AC_MSG_ERROR([could not locate rpcgen])
+fi
+
 # Checks for supported compiler options.
 CHECK_COMPILER_OPTION([-fvisibility=hidden], [HAVE_VISIBILITY])
 

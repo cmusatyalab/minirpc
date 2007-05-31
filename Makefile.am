@@ -23,13 +23,13 @@ EXTRA_DIST = LICENSE CHANGES
 
 %_xdr.c: %.x
 	rm -f $@
-	rpcgen -c $^ | \
+	$(RPCGEN) -c $^ | \
 		sed -e 's/"$(^:%.x=%\.h)"/"$(^:%.x=%_xdr.h)"/g' > $@ || \
 		(rm $@ && false)
 
 %_xdr.h: %.x
 	rm -f $@
-	rpcgen -h -o $@ $^
+	$(RPCGEN) -h -o $@ $^
 
 # Libtool sets the .la and .so files executable, for reasons passing
 # understanding.
