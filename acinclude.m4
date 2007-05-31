@@ -46,20 +46,6 @@ AC_DEFUN([FIND_LIBRARY], [
 ])
 
 
-# CHECK_COMPILE([MESSAGE], [TEST_PROGRAM], [DEFINE_IF_SUCCEEDS],
-#               [DEFINE_DESCRIPTION])
-# --------------------------------------------------------------
-AC_DEFUN([CHECK_COMPILE], [
-	AC_MSG_CHECKING($1)
-	AC_COMPILE_IFELSE([$2], [result=ok], [result=bad])
-	if test z$result = zok ; then
-		AC_MSG_RESULT([yes])
-		AC_DEFINE([$3], 1, [$4])
-	else
-		AC_MSG_RESULT([no])
-	fi
-])
-
 # CHECK_COMPILER_OPTION([OPTION], [SYMBOL])
 # If the compiler supports the command line option OPTION, define the cpp
 # symbol SYMBOL to 1.  Also, define an automake conditional named SYMBOL

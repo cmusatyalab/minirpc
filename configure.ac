@@ -15,7 +15,7 @@ AC_PREREQ(2.59)
 AC_INIT([miniRPC], [0.1])
 AM_INIT_AUTOMAKE([foreign])
 AC_COPYRIGHT([Copyright (C) 2007 Carnegie Mellon University])
-AC_CONFIG_SRCDIR([configure.ac])
+AC_CONFIG_SRCDIR([connection.c])
 
 # Generating a config.h prevents the introduction of several lines' worth of
 # -D flags on every gcc command line
