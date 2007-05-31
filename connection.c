@@ -33,7 +33,7 @@ static int conn_match(struct list_head *entry, void *data)
 static struct mrpc_connection *conn_lookup(struct mrpc_conn_set *set, int fd)
 {
 	struct list_head *head;
-	
+
 	head=hash_get(set->conns, conn_match, fd, &fd);
 	if (head == NULL)
 		return NULL;
@@ -48,7 +48,7 @@ static int setsockoptval(int fd, int level, int optname, int value)
 static int set_nonblock(int fd)
 {
 	int flags;
-	
+
 	flags=fcntl(fd, F_GETFL);
 	if (flags == -1)
 		return -errno;
@@ -64,7 +64,7 @@ static int mrpc_conn_add(struct mrpc_conn_set *set, int fd,
 	struct epoll_event event={0};
 	pthread_mutexattr_t attr;
 	int ret;
-	
+
 	setsockoptval(fd, SOL_SOCKET, SO_KEEPALIVE, 1);
 	ret=set_nonblock(fd);
 	if (ret)
@@ -112,7 +112,7 @@ static int mrpc_conn_add(struct mrpc_conn_set *set, int fd,
 static void mrpc_conn_remove(struct mrpc_connection *conn)
 {
 	struct mrpc_conn_set *set=conn->set;
-	
+
 	/* XXX data already in buffer? */
 	pthread_mutex_lock(&set->conns_lock);
 	hash_remove(set->conns, &conn->lh_conns);
@@ -133,10 +133,10 @@ exported const char *mrpc_connect(struct mrpc_conn_set *set, char *host,
 	char portbuf[8];
 	int fd=-1;
 	int ret;
-	
+
 	if (set->config.protocol->is_server)
 		return "Servers cannot make outbound connections";
-	
+
 	ret=snprintf(portbuf, sizeof(portbuf), "%u", port);
 	if (ret == -1 || ret >= sizeof(portbuf))
 		return "Port number too long for buffer";
@@ -144,7 +144,7 @@ exported const char *mrpc_connect(struct mrpc_conn_set *set, char *host,
 	ret=getaddrinfo(host, portbuf, &hints, &info);
 	if (ret)
 		return gai_strerror(ret);
-	
+
 	for (curinfo=info; curinfo != NULL; curinfo=curinfo->ai_next) {
 		fd=socket(info->ai_family, info->ai_socktype,
 					info->ai_protocol);
@@ -182,13 +182,13 @@ exported int mrpc_listen(struct mrpc_conn_set *set, char *listenaddr,
 	int fd;
 	int ret;
 	int count=0;
-	
+
 	if (!set->config.protocol->is_server) {
 		if (err != NULL)
 			*err="Clients cannot accept inbound connections";
 		return 0;
 	}
-	
+
 	ret=snprintf(portbuf, sizeof(portbuf), "%u", port);
 	if (ret == -1 || ret >= sizeof(portbuf)) {
 		if (err != NULL)
@@ -203,7 +203,7 @@ exported int mrpc_listen(struct mrpc_conn_set *set, char *listenaddr,
 			*err=gai_strerror(ret);
 		return 0;
 	}
-	
+
 	event.events=EPOLLIN;
 	for (curinfo=info; curinfo != NULL; curinfo=curinfo->ai_next) {
 		fd=socket(curinfo->ai_family, curinfo->ai_socktype,
@@ -250,7 +250,7 @@ exported int mrpc_bind_fd(struct mrpc_conn_set *set, int fd, void *data,
 	int accepting;
 	socklen_t arglen=sizeof(accepting);
 	int ret;
-	
+
 	if (getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &accepting, &arglen))
 		return -errno;
 	if (accepting)
@@ -289,7 +289,7 @@ exported mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
 static int need_writable(struct mrpc_connection *conn, int writable)
 {
 	struct epoll_event event={0};
-	
+
 	event.data.fd=conn->fd;
 	event.events=POLLEVENTS;
 	if (writable)
@@ -301,7 +301,7 @@ static void conn_kill(struct mrpc_connection *conn,
 			enum mrpc_disc_reason reason)
 {
 	struct mrpc_event *event;
-	
+
 	mrpc_conn_close(conn);
 	event=mrpc_alloc_event(conn, EVENT_DISCONNECT);
 	if (event != NULL) {
@@ -313,7 +313,7 @@ static void conn_kill(struct mrpc_connection *conn,
 static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
 {
 	mrpc_status_t ret;
-	
+
 	ret=unserialize((xdrproc_t)xdr_mrpc_header, conn->recv_hdr_buf,
 				MINIRPC_HEADER_LEN, &conn->recv_msg->hdr,
 				sizeof(conn->recv_msg->hdr));
@@ -323,7 +323,7 @@ static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
 		/* XXX doesn't get returned to client if request */
   		return MINIRPC_ENCODING_ERR;
 	}
-	
+
 	if (conn->recv_msg->hdr.datalen) {
 		conn->recv_msg->data=malloc(conn->recv_msg->hdr.datalen);
 		if (conn->recv_msg->data == NULL) {
@@ -341,7 +341,7 @@ static void try_read_conn(struct mrpc_connection *conn)
 	ssize_t count;
 	char *buf;
 	unsigned len;
-	
+
 	while (1) {
 		if (conn->recv_msg == NULL) {
 			conn->recv_msg=mrpc_alloc_message(conn);
@@ -349,7 +349,7 @@ static void try_read_conn(struct mrpc_connection *conn)
 				/* XXX */
 			}
 		}
-		
+
 		switch (conn->recv_state) {
 		case STATE_HEADER:
 			buf=conn->recv_hdr_buf;
@@ -362,7 +362,7 @@ static void try_read_conn(struct mrpc_connection *conn)
 		default:
 			assert(0);
 		}
-		
+
 		if (conn->recv_offset < len) {
 			count=read(conn->fd, buf + conn->recv_offset,
 						len - conn->recv_offset);
@@ -380,7 +380,7 @@ static void try_read_conn(struct mrpc_connection *conn)
 			printf("Read %d bytes\n", count);
 			conn->recv_offset += count;
 		}
-		
+
 		if (conn->recv_offset == len) {
 			switch (conn->recv_state) {
 			case STATE_HEADER:
@@ -408,7 +408,7 @@ static void try_read_conn(struct mrpc_connection *conn)
 static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 {
 	mrpc_status_t ret;
-	
+
 	pthread_mutex_lock(&conn->send_msgs_lock);
 	if (list_is_empty(&conn->send_msgs)) {
 		need_writable(conn, 0);
@@ -419,7 +419,7 @@ static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 				lh_msgs);
 	list_del_init(&conn->send_msg->lh_msgs);
 	pthread_mutex_unlock(&conn->send_msgs_lock);
-	
+
 	ret=serialize_len((xdrproc_t)xdr_mrpc_header, &conn->send_msg->hdr,
 				conn->send_hdr_buf, MINIRPC_HEADER_LEN);
 	if (ret) {
@@ -436,7 +436,7 @@ static void try_write_conn(struct mrpc_connection *conn)
 	ssize_t count;
 	char *buf;
 	unsigned len;
-	
+
 	while (1) {
 		if (conn->send_msg == NULL) {
 			if (get_next_message(conn)) {
@@ -457,7 +457,7 @@ static void try_write_conn(struct mrpc_connection *conn)
 				conn->send_state=STATE_HEADER;
 			}
 		}
-		
+
 		switch (conn->send_state) {
 		case STATE_HEADER:
 			buf=conn->send_hdr_buf;
@@ -470,7 +470,7 @@ static void try_write_conn(struct mrpc_connection *conn)
 		default:
 			assert(0);
 		}
-		
+
 		if (conn->send_offset < len) {
 			count=write(conn->fd, buf + conn->send_offset,
 						len - conn->send_offset);
@@ -484,7 +484,7 @@ static void try_write_conn(struct mrpc_connection *conn)
 			}
 			conn->send_offset += count;
 		}
-		
+
 		if (conn->send_offset == len) {
 			switch (conn->send_state) {
 			case STATE_HEADER:
@@ -511,7 +511,7 @@ static void try_accept(struct mrpc_conn_set *set, int listenfd)
 	struct sockaddr *addr;
 	socklen_t addrlen;
 	int fd;
-	
+
 	while (1) {
 		addrlen=sizeof(struct sockaddr_storage);
 		addr=malloc(addrlen);
@@ -555,14 +555,14 @@ static void *listener(void *data)
 	struct epoll_event events[set->config.expected_fds];
 	int count;
 	int i;
-	
+
 	while (1) {
 		count=epoll_wait(set->epoll_fd, events,
 					set->config.expected_fds, -1);
 		for (i=0; i<count; i++) {
 			if (events[i].data.fd == set->shutdown_pipe[0])
 				return NULL;
-			
+
 			pthread_mutex_lock(&set->conns_lock);
 			conn=conn_lookup(set, events[i].data.fd);
 			pthread_mutex_unlock(&set->conns_lock);
@@ -590,7 +590,7 @@ static void *listener(void *data)
 mrpc_status_t send_message(struct mrpc_message *msg)
 {
 	struct mrpc_connection *conn=msg->conn;
-	
+
 	pthread_mutex_lock(&conn->send_msgs_lock);
 	/* XXX extra syscall even when we don't need it */
 	if (need_writable(conn, 1)) {
@@ -625,7 +625,7 @@ exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
 	struct mrpc_conn_set *set;
 	struct epoll_event event={0};
 	int ret=-ENOMEM;
-	
+
 	if (config == NULL || config->protocol == NULL || ops == NULL ||
 				new_set == NULL)
 		return -EINVAL;

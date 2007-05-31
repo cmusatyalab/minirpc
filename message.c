@@ -38,7 +38,7 @@ static struct pending_reply *request_lookup(struct mrpc_connection *conn,
 			int sequence)
 {
 	struct list_head *head;
-	
+
 	head=hash_get(conn->pending_replies, request_match, sequence,
 				&sequence);
 	if (head == NULL)
@@ -50,7 +50,7 @@ static mrpc_status_t pending_alloc(struct mrpc_message *request,
 			struct pending_reply **pending_reply)
 {
 	struct pending_reply *pending;
-	
+
 	pending=malloc(sizeof(*pending));
 	if (pending == NULL)
 		return MINIRPC_NOMEM;
@@ -66,7 +66,7 @@ static mrpc_status_t send_request_pending(struct mrpc_message *request,
 {
 	struct mrpc_connection *conn=request->conn;
 	mrpc_status_t ret;
-	
+
 	pthread_mutex_lock(&conn->pending_replies_lock);
 	hash_add(conn->pending_replies, &pending->lh_pending);
 	pthread_mutex_unlock(&conn->pending_replies_lock);
@@ -89,7 +89,7 @@ exported mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
 	struct pending_reply *pending;
 	pthread_cond_t cond=PTHREAD_COND_INITIALIZER;
 	mrpc_status_t ret;
-	
+
 	if (protocol != conn->set->config.protocol)
 		return MINIRPC_INVALID_PROTOCOL;
 	if (cmd <= 0)
@@ -108,7 +108,7 @@ exported mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
 	ret=send_request_pending(request, pending);
 	if (ret)
 		return ret;
-	
+
 	pthread_mutex_lock(&conn->sync_wakeup_lock);
 	while (reply == NULL)
 		pthread_cond_wait(&cond, &conn->sync_wakeup_lock);
@@ -126,7 +126,7 @@ exported mrpc_status_t mrpc_send_request_async(
 	struct mrpc_message *msg;
 	struct pending_reply *pending;
 	mrpc_status_t ret;
-	
+
 	if (protocol != conn->set->config.protocol)
 		return MINIRPC_INVALID_PROTOCOL;
 	if (callback == NULL || cmd <= 0)
@@ -151,7 +151,7 @@ exported mrpc_status_t mrpc_send_request_noreply(
 {
 	struct mrpc_message *msg;
 	mrpc_status_t ret;
-	
+
 	if (protocol != conn->set->config.protocol)
 		return MINIRPC_INVALID_PROTOCOL;
 	if (cmd >= 0)
@@ -167,7 +167,7 @@ exported mrpc_status_t mrpc_send_reply(const struct mrpc_protocol *protocol,
 {
 	struct mrpc_message *reply;
 	mrpc_status_t ret;
-	
+
 	if (protocol != request->conn->set->config.protocol)
 		return MINIRPC_INVALID_PROTOCOL;
 	ret=format_reply(request, data, &reply);
@@ -186,7 +186,7 @@ exported mrpc_status_t mrpc_send_reply_error(
 {
 	struct mrpc_message *reply;
 	mrpc_status_t ret;
-	
+
 	if (protocol != request->conn->set->config.protocol)
 		return MINIRPC_INVALID_PROTOCOL;
 	if (status == MINIRPC_OK || status == MINIRPC_PENDING)
@@ -207,7 +207,7 @@ void process_incoming_message(struct mrpc_message *msg)
 	struct mrpc_connection *conn=msg->conn;
 	struct pending_reply *pending;
 	struct mrpc_event *event;
-	
+
 	if (msg->hdr.status == MINIRPC_PENDING) {
 		event=mrpc_alloc_message_event(msg, EVENT_REQUEST);
 		if (event == NULL)

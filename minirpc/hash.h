@@ -18,7 +18,7 @@ static inline struct htable *hash_alloc(unsigned buckets, hash_fn hfunc)
 {
 	struct htable *table;
 	int i;
-	
+
 	table=malloc(sizeof(*table));
 	if (table == NULL)
 		return NULL;
@@ -56,7 +56,7 @@ static inline struct list_head *hash_get(struct htable *table,
 			hash_match_fn match, unsigned bucketkey, void *data)
 {
 	struct list_head *cur;
-	
+
 	list_for_each(cur, &table->hash[bucketkey % table->buckets])
 		if (match(cur, data))
 			return cur;

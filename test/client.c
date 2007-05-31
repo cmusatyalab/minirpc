@@ -20,7 +20,7 @@ void query_sync(struct mrpc_connection *conn)
 	struct TestRequest request;
 	struct TestReply *reply;
 	mrpc_status_t ret;
-	
+
 	warn("Sending sync query");
 	request.num=12;
 	ret=test_query(conn, &request, &reply);
@@ -37,7 +37,7 @@ void call_sync(struct mrpc_connection *conn)
 {
 	struct TestRequest request;
 	mrpc_status_t ret;
-	
+
 	warn("Sending sync call");
 	request.num=12;
 	ret=test_call(conn, &request);
@@ -51,7 +51,7 @@ void error_sync(struct mrpc_connection *conn)
 {
 	struct TestReply *reply;
 	mrpc_status_t ret;
-	
+
 	warn("Sending sync error");
 	ret=test_error(conn, &reply);
 	if (ret != 1)
@@ -63,7 +63,7 @@ void query_callback(void *conn_private, void *msg_private,
 			struct mrpc_message *msg, int status, TestReply *reply)
 {
 	int request=(int)msg_private;
-	
+
 	if (status)
 		warn("Request %d returned error %d", request, status);
 	else
@@ -76,7 +76,7 @@ void query_client_async(struct mrpc_connection *conn)
 	struct TestRequest request;
 	mrpc_status_t ret;
 	int i;
-	
+
 	warn("Sending client-async queries");
 	for (i=0; i<5; i++) {
 		request.num=i;
@@ -93,7 +93,7 @@ void query_server_async(struct mrpc_connection *conn)
 	struct TestRequest request;
 	struct TestReply *reply;
 	mrpc_status_t ret;
-	
+
 	warn("Sending server-async query");
 	request.num=12;
 	ret=test_query_async_reply(conn, &request, &reply);
@@ -110,7 +110,7 @@ void notify(struct mrpc_connection *conn)
 {
 	struct TestNotify notify;
 	mrpc_status_t ret;
-	
+
 	warn("Sending notify");
 	notify.num=12;
 	ret=test_notify(conn, &notify);
@@ -123,7 +123,7 @@ void notify(struct mrpc_connection *conn)
 void invalidate(struct mrpc_connection *conn)
 {
 	int ret;
-	
+
 	warn("Testing connectivity");
 	ret=test_ping(conn);
 	if (ret)
@@ -163,21 +163,21 @@ int main(int argc, char **argv)
 	struct mrpc_connection *conn;
 	int ret;
 	const char *sret;
-	
+
 	if (argc != 2)
 		die("Usage: %s hostname", argv[0]);
-	
+
 	if (mrpc_conn_set_alloc(&config, &set_ops, NULL, &set))
 		die("Couldn't allocate conn set");
-	
+
 	sret=mrpc_connect(set, argv[1], 58000, NULL, &conn);
 	if (sret != NULL)
 		die("%s", sret);
-	
+
 	ret=pthread_create(&thread, NULL, runner, set);
 	if (ret)
 		die("Couldn't create runner thread: %s", strerror(errno));
-	
+
 	warn("Sending messages");
 	query_sync(conn);
 	query_client_async(conn);

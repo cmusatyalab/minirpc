@@ -6,7 +6,7 @@
 struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn)
 {
 	struct mrpc_message *msg;
-	
+
 	msg=malloc(sizeof(*msg));
 	if (msg == NULL)
 		return NULL;
@@ -34,7 +34,7 @@ static mrpc_status_t serialize_common(enum xdr_op direction, xdrproc_t xdr_proc,
 {
 	XDR xdrs;
 	mrpc_status_t ret=MINIRPC_OK;
-	
+
 	xdrmem_create(&xdrs, buf, buflen, direction);
 	if (!xdr_proc(&xdrs, data) || xdr_getpos(&xdrs) != buflen)
 		ret=MINIRPC_ENCODING_ERR;
@@ -52,7 +52,7 @@ mrpc_status_t unserialize(xdrproc_t xdr_proc, char *in, unsigned in_len,
 			void *out, unsigned out_len)
 {
 	mrpc_status_t ret;
-	
+
 	memset(out, 0, out_len);
 	ret=serialize_common(XDR_DECODE, xdr_proc, out, in, in_len);
 	if (ret) {
@@ -69,7 +69,7 @@ static mrpc_status_t serialize(xdrproc_t xdr_proc, void *in, char **out,
 	char *buf=NULL;
 	unsigned len;
 	mrpc_status_t ret;
-	
+
 	xdrlen_create(&xdrs);
 	if (!xdr_proc(&xdrs, in)) {
 		xdr_destroy(&xdrs);
@@ -77,7 +77,7 @@ static mrpc_status_t serialize(xdrproc_t xdr_proc, void *in, char **out,
 	}
 	len=xdr_getpos(&xdrs);
 	xdr_destroy(&xdrs);
-	
+
 	if (len) {
 		buf=malloc(len);
 		if (buf == NULL)
@@ -99,7 +99,7 @@ static mrpc_status_t format_message(struct mrpc_connection *conn,
 {
 	struct mrpc_message *msg;
 	mrpc_status_t ret;
-	
+
 	msg=mrpc_alloc_message(conn);
 	if (msg == NULL)
 		return MINIRPC_NOMEM;
@@ -117,7 +117,7 @@ static mrpc_status_t unformat_message(xdrproc_t type, unsigned size,
 {
 	void *buf=NULL;
 	mrpc_status_t ret;
-	
+
 	if (size) {
 		if (result == NULL)
 			return MINIRPC_ENCODING_ERR;
@@ -141,7 +141,7 @@ mrpc_status_t format_request(struct mrpc_connection *conn, unsigned cmd,
 	struct mrpc_message *msg;
 	xdrproc_t type;
 	mrpc_status_t ret;
-	
+
 	if (conn->set->config.protocol->sender_request_info(cmd, &type, NULL))
 		return MINIRPC_ENCODING_ERR;
 	ret=format_message(conn, type, data, &msg);
@@ -162,7 +162,7 @@ mrpc_status_t format_reply(struct mrpc_message *request, void *data,
 	struct mrpc_message *msg;
 	xdrproc_t type;
 	mrpc_status_t ret;
-	
+
 	if (request->conn->set->config.protocol->
 				receiver_reply_info(request->hdr.cmd, &type,
 				NULL))
@@ -181,7 +181,7 @@ mrpc_status_t format_reply_error(struct mrpc_message *request,
 			mrpc_status_t status, struct mrpc_message **result)
 {
 	struct mrpc_message *msg;
-	
+
 	if (status == MINIRPC_OK)
 		return MINIRPC_INVALID_ARGUMENT;
 	if (format_message(request->conn, (xdrproc_t)xdr_void, NULL, &msg))
@@ -197,7 +197,7 @@ mrpc_status_t unformat_request(struct mrpc_message *msg, void **result)
 {
 	xdrproc_t type;
 	unsigned size;
-	
+
 	if (msg->conn->set->config.protocol->receiver_request_info(msg->hdr.cmd,
 				&type, &size))
 		return MINIRPC_ENCODING_ERR;
@@ -208,7 +208,7 @@ mrpc_status_t unformat_reply(struct mrpc_message *msg, void **result)
 {
 	xdrproc_t type;
 	unsigned size;
-	
+
 	if (msg->hdr.status)
 		return msg->hdr.status;
 	if (msg->conn->set->config.protocol->sender_reply_info(msg->hdr.cmd,

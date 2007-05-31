@@ -9,7 +9,7 @@ struct mrpc_event *mrpc_alloc_event(struct mrpc_connection *conn,
 			enum event_type type)
 {
 	struct mrpc_event *event;
-	
+
 	event=malloc(sizeof(*event));
 	if (event == NULL)
 		return NULL;
@@ -24,7 +24,7 @@ struct mrpc_event *mrpc_alloc_message_event(struct mrpc_message *msg,
 			enum event_type type)
 {
 	struct mrpc_event *event;
-	
+
 	assert(msg->event == NULL);
 	event=mrpc_alloc_event(msg->conn, type);
 	if (event == NULL)
@@ -39,7 +39,7 @@ static int empty_pipe(int fd)
 	char buf[8];
 	int count;
 	ssize_t ret;
-	
+
 	for (count=0; (ret=read(fd, buf, sizeof(buf))) >= 0; count += ret);
 	return count;
 }
@@ -53,7 +53,7 @@ static int conn_is_plugged(struct mrpc_connection *conn)
 static void try_queue_conn(struct mrpc_connection *conn)
 {
 	struct mrpc_conn_set *set=conn->set;
-	
+
 	if (conn_is_plugged(conn) || list_is_empty(&conn->events) ||
 				!list_is_empty(&conn->lh_event_conns))
 		return;
@@ -65,7 +65,7 @@ static void try_queue_conn(struct mrpc_connection *conn)
 void queue_event(struct mrpc_event *event)
 {
 	struct mrpc_connection *conn=event->conn;
-	
+
 	assert(list_is_empty(&event->lh_events));
 	pthread_mutex_lock(&conn->set->events_lock);
 	list_add_tail(&event->lh_events, &conn->events);
@@ -77,7 +77,7 @@ static struct mrpc_event *unqueue_event(struct mrpc_conn_set *set)
 {
 	struct mrpc_connection *conn;
 	struct mrpc_event *event=NULL;
-	
+
 	pthread_mutex_lock(&set->events_lock);
 	if (list_is_empty(&set->event_conns)) {
 		if (empty_pipe(set->events_notify_pipe[0]))
@@ -138,7 +138,7 @@ exported mrpc_status_t mrpc_plug_conn(struct mrpc_connection *conn)
 exported mrpc_status_t mrpc_unplug_conn(struct mrpc_connection *conn)
 {
 	mrpc_status_t ret=MINIRPC_OK;
-	
+
 	pthread_mutex_lock(&conn->set->events_lock);
 	if (conn->plugged_user) {
 		conn->plugged_user--;
@@ -186,16 +186,16 @@ static void dispatch_request(struct mrpc_event *event)
 	xdrproc_t reply_type;
 	unsigned reply_size;
 	int doreply;
-	
+
 	assert(request->hdr.status == MINIRPC_PENDING);
-	
+
 	if (conn->set->config.protocol->receiver_request_info(request->hdr.cmd,
 				&request_type, NULL)) {
 		/* Unknown opcode */
 		fail_request(request, MINIRPC_PROCEDURE_UNAVAIL);
 		return;
 	}
-	
+
 	doreply=(request->hdr.cmd >= 0);
 	if (doreply) {
 		if (conn->set->config.protocol->
@@ -205,7 +205,7 @@ static void dispatch_request(struct mrpc_event *event)
 			fail_request(request, MINIRPC_ENCODING_ERR);
 			return;
 		}
-		
+
 		if (reply_size) {
 			reply_data=malloc(reply_size);
 			if (reply_data == NULL) {
@@ -226,7 +226,7 @@ static void dispatch_request(struct mrpc_event *event)
 	   struct may stay around for a while, so free up some memory. */
 	cond_free(request->data);
 	request->data=NULL;
-	
+
 	pthread_mutex_lock(&conn->operations_lock);
 	if (conn->set->config.protocol->request != NULL)
 		result=conn->set->config.protocol->request(conn->operations,
@@ -241,7 +241,7 @@ static void dispatch_request(struct mrpc_event *event)
 	mrpc_unplug_event(event);
 	xdr_free(request_type, request_data);
 	cond_free(request_data);
-	
+
 	if (doreply) {
 		if (result == MINIRPC_PENDING) {
 			xdr_free(reply_type, reply_data);
@@ -273,7 +273,7 @@ static void run_reply_callback(struct mrpc_event *event)
 	void *out=NULL;
 	unsigned size;
 	mrpc_status_t ret;
-	
+
 	ret=reply->conn->set->config.protocol->sender_reply_info(reply->hdr.cmd,
 				NULL, &size);
 	if (ret) {
@@ -300,7 +300,7 @@ static void dispatch_event(struct mrpc_event *event)
 {
 	struct mrpc_connection *conn=event->conn;
 	const struct mrpc_set_operations *ops=conn->set->ops;
-	
+
 	switch (event->type) {
 	case EVENT_ACCEPT:
 		assert(ops->accept != NULL);
@@ -333,7 +333,7 @@ static void dispatch_event(struct mrpc_event *event)
 exported int mrpc_dispatch_one(struct mrpc_conn_set *set)
 {
 	struct mrpc_event *event;
-	
+
 	event=unqueue_event(set);
 	if (event != NULL)
 		dispatch_event(event);
@@ -343,7 +343,7 @@ exported int mrpc_dispatch_one(struct mrpc_conn_set *set)
 exported int mrpc_dispatch_all(struct mrpc_conn_set *set)
 {
 	int i;
-	
+
 	for (i=0; mrpc_dispatch_one(set); i++);
 	return i;
 }
@@ -353,17 +353,17 @@ exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 	struct mrpc_event *event;
 	struct pollfd poll_s[2] = {{0}};
 	int ret=0;
-	
+
 	pthread_mutex_lock(&set->events_lock);
 	set->events_threads++;
 	pthread_cond_broadcast(&set->events_threads_cond);
 	pthread_mutex_unlock(&set->events_lock);
-	
+
 	poll_s[0].fd=set->events_notify_pipe[0];
 	poll_s[0].events=POLLIN;
 	poll_s[1].fd=set->shutdown_pipe[0];
 	poll_s[1].events=POLLIN;
-	
+
 	while (poll_s[1].revents == 0) {
 		event=unqueue_event(set);
 		if (event == NULL) {
@@ -375,7 +375,7 @@ exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 			dispatch_event(event);
 		}
 	}
-	
+
 	pthread_mutex_lock(&set->events_lock);
 	set->events_threads--;
 	pthread_cond_broadcast(&set->events_threads_cond);

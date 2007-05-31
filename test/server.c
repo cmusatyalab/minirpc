@@ -128,7 +128,7 @@ static void *run_callbacks(void *ignored)
 {
 	struct message_list_node *node;
 	struct TestReply reply;
-	
+
 	while (1) {
 		pthread_mutex_lock(&lock);
 		while (list_is_empty(&pending))
@@ -136,7 +136,7 @@ static void *run_callbacks(void *ignored)
 		node=list_first_entry(&pending, struct message_list_node, lh);
 		list_del_init(&node->lh);
 		pthread_mutex_unlock(&lock);
-		
+
 		warn("Sending async reply, value %d", node->num);
 		reply.num=node->num;
 		test_query_async_reply_send_async_reply(node->msg, &reply);
@@ -148,7 +148,7 @@ int main(int argc, char **argv)
 {
 	struct mrpc_conn_set *set;
 	const char *err;
-	
+
 	if (mrpc_conn_set_alloc(&config, &set_ops, NULL, &set))
 		die("Couldn't allocate connection set");
 	INIT_LIST_HEAD(&pending);

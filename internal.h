@@ -25,14 +25,14 @@ struct mrpc_conn_set {
 	struct mrpc_config config;
 	const struct mrpc_set_operations *ops;
 	void *private;
-	
+
 	struct htable *conns;
 	pthread_mutex_t conns_lock;
-	
+
 	struct list_head event_conns;
 	int events_notify_pipe[2];
 	pthread_mutex_t events_lock;
-	
+
 	int epoll_fd;
 	int shutdown_pipe[2];
 	pthread_t thread;
@@ -52,21 +52,21 @@ struct mrpc_event {
 	struct list_head lh_events;
 	enum event_type type;
 	struct mrpc_connection *conn;
-	
+
 	/* accept */
 	struct sockaddr *addr;
 	socklen_t addrlen;
-	
+
 	/* request/reply */
 	struct mrpc_message *msg;
-	
+
 	/* reply */
 	reply_callback_fn *callback;
 	void *private;
-	
+
 	/* disconnect */
 	enum mrpc_disc_reason disc_reason;
-	
+
 	/* message errors */
 	char *errstring;
 };
@@ -90,32 +90,32 @@ struct mrpc_connection {
 	struct mrpc_conn_set *set;
 	int fd;
 	void *private;
-	
+
 	const void *operations;
 	pthread_mutex_t operations_lock;
-	
+
 	struct list_head send_msgs;
 	pthread_mutex_t send_msgs_lock;
 	struct mrpc_message *send_msg;
 	enum conn_state send_state;
 	char send_hdr_buf[MINIRPC_HEADER_LEN];
 	unsigned send_offset;
-	
+
 	unsigned recv_offset;
 	unsigned recv_length;
 	char recv_hdr_buf[MINIRPC_HEADER_LEN];
 	enum conn_state recv_state;
 	struct mrpc_message *recv_msg;
-	
+
 	struct htable *pending_replies;
 	pthread_mutex_t pending_replies_lock;
 	pthread_mutex_t sync_wakeup_lock;
-	
+
 	struct list_head lh_event_conns;
 	struct list_head events;	/* protected by set->events_lock */
 	struct mrpc_event *plugged_event;
 	unsigned plugged_user;
-	
+
 	int next_sequence;
 	pthread_mutex_t next_sequence_lock;
 };

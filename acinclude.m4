@@ -31,12 +31,12 @@ AC_DEFUN([FIND_LIBRARY], [
 			break
 		fi
 	done
-	
+
 	if test $found_lib = 0 ; then
 		AC_MSG_RESULT([not found])
 		AC_MSG_ERROR([cannot find $1 in $5])
 	fi
-	
+
 	# By default, AC_CHECK_LIB([foo], ...) will add "-lfoo" to the linker
 	# flags for ALL programs and libraries, which is not what we want.
 	# We put a no-op in the third argument to disable this behavior.
