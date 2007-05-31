@@ -17,6 +17,9 @@ use Getopt::Std;
 use File::Compare;
 use Text::Wrap;
 
+my $rpcgen = "!!RPCGEN!!";
+my $version = "!!VERSION!!";
+
 our $base;
 our %outfiles;
 our %types;
@@ -869,6 +872,7 @@ sub genRpclFile {
 our $opt_o;
 getopts("o:");
 if (!defined($opt_o) || @ARGV == 0) {
+	print "minirpcgen $version\n";
 	print "Usage: $0 -o <output_file_base_name> <input_files>\n";
 	exit 1;
 }
@@ -898,7 +902,7 @@ genstubs;
 genRpclFile(@ARGV);
 
 # Generate xdr.c
-open(IF, "-|", "rpcgen -c $base.x.$$") or
+open(IF, "-|", "$rpcgen -c $base.x.$$") or
 	die "Couldn't generate ${base}_xdr.c";
 openFile(*XCF, "${base}_xdr.c");
 while (<IF>) {
@@ -910,7 +914,7 @@ while (<IF>) {
 # Generate xdr.h
 my $olddefine = uc "_$base.x_H_RPCGEN";
 my $newdefine = uc "${base}_XDR_H";
-open(IF, "-|", "rpcgen -h $base.x.$$") or
+open(IF, "-|", "$rpcgen -h $base.x.$$") or
 	die "Couldn't generate ${base}_xdr.h";
 openFile(*XHF, "${base}_xdr.h");
 while (<IF>) {

@@ -12,5 +12,5 @@ EXTRA_PROGRAMS = client server
 client_SOURCES = client.c $(GEN)
 server_SOURCES = server.c $(GEN)
 
-%_minirpc.c %_minirpc.h %_client.h %_server.h %_xdr.c %_xdr.h: %.mx ../minirpcgen.pl
-	../minirpcgen.pl -o $(<:%.mx=%) $(filter-out %.pl,$^)
+%_minirpc.c %_minirpc.h %_client.h %_server.h %_xdr.c %_xdr.h: %.mx ../minirpcgen.in
+	../minirpcgen -o $(<:%.mx=%) $(filter-out %.in,$^)
