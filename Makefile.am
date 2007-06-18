@@ -19,6 +19,9 @@ nobase_include_HEADERS = $(foreach hf,$(EXTHEADERS),minirpc/$(hf))
 bin_SCRIPTS = minirpcgen
 CLEANFILES = minirpcgen
 
+pkgconfigdir = $(libdir)/pkgconfig
+pkgconfig_DATA = minirpc.pc
+
 SUBDIRS = . test
 EXTRA_DIST = LICENSE CHANGES minirpcgen.in
 

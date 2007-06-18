@@ -22,6 +22,7 @@ Makefile.in
 *.o
 *.la
 *.lo
+*.pc
 .libs
 .deps
 

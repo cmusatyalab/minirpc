@@ -36,6 +36,7 @@ fi
 # Checks for supported compiler options.
 CHECK_COMPILER_OPTION([-fvisibility=hidden], [HAVE_VISIBILITY])
 
-AC_CONFIG_FILES([Makefile
+AC_CONFIG_FILES([minirpc.pc
+		Makefile
 		test/Makefile])
 AC_OUTPUT
