@@ -33,6 +33,11 @@ if test z$RPCGEN = z ; then
 	AC_MSG_ERROR([could not locate rpcgen])
 fi
 
+# Checks for libraries.
+PKG_CHECK_MODULES([APR], [apr-1])
+CFLAGS="$CFLAGS $APR_CFLAGS"
+LIBS="$LIBS $APR_LIBS"
+
 # Checks for supported compiler options.
 CHECK_COMPILER_OPTION([-fvisibility=hidden], [HAVE_VISIBILITY])
 
