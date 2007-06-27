@@ -86,8 +86,8 @@ static int mrpc_conn_add(struct mrpc_conn_set *set, int fd,
 	memset(conn, 0, sizeof(*conn));
 	INIT_LIST_HEAD(&conn->lh_conns);
 	INIT_LIST_HEAD(&conn->send_msgs);
-	INIT_LIST_HEAD(&conn->lh_event_conns);
-	INIT_LIST_HEAD(&conn->events);
+	APR_RING_ELEM_INIT(conn, lh_event_conns);
+	APR_RING_INIT(&conn->events, mrpc_event, lh_events);
 	pthread_mutexattr_init(&attr);
 	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
 	pthread_mutex_init(&conn->operations_lock, &attr);
@@ -662,7 +662,7 @@ exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
 	pthread_mutex_init(&set->conns_lock, NULL);
 	pthread_mutex_init(&set->events_lock, NULL);
 	pthread_cond_init(&set->events_threads_cond, NULL);
-	INIT_LIST_HEAD(&set->event_conns);
+	APR_RING_INIT(&set->event_conns, mrpc_connection, lh_event_conns);
 	set->ops=ops;
 	set->private = (set_data != NULL) ? set_data : set;
 	set->conns=hash_alloc(set->config.conn_buckets, conn_hash);

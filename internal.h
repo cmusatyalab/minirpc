@@ -19,6 +19,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <apr_ring.h>
 #include <minirpc/minirpc.h>
 #include <minirpc/protocol.h>
 #include <minirpc/list.h>
@@ -32,6 +33,9 @@
 #define exported
 #endif
 
+APR_RING_HEAD(conn_ring, mrpc_connection);
+APR_RING_HEAD(event_ring, mrpc_event);
+
 struct mrpc_conn_set {
 	struct mrpc_config config;
 	const struct mrpc_set_operations *ops;
@@ -40,7 +44,7 @@ struct mrpc_conn_set {
 	struct htable *conns;
 	pthread_mutex_t conns_lock;
 
-	struct list_head event_conns;
+	struct conn_ring event_conns;
 	int events_notify_pipe[2];
 	pthread_mutex_t events_lock;
 
@@ -60,7 +64,7 @@ enum event_type {
 };
 
 struct mrpc_event {
-	struct list_head lh_events;
+	APR_RING_ENTRY(mrpc_event) lh_events;
 	enum event_type type;
 	struct mrpc_connection *conn;
 
@@ -122,14 +126,25 @@ struct mrpc_connection {
 	pthread_mutex_t pending_replies_lock;
 	pthread_mutex_t sync_wakeup_lock;
 
-	struct list_head lh_event_conns;
-	struct list_head events;	/* protected by set->events_lock */
+	APR_RING_ENTRY(mrpc_connection) lh_event_conns;
+	struct event_ring events;	/* protected by set->events_lock */
 	struct mrpc_event *plugged_event;
 	unsigned plugged_user;
 
 	int next_sequence;
 	pthread_mutex_t next_sequence_lock;
 };
+
+#define APR_RING_REMOVE_INIT(ep, link) \
+	do { \
+		APR_RING_UNSPLICE((ep), (ep), link); \
+		APR_RING_ELEM_INIT((ep), link); \
+	} while (0)
+/* We don't want people accidentally using the unclean version */
+#undef APR_RING_REMOVE
+
+#define APR_RING_ELEM_EMPTY(ep, link) \
+	(APR_RING_NEXT((ep), link) == (ep))
 
 /* connection.c */
 mrpc_status_t send_message(struct mrpc_message *msg);

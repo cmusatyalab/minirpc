@@ -13,6 +13,7 @@
 #include <unistd.h>
 #include <assert.h>
 #include <pthread.h>
+#include <apr_ring.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
@@ -25,7 +26,7 @@ struct mrpc_event *mrpc_alloc_event(struct mrpc_connection *conn,
 	if (event == NULL)
 		return NULL;
 	memset(event, 0, sizeof(*event));
-	INIT_LIST_HEAD(&event->lh_events);
+	APR_RING_ELEM_INIT(event, lh_events);
 	event->type=type;
 	event->conn=conn;
 	return event;
@@ -65,21 +66,24 @@ static void try_queue_conn(struct mrpc_connection *conn)
 {
 	struct mrpc_conn_set *set=conn->set;
 
-	if (conn_is_plugged(conn) || list_is_empty(&conn->events) ||
-				!list_is_empty(&conn->lh_event_conns))
+	if (conn_is_plugged(conn) ||
+				APR_RING_EMPTY(&conn->events, mrpc_event,
+				lh_events) ||
+				!APR_RING_ELEM_EMPTY(conn, lh_event_conns))
 		return;
-	if (list_is_empty(&set->event_conns))
+	if (APR_RING_EMPTY(&set->event_conns, mrpc_connection, lh_event_conns))
 		write(set->events_notify_pipe[1], "a", 1);
-	list_add_tail(&conn->lh_event_conns, &set->event_conns);
+	APR_RING_INSERT_TAIL(&set->event_conns, conn, mrpc_connection,
+				lh_event_conns);
 }
 
 void queue_event(struct mrpc_event *event)
 {
 	struct mrpc_connection *conn=event->conn;
 
-	assert(list_is_empty(&event->lh_events));
+	assert(APR_RING_ELEM_EMPTY(event, lh_events));
 	pthread_mutex_lock(&conn->set->events_lock);
-	list_add_tail(&event->lh_events, &conn->events);
+	APR_RING_INSERT_TAIL(&conn->events, event, mrpc_event, lh_events);
 	try_queue_conn(conn);
 	pthread_mutex_unlock(&conn->set->events_lock);
 }
@@ -90,20 +94,20 @@ static struct mrpc_event *unqueue_event(struct mrpc_conn_set *set)
 	struct mrpc_event *event=NULL;
 
 	pthread_mutex_lock(&set->events_lock);
-	if (list_is_empty(&set->event_conns)) {
+	if (APR_RING_EMPTY(&set->event_conns, mrpc_connection,
+				lh_event_conns)) {
 		if (empty_pipe(set->events_notify_pipe[0]))
 			/* XXX */;
 	} else {
-		conn=list_first_entry(&set->event_conns, struct mrpc_connection,
-					lh_event_conns);
-		list_del_init(&conn->lh_event_conns);
-		if (list_is_empty(&set->event_conns))
+		conn=APR_RING_FIRST(&set->event_conns);
+		APR_RING_REMOVE_INIT(conn, lh_event_conns);
+		if (APR_RING_EMPTY(&set->event_conns, mrpc_connection,
+					lh_event_conns))
 			if (empty_pipe(set->events_notify_pipe[0]) != 1)
 				/* XXX */;
-		assert(!list_is_empty(&conn->events));
-		event=list_first_entry(&conn->events, struct mrpc_event,
-					lh_events);
-		list_del_init(&event->lh_events);
+		assert(!APR_RING_EMPTY(&conn->events, mrpc_event, lh_events));
+		event=APR_RING_FIRST(&conn->events);
+		APR_RING_REMOVE_INIT(event, lh_events);
 		conn->plugged_event=event;
 	}
 	pthread_mutex_unlock(&set->events_lock);
@@ -118,7 +122,7 @@ static mrpc_status_t _mrpc_unplug_event(struct mrpc_connection *conn,
 		pthread_mutex_unlock(&conn->set->events_lock);
 		return MINIRPC_INVALID_ARGUMENT;
 	}
-	assert(list_is_empty(&conn->lh_event_conns));
+	assert(APR_RING_ELEM_EMPTY(conn, lh_event_conns));
 	conn->plugged_event=NULL;
 	try_queue_conn(conn);
 	pthread_mutex_unlock(&conn->set->events_lock);
@@ -140,8 +144,8 @@ exported mrpc_status_t mrpc_plug_conn(struct mrpc_connection *conn)
 {
 	pthread_mutex_lock(&conn->set->events_lock);
 	conn->plugged_user++;
-	if (!list_is_empty(&conn->lh_event_conns))
-		list_del_init(&conn->lh_event_conns);
+	if (!APR_RING_ELEM_EMPTY(conn, lh_event_conns))
+		APR_RING_REMOVE_INIT(conn, lh_event_conns);
 	pthread_mutex_unlock(&conn->set->events_lock);
 	return MINIRPC_OK;
 }
