@@ -35,6 +35,7 @@
 
 APR_RING_HEAD(conn_ring, mrpc_connection);
 APR_RING_HEAD(event_ring, mrpc_event);
+APR_RING_HEAD(msg_ring, mrpc_message);
 
 struct mrpc_conn_set {
 	struct mrpc_config config;
@@ -89,7 +90,7 @@ struct mrpc_event {
 struct mrpc_message {
 	struct mrpc_connection *conn;
 	struct mrpc_event *event;
-	struct list_head lh_msgs;
+	APR_RING_ENTRY(mrpc_message) lh_msgs;
 	struct mrpc_header hdr;
 	char *data;
 };
@@ -109,7 +110,7 @@ struct mrpc_connection {
 	const void *operations;
 	pthread_mutex_t operations_lock;
 
-	struct list_head send_msgs;
+	struct msg_ring send_msgs;
 	pthread_mutex_t send_msgs_lock;
 	struct mrpc_message *send_msg;
 	enum conn_state send_state;

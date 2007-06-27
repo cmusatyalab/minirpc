@@ -22,7 +22,7 @@ struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn)
 	if (msg == NULL)
 		return NULL;
 	memset(msg, 0, sizeof(*msg));
-	INIT_LIST_HEAD(&msg->lh_msgs);
+	APR_RING_ELEM_INIT(msg, lh_msgs);
 	msg->conn=conn;
 	return msg;
 }
@@ -35,7 +35,7 @@ void cond_free(void *ptr)
 
 void mrpc_free_message(struct mrpc_message *msg)
 {
-	assert(list_is_empty(&msg->lh_msgs));
+	assert(APR_RING_ELEM_EMPTY(msg, lh_msgs));
 	cond_free(msg->data);
 	free(msg);
 }

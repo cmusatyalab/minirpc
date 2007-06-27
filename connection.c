@@ -85,7 +85,7 @@ static int mrpc_conn_add(struct mrpc_conn_set *set, int fd,
 		return -ENOMEM;
 	memset(conn, 0, sizeof(*conn));
 	INIT_LIST_HEAD(&conn->lh_conns);
-	INIT_LIST_HEAD(&conn->send_msgs);
+	APR_RING_INIT(&conn->send_msgs, mrpc_message, lh_msgs);
 	APR_RING_ELEM_INIT(conn, lh_event_conns);
 	APR_RING_INIT(&conn->events, mrpc_event, lh_events);
 	pthread_mutexattr_init(&attr);
@@ -421,14 +421,13 @@ static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 	mrpc_status_t ret;
 
 	pthread_mutex_lock(&conn->send_msgs_lock);
-	if (list_is_empty(&conn->send_msgs)) {
+	if (APR_RING_EMPTY(&conn->send_msgs, mrpc_message, lh_msgs)) {
 		need_writable(conn, 0);
 		pthread_mutex_unlock(&conn->send_msgs_lock);
 		return MINIRPC_OK;
 	}
-	conn->send_msg=list_first_entry(&conn->send_msgs, struct mrpc_message,
-				lh_msgs);
-	list_del_init(&conn->send_msg->lh_msgs);
+	conn->send_msg=APR_RING_FIRST(&conn->send_msgs);
+	APR_RING_REMOVE_INIT(conn->send_msg, lh_msgs);
 	pthread_mutex_unlock(&conn->send_msgs_lock);
 
 	ret=serialize_len((xdrproc_t)xdr_mrpc_header, &conn->send_msg->hdr,
@@ -609,7 +608,7 @@ mrpc_status_t send_message(struct mrpc_message *msg)
 		mrpc_free_message(msg);
 		return MINIRPC_NETWORK_FAILURE;
 	}
-	list_add_tail(&msg->lh_msgs, &conn->send_msgs);
+	APR_RING_INSERT_TAIL(&conn->send_msgs, msg, mrpc_message, lh_msgs);
 	pthread_mutex_unlock(&conn->send_msgs_lock);
 	return MINIRPC_OK;
 }
