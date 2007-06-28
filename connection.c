@@ -75,6 +75,7 @@ static int mrpc_conn_add(struct mrpc_conn_set *set, int fd,
 	struct epoll_event event={0};
 	pthread_mutexattr_t attr;
 	int ret;
+	apr_status_t stat;
 
 	setsockoptval(fd, SOL_SOCKET, SO_KEEPALIVE, 1);
 	ret=set_nonblock(fd);
@@ -100,8 +101,14 @@ static int mrpc_conn_add(struct mrpc_conn_set *set, int fd,
 	conn->recv_state=STATE_HEADER;
 	conn->set=set;
 	conn->fd=fd;
+	stat=apr_pool_create(&conn->pool, set->pool);
+	if (stat) {
+		free(conn);
+		return -APR_TO_OS_ERROR(stat);
+	}
 	conn->pending_replies=hash_alloc(set->config.msg_buckets, request_hash);
 	if (conn->pending_replies == NULL) {
+		apr_pool_destroy(conn->pool);
 		free(conn);
 		return -ENOMEM;
 	}
@@ -110,6 +117,7 @@ static int mrpc_conn_add(struct mrpc_conn_set *set, int fd,
 	if (epoll_ctl(set->epoll_fd, EPOLL_CTL_ADD, fd, &event)) {
 		ret=-errno;
 		hash_free(conn->pending_replies);
+		apr_pool_destroy(conn->pool);
 		free(conn);
 		return ret;
 	}
@@ -129,6 +137,7 @@ static void mrpc_conn_remove(struct mrpc_connection *conn)
 	hash_remove(set->conns, &conn->lh_conns);
 	pthread_mutex_unlock(&set->conns_lock);
 	hash_free(conn->pending_replies);
+	apr_pool_destroy(conn->pool);
 	free(conn);
 }
 
@@ -635,6 +644,7 @@ exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
 	struct mrpc_conn_set *set;
 	struct epoll_event event={0};
 	int ret;
+	apr_status_t stat;
 
 	if (config == NULL || config->protocol == NULL || ops == NULL ||
 				new_set == NULL)
@@ -669,6 +679,11 @@ exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
 	APR_RING_INIT(&set->event_conns, mrpc_connection, lh_event_conns);
 	set->ops=ops;
 	set->private = (set_data != NULL) ? set_data : set;
+	stat=apr_pool_create(&set->pool, mrpc_pool);
+	if (stat) {
+		ret=-APR_TO_OS_ERROR(stat);
+		goto bad_pool;
+	}
 	set->conns=hash_alloc(set->config.conn_buckets, conn_hash);
 	if (set->conns == NULL) {
 		ret=-ENOMEM;
@@ -721,6 +736,8 @@ bad_events_pipe:
 bad_shutdown_pipe:
 	hash_free(set->conns);
 bad_conns:
+	apr_pool_destroy(set->pool);
+bad_pool:
 	free(set);
 bad_alloc:
 	mrpc_put();
@@ -739,6 +756,7 @@ exported void mrpc_conn_set_free(struct mrpc_conn_set *set)
 	pthread_join(set->thread, NULL);
 	close(set->epoll_fd);
 	hash_free(set->conns);
+	apr_pool_destroy(set->pool);
 	free(set);
 	mrpc_put();
 }

@@ -20,6 +20,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <apr_ring.h>
+#include <apr_pools.h>
 #include <minirpc/minirpc.h>
 #include <minirpc/protocol.h>
 #include <minirpc/list.h>
@@ -41,6 +42,8 @@ struct mrpc_conn_set {
 	struct mrpc_config config;
 	const struct mrpc_set_operations *ops;
 	void *private;
+
+	apr_pool_t *pool;
 
 	struct htable *conns;
 	pthread_mutex_t conns_lock;
@@ -106,6 +109,7 @@ struct mrpc_connection {
 	struct mrpc_conn_set *set;
 	int fd;
 	void *private;
+	apr_pool_t *pool;
 
 	const void *operations;
 	pthread_mutex_t operations_lock;
@@ -148,6 +152,7 @@ struct mrpc_connection {
 	(APR_RING_NEXT((ep), link) == (ep))
 
 /* init.c */
+extern apr_pool_t *mrpc_pool;
 int mrpc_get(void);
 void mrpc_put(void);
 
