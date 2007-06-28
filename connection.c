@@ -634,7 +634,7 @@ exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
 {
 	struct mrpc_conn_set *set;
 	struct epoll_event event={0};
-	int ret=-ENOMEM;
+	int ret;
 
 	if (config == NULL || config->protocol == NULL || ops == NULL ||
 				new_set == NULL)
@@ -654,8 +654,10 @@ exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
 			return -EINVAL;
 	}
 	set=malloc(sizeof(*set));
-	if (set == NULL)
+	if (set == NULL) {
+		ret=-ENOMEM;
 		goto bad_alloc;
+	}
 	memset(set, 0, sizeof(*set));
 	validate_copy_config(config, &set->config);
 	pthread_mutex_init(&set->conns_lock, NULL);
@@ -665,8 +667,10 @@ exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
 	set->ops=ops;
 	set->private = (set_data != NULL) ? set_data : set;
 	set->conns=hash_alloc(set->config.conn_buckets, conn_hash);
-	if (set->conns == NULL)
+	if (set->conns == NULL) {
+		ret=-ENOMEM;
 		goto bad_conns;
+	}
 	if (pipe(set->shutdown_pipe)) {
 		ret=-errno;
 		goto bad_shutdown_pipe;
@@ -675,9 +679,11 @@ exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
 		ret=-errno;
 		goto bad_events_pipe;
 	}
-	if (set_nonblock(set->events_notify_pipe[0]))
+	ret=set_nonblock(set->events_notify_pipe[0]);
+	if (ret)
 		goto bad_nonblock;
-	if (set_nonblock(set->events_notify_pipe[1]))
+	ret=set_nonblock(set->events_notify_pipe[1]);
+	if (ret)
 		goto bad_nonblock;
 	set->epoll_fd=epoll_create(set->config.expected_fds);
 	if (set->epoll_fd < 0) {
