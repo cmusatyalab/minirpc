@@ -136,8 +136,7 @@ struct mrpc_connection {
 	struct mrpc_event *plugged_event;
 	unsigned plugged_user;
 
-	int next_sequence;
-	pthread_mutex_t next_sequence_lock;
+	apr_uint32_t next_sequence;  /* atomic operations only */
 };
 
 #define APR_RING_REMOVE_INIT(ep, link) \

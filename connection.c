@@ -96,7 +96,6 @@ static int mrpc_conn_add(struct mrpc_conn_set *set, int fd,
 	pthread_mutex_init(&conn->send_msgs_lock, NULL);
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
 	pthread_mutex_init(&conn->sync_wakeup_lock, NULL);
-	pthread_mutex_init(&conn->next_sequence_lock, NULL);
 	conn->send_state=STATE_IDLE;
 	conn->recv_state=STATE_HEADER;
 	conn->set=set;
