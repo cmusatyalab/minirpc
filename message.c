@@ -10,11 +10,11 @@
  */
 
 #include <pthread.h>
+#include <assert.h>  /* XXX */
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
 struct pending_reply {
-	struct list_head lh_pending;
 	unsigned sequence;
 	unsigned cmd;
 	int async;
@@ -30,31 +30,11 @@ struct pending_reply {
 	} data;
 };
 
-unsigned request_hash(struct list_head *head, unsigned buckets)
+unsigned numeric_hash_fn(const char *key, apr_ssize_t *klen)
 {
-	struct pending_reply *pending=list_entry(head, struct pending_reply,
-				lh_pending);
-	return pending->sequence % buckets;
-}
-
-static int request_match(struct list_head *head, void *data)
-{
-	struct pending_reply *pending=list_entry(head, struct pending_reply,
-				lh_pending);
-	int *sequence=data;
-	return (*sequence == pending->sequence);
-}
-
-static struct pending_reply *request_lookup(struct mrpc_connection *conn,
-			int sequence)
-{
-	struct list_head *head;
-
-	head=hash_get(conn->pending_replies, request_match, sequence,
-				&sequence);
-	if (head == NULL)
-		return NULL;
-	return list_entry(head, struct pending_reply, lh_pending);
+	const unsigned *kp=(const unsigned *)key;
+	assert(*klen == sizeof(unsigned));
+	return *kp;
 }
 
 static mrpc_status_t pending_alloc(struct mrpc_message *request,
@@ -65,7 +45,6 @@ static mrpc_status_t pending_alloc(struct mrpc_message *request,
 	pending=malloc(sizeof(*pending));
 	if (pending == NULL)
 		return MINIRPC_NOMEM;
-	INIT_LIST_HEAD(&pending->lh_pending);
 	pending->sequence=request->hdr.sequence;
 	pending->cmd=request->hdr.cmd;
 	*pending_reply=pending;
@@ -79,12 +58,14 @@ static mrpc_status_t send_request_pending(struct mrpc_message *request,
 	mrpc_status_t ret;
 
 	pthread_mutex_lock(&conn->pending_replies_lock);
-	hash_add(conn->pending_replies, &pending->lh_pending);
+	apr_hash_set(conn->pending_replies, &pending->sequence,
+				sizeof(pending->sequence), pending);
 	pthread_mutex_unlock(&conn->pending_replies_lock);
 	ret=send_message(request);
 	if (ret) {
 		pthread_mutex_lock(&conn->pending_replies_lock);
-		hash_remove(conn->pending_replies, &pending->lh_pending);
+		apr_hash_set(conn->pending_replies, &pending->sequence,
+					sizeof(pending->sequence), NULL);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
 		free(pending);
 	}
@@ -226,10 +207,12 @@ void process_incoming_message(struct mrpc_message *msg)
 		queue_event(event);
 	} else {
 		pthread_mutex_lock(&conn->pending_replies_lock);
-		pending=request_lookup(conn, msg->hdr.sequence);
+		pending=apr_hash_get(conn->pending_replies, &msg->hdr.sequence,
+					sizeof(msg->hdr.sequence));
 		if (pending != NULL)
-			hash_remove(conn->pending_replies,
-						&pending->lh_pending);
+			apr_hash_set(conn->pending_replies, &pending->sequence,
+						sizeof(pending->sequence),
+						NULL);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
 		if (pending == NULL || pending->cmd != msg->hdr.cmd ||
 					(msg->hdr.status != 0 &&

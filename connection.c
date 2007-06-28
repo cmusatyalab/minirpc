@@ -105,17 +105,11 @@ static int mrpc_conn_add(struct mrpc_conn_set *set, int fd,
 		free(conn);
 		return -APR_TO_OS_ERROR(stat);
 	}
-	conn->pending_replies=hash_alloc(set->config.msg_buckets, request_hash);
-	if (conn->pending_replies == NULL) {
-		apr_pool_destroy(conn->pool);
-		free(conn);
-		return -ENOMEM;
-	}
+	conn->pending_replies=apr_hash_make_custom(conn->pool, numeric_hash_fn);
 	event.events=POLLEVENTS;
 	event.data.fd=fd;
 	if (epoll_ctl(set->epoll_fd, EPOLL_CTL_ADD, fd, &event)) {
 		ret=-errno;
-		hash_free(conn->pending_replies);
 		apr_pool_destroy(conn->pool);
 		free(conn);
 		return ret;
@@ -135,7 +129,6 @@ static void mrpc_conn_remove(struct mrpc_connection *conn)
 	pthread_mutex_lock(&set->conns_lock);
 	hash_remove(set->conns, &conn->lh_conns);
 	pthread_mutex_unlock(&set->conns_lock);
-	hash_free(conn->pending_replies);
 	apr_pool_destroy(conn->pool);
 	free(conn);
 }
@@ -630,7 +623,6 @@ static void validate_copy_config(const struct mrpc_config *from,
 	to->protocol=from->protocol;
 	copy_default(from, to, expected_fds, 16);
 	copy_default(from, to, conn_buckets, 16);
-	copy_default(from, to, msg_buckets, 16);
 	copy_default(from, to, msg_max_buf_len, 16000);
 	copy_default(from, to, listen_backlog, 16);
 }

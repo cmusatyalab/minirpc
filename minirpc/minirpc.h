@@ -36,7 +36,6 @@ struct mrpc_config {
 	const struct mrpc_protocol *protocol;
 	unsigned expected_fds;
 	unsigned conn_buckets;
-	unsigned msg_buckets;
 	unsigned msg_max_buf_len;
 	unsigned listen_backlog;
 };
