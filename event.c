@@ -13,7 +13,6 @@
 #include <unistd.h>
 #include <assert.h>
 #include <pthread.h>
-#include <apr_ring.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
