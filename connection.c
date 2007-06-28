@@ -653,6 +653,9 @@ exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
 		if (ops->accept != NULL)
 			return -EINVAL;
 	}
+	ret=mrpc_get();
+	if (ret)
+		goto bad_init;
 	set=malloc(sizeof(*set));
 	if (set == NULL) {
 		ret=-ENOMEM;
@@ -720,6 +723,8 @@ bad_shutdown_pipe:
 bad_conns:
 	free(set);
 bad_alloc:
+	mrpc_put();
+bad_init:
 	return ret;
 }
 
@@ -735,4 +740,5 @@ exported void mrpc_conn_set_free(struct mrpc_conn_set *set)
 	close(set->epoll_fd);
 	hash_free(set->conns);
 	free(set);
+	mrpc_put();
 }
