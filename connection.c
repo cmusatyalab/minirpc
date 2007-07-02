@@ -26,23 +26,6 @@
 
 #define POLLEVENTS (APR_POLLIN|APR_POLLERR|APR_POLLHUP)
 
-static int setsockoptval(int fd, int level, int optname, int value)
-{
-	return setsockopt(fd, level, optname, &value, sizeof(value));
-}
-
-static int set_nonblock(int fd)
-{
-	int flags;
-
-	flags=fcntl(fd, F_GETFL);
-	if (flags == -1)
-		return -errno;
-	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK))
-		return -errno;
-	return 0;
-}
-
 static apr_status_t update_poll(struct mrpc_conn_set *set, apr_socket_t *sock,
 			unsigned reqevents, void *data)
 {
@@ -180,84 +163,60 @@ exported const char *mrpc_connect(struct mrpc_conn_set *set, char *host,
 	return NULL;
 }
 
-/* returns number of successfully bound listening sockets */
-exported int mrpc_listen(struct mrpc_conn_set *set, char *listenaddr,
-			unsigned port, const char **err)
+exported apr_status_t mrpc_listen(struct mrpc_conn_set *set, char *listenaddr,
+			unsigned port, int *bound)
 {
-	struct addrinfo *info;
-	struct addrinfo *curinfo;
-	struct addrinfo hints={0};
-	char portbuf[8];
-	int fd;
-	int ret;
+	apr_pool_t *pool;
+	apr_sockaddr_t *sa;
+	apr_socket_t *sock;
 	apr_status_t stat;
-	apr_socket_t *sock=NULL;
 	int count=0;
 
-	if (!set->config.protocol->is_server) {
-		if (err != NULL)
-			*err="Clients cannot accept inbound connections";
-		return 0;
-	}
-
-	ret=snprintf(portbuf, sizeof(portbuf), "%u", port);
-	if (ret == -1 || ret >= sizeof(portbuf)) {
-		if (err != NULL)
-			*err="Port number too long for buffer";
-		return 0;
-	}
-	hints.ai_flags=AI_PASSIVE;
-	hints.ai_socktype=SOCK_STREAM;
-	ret=getaddrinfo(listenaddr, portbuf, &hints, &info);
-	if (ret) {
-		if (err != NULL)
-			*err=gai_strerror(ret);
-		return 0;
-	}
-
-	for (curinfo=info; curinfo != NULL; curinfo=curinfo->ai_next) {
-		fd=socket(curinfo->ai_family, curinfo->ai_socktype,
-					curinfo->ai_protocol);
-		if (fd == -1) {
-			ret=errno;
+	if (bound)
+		*bound=0;
+	if (!set->config.protocol->is_server)
+		return APR_EINVAL;
+	stat=apr_pool_create(&pool, set->pool);
+	if (stat)
+		return stat;
+	stat=apr_sockaddr_info_get(&sa, listenaddr, APR_UNSPEC, port, 0, pool);
+	for (; sa != NULL; sa=sa->next) {
+		stat=apr_socket_create(&sock, sa->family, SOCK_STREAM, 0,
+					set->pool);
+		if (stat)
 			continue;
-		}
-		setsockoptval(fd, SOL_SOCKET, SO_REUSEADDR, 1);
-		ret=set_nonblock(fd);
-		if (ret) {
-			ret=-ret;
-			close(fd);
-			continue;
-		}
-		if (bind(fd, curinfo->ai_addr, curinfo->ai_addrlen)) {
-			ret=errno;
-			close(fd);
-			continue;
-		}
-		if (listen(fd, set->config.listen_backlog)) {
-			ret=errno;
-			close(fd);
-			continue;
-		}
-		stat=apr_os_sock_put(&sock, &fd, set->pool);
+		stat=apr_socket_opt_set(sock, APR_SO_REUSEADDR, 1);
 		if (stat) {
-			/* XXX shouldn't indirect through ret */
-			ret=-APR_TO_OS_ERROR(stat);
-			close(fd);
+			apr_socket_close(sock);
+			continue;
+		}
+		stat=apr_socket_opt_set(sock, APR_SO_NONBLOCK, 1);
+		if (stat) {
+			apr_socket_close(sock);
+			continue;
+		}
+		stat=apr_socket_bind(sock, sa);
+		if (stat) {
+			apr_socket_close(sock);
+			continue;
+		}
+		if (apr_socket_listen(sock, set->config.listen_backlog)) {
+			apr_socket_close(sock);
 			continue;
 		}
 		stat=update_poll(set, sock, APR_POLLIN, NULL);
 		if (stat) {
-			/* XXX shouldn't indirect through ret */
-			ret=-APR_TO_OS_ERROR(stat);
 			apr_socket_close(sock);
 			continue;
 		}
 		count++;
 	}
-	if (count == 0 && err != NULL)
-		*err=strerror(ret);
-	return count;
+	apr_pool_destroy(pool);
+	if (bound)
+		*bound=count;
+	if (count == 0)
+		return stat;
+	return APR_SUCCESS;
 }
 
 /* returns -errno */

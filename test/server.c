@@ -158,7 +158,8 @@ static void *run_callbacks(void *ignored)
 int main(int argc, char **argv)
 {
 	struct mrpc_conn_set *set;
-	const char *err;
+	char errbuf[128];
+	apr_status_t stat;
 
 	if (mrpc_conn_set_alloc(&config, &set_ops, NULL, &set))
 		die("Couldn't allocate connection set");
@@ -167,8 +168,11 @@ int main(int argc, char **argv)
 	pthread_cond_init(&cond, NULL);
 	if (pthread_create(&callback_thread, NULL, run_callbacks, NULL))
 		die("Couldn't start callback thread");
-	if (!mrpc_listen(set, NULL, 58000, &err))
-		die("%s", err);
+	stat=mrpc_listen(set, NULL, 58000, NULL);
+	if (stat) {
+		apr_strerror(stat, errbuf, sizeof(errbuf));
+		die("%s", errbuf);
+	}
 	mrpc_dispatch_loop(set);
 	return 0;
 }

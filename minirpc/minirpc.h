@@ -14,6 +14,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <apr_errno.h>
 
 struct mrpc_protocol;
 struct mrpc_conn_set;
@@ -59,8 +60,8 @@ int mrpc_conn_set_alloc(const struct mrpc_config *config,
 void mrpc_conn_set_free(struct mrpc_conn_set *set);
 const char *mrpc_connect(struct mrpc_conn_set *set, char *host, unsigned port,
 			void *data, struct mrpc_connection **new_conn);
-int mrpc_listen(struct mrpc_conn_set *set, char *listenaddr, unsigned port,
-			const char **err);
+apr_status_t mrpc_listen(struct mrpc_conn_set *set, char *listenaddr,
+			unsigned port, int *bound);
 int mrpc_bind_fd(struct mrpc_conn_set *set, int fd, void *data,
 			struct mrpc_connection **new_conn);
 void mrpc_conn_close(struct mrpc_connection *conn);
