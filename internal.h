@@ -25,8 +25,6 @@
 #include <apr_poll.h>
 #include <minirpc/minirpc.h>
 #include <minirpc/protocol.h>
-#include <minirpc/list.h>
-#include <minirpc/hash.h>
 #include "minirpc_xdr.h"
 
 #include "config.h"
