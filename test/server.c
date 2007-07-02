@@ -20,8 +20,8 @@
 #include <time.h>
 #include <errno.h>
 #include <pthread.h>
+#include <apr_ring.h>
 #include <minirpc/minirpc.h>
-#include <minirpc/list.h>
 #include "test_server.h"
 
 #define DEBUG
@@ -37,12 +37,13 @@
 #endif
 
 struct message_list_node {
-	struct list_head lh;
+	APR_RING_ENTRY(message_list_node) lh;
 	struct mrpc_message *msg;
 	int num;
 };
 
-static struct list_head pending;
+APR_RING_HEAD(message_ring, message_list_node);
+static struct message_ring pending;
 static pthread_mutex_t lock;
 static pthread_cond_t cond;
 static pthread_t callback_thread;
@@ -60,11 +61,10 @@ mrpc_status_t do_query_async_reply(void *conn_data, struct mrpc_message *msg,
 {
 	struct message_list_node *node=malloc(sizeof(*node));
 	warn("Query, value %d, pending", in->num);
-	INIT_LIST_HEAD(&node->lh);
 	node->msg=msg;
 	node->num=in->num;
 	pthread_mutex_lock(&lock);
-	list_add(&node->lh, &pending);
+	APR_RING_INSERT_HEAD(&pending, node, message_list_node, lh);
 	pthread_cond_signal(&cond);
 	pthread_mutex_unlock(&lock);
 	return MINIRPC_PENDING;
@@ -142,10 +142,10 @@ static void *run_callbacks(void *ignored)
 
 	while (1) {
 		pthread_mutex_lock(&lock);
-		while (list_is_empty(&pending))
+		while (APR_RING_EMPTY(&pending, message_list_node, lh))
 			pthread_cond_wait(&cond, &lock);
-		node=list_first_entry(&pending, struct message_list_node, lh);
-		list_del_init(&node->lh);
+		node=APR_RING_FIRST(&pending);
+		APR_RING_REMOVE(node, lh);
 		pthread_mutex_unlock(&lock);
 
 		warn("Sending async reply, value %d", node->num);
@@ -162,7 +162,7 @@ int main(int argc, char **argv)
 
 	if (mrpc_conn_set_alloc(&config, &set_ops, NULL, &set))
 		die("Couldn't allocate connection set");
-	INIT_LIST_HEAD(&pending);
+	APR_RING_INIT(&pending, message_list_node, lh);
 	pthread_mutex_init(&lock, NULL);
 	pthread_cond_init(&cond, NULL);
 	if (pthread_create(&callback_thread, NULL, run_callbacks, NULL))
