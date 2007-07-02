@@ -157,6 +157,7 @@ void mrpc_put(void);
 
 /* connection.c */
 mrpc_status_t send_message(struct mrpc_message *msg);
+void mrpc_conn_free(struct mrpc_connection *conn);
 
 /* message.c */
 unsigned numeric_hash_fn(const char *key, apr_ssize_t *klen);

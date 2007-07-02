@@ -124,12 +124,9 @@ static int mrpc_conn_add(struct mrpc_conn_set *set, int fd,
 }
 /* XXX unregister sock from pollset at pool release */
 
-static void mrpc_conn_remove(struct mrpc_connection *conn)
+void mrpc_conn_free(struct mrpc_connection *conn)
 {
-	struct mrpc_conn_set *set=conn->set;
-
 	/* XXX data already in buffer? */
-	remove_poll(set, conn->sock);
 	apr_pool_destroy(conn->pool);
 	free(conn);
 }
@@ -287,13 +284,14 @@ exported int mrpc_bind_fd(struct mrpc_conn_set *set, int fd, void *data,
 static void _conn_close(struct mrpc_connection *conn)
 {
 	/* XXX */
+	remove_poll(conn->set, conn->sock);
 	apr_socket_close(conn->sock);
 }
 
 exported void mrpc_conn_close(struct mrpc_connection *conn)
 {
 	_conn_close(conn);
-	mrpc_conn_remove(conn);
+	mrpc_conn_free(conn);
 }
 
 exported mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
@@ -312,7 +310,7 @@ static void conn_kill(struct mrpc_connection *conn,
 {
 	struct mrpc_event *event;
 
-	mrpc_conn_close(conn);
+	_conn_close(conn);
 	event=mrpc_alloc_event(conn, EVENT_DISCONNECT);
 	if (event != NULL) {
 		event->disc_reason=reason;

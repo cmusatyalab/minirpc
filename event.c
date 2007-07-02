@@ -339,7 +339,7 @@ static void dispatch_event(struct mrpc_event *event)
 	case EVENT_DISCONNECT:
 		if (ops->disconnect)
 			ops->disconnect(conn->private, event->disc_reason);
-		/* XXX free conn? */
+		mrpc_conn_free(conn);
 		break;
 	case EVENT_IOERR:
 		if (ops->ioerr)
