@@ -380,9 +380,9 @@ static void try_read_conn(struct mrpc_connection *conn)
 			/* Errors can be returned even if count > 0.  Ignore
 			   them and pick them up on the next pass. */
 			if (count == 0) {
-				if (stat == APR_EOF) {
+				if (APR_STATUS_IS_EOF(stat)) {
 					conn_kill(conn, MRPC_DISC_CLOSED);
-				} else if (stat != APR_EAGAIN) {
+				} else if (!APR_STATUS_IS_EAGAIN(stat)) {
 					conn_kill(conn, MRPC_DISC_IOERR);
 				}
 				return;
@@ -489,7 +489,7 @@ static void try_write_conn(struct mrpc_connection *conn)
 			/* Errors can be returned even if count > 0.  Ignore
 			   them and pick them up on the next pass. */
 			if (count == 0) {
-				if (stat != APR_EAGAIN)
+				if (!APR_STATUS_IS_EAGAIN(stat))
 					conn_kill(conn, MRPC_DISC_IOERR);
 				break;
 			}
