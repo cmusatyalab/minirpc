@@ -22,6 +22,7 @@
 #include <apr_ring.h>
 #include <apr_hash.h>
 #include <apr_pools.h>
+#include <apr_poll.h>
 #include <minirpc/minirpc.h>
 #include <minirpc/protocol.h>
 #include <minirpc/list.h>
@@ -46,15 +47,14 @@ struct mrpc_conn_set {
 
 	apr_pool_t *pool;
 
-	struct htable *conns;
-	pthread_mutex_t conns_lock;
-
 	struct conn_ring event_conns;
-	int events_notify_pipe[2];
+	apr_file_t *events_notify_pipe_read;
+	apr_file_t *events_notify_pipe_write;
 	pthread_mutex_t events_lock;
 
-	int epoll_fd;
-	int shutdown_pipe[2];
+	apr_pollset_t *pollset;
+	apr_file_t *shutdown_pipe_read;
+	apr_file_t *shutdown_pipe_write;
 	pthread_t thread;
 	unsigned events_threads;		/* protected by events_lock */
 	pthread_cond_t events_threads_cond;
@@ -106,9 +106,8 @@ enum conn_state {
 };
 
 struct mrpc_connection {
-	struct list_head lh_conns;
 	struct mrpc_conn_set *set;
-	int fd;
+	apr_socket_t *sock;
 	void *private;
 	apr_pool_t *pool;
 

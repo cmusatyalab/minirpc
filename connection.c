@@ -14,42 +14,17 @@
 #include <netinet/in.h>
 #include <netinet/tcp.h>
 #include <netdb.h>
-#include <sys/epoll.h>
 #include <unistd.h>
 #include <fcntl.h>
 #include <string.h>
 #include <errno.h>
 #include <assert.h>
 #include <pthread.h>
+#include <apr_portable.h>  /* XXX */
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
-#define POLLEVENTS (EPOLLIN|EPOLLERR|EPOLLHUP)
-
-static unsigned conn_hash(struct list_head *entry, unsigned buckets)
-{
-	struct mrpc_connection *conn=list_entry(entry, struct mrpc_connection,
-				lh_conns);
-	return conn->fd % buckets;
-}
-
-static int conn_match(struct list_head *entry, void *data)
-{
-	struct mrpc_connection *conn=list_entry(entry, struct mrpc_connection,
-				lh_conns);
-	int *fd=data;
-	return (*fd == conn->fd);
-}
-
-static struct mrpc_connection *conn_lookup(struct mrpc_conn_set *set, int fd)
-{
-	struct list_head *head;
-
-	head=hash_get(set->conns, conn_match, fd, &fd);
-	if (head == NULL)
-		return NULL;
-	return list_entry(head, struct mrpc_connection, lh_conns);
-}
+#define POLLEVENTS (APR_POLLIN|APR_POLLERR|APR_POLLHUP)
 
 static int setsockoptval(int fd, int level, int optname, int value)
 {
@@ -68,24 +43,60 @@ static int set_nonblock(int fd)
 	return 0;
 }
 
+static apr_status_t update_poll(struct mrpc_conn_set *set, apr_socket_t *sock,
+			unsigned reqevents, void *data)
+{
+	apr_pollfd_t pollfd;
+
+	pollfd.p=set->pool;
+	pollfd.desc_type=APR_POLL_SOCKET;
+	pollfd.reqevents=reqevents;
+	pollfd.desc.s=sock;
+	pollfd.client_data=data;
+	/* We can't update an existing reqevents set, so we remove the fd
+	   (which may fail) and re-add it. */
+	apr_pollset_remove(set->pollset, &pollfd);
+	return apr_pollset_add(set->pollset, &pollfd);
+}
+
+static apr_status_t remove_poll(struct mrpc_conn_set *set, apr_socket_t *sock)
+{
+	apr_pollfd_t pollfd={0};
+
+	pollfd.desc_type=APR_POLL_SOCKET;
+	pollfd.desc.s=sock;
+	return apr_pollset_remove(set->pollset, &pollfd);
+}
+
 static int mrpc_conn_add(struct mrpc_conn_set *set, int fd,
 			struct mrpc_connection **new_conn)
 {
 	struct mrpc_connection *conn;
-	struct epoll_event event={0};
 	pthread_mutexattr_t attr;
-	int ret;
 	apr_status_t stat;
+	apr_socket_t *sock=NULL;
+	apr_pool_t *pool;
 
-	setsockoptval(fd, SOL_SOCKET, SO_KEEPALIVE, 1);
-	ret=set_nonblock(fd);
-	if (ret)
-		return ret;
+	stat=apr_pool_create(&pool, set->pool);
+	if (stat)
+		return -APR_TO_OS_ERROR(stat);
+	stat=apr_os_sock_put(&sock, &fd, pool);
+	if (stat) {
+		apr_pool_destroy(pool);
+		return -APR_TO_OS_ERROR(stat);
+	}
+	apr_socket_opt_set(sock, APR_SO_KEEPALIVE, 1);
+	stat=apr_socket_opt_set(sock, APR_SO_NONBLOCK, 1);
+	if (stat) {
+		apr_pool_destroy(pool);
+		return -APR_TO_OS_ERROR(stat);
+	}
 	conn=malloc(sizeof(*conn));
-	if (conn == NULL)
+	if (conn == NULL) {
+		apr_pool_destroy(pool);
 		return -ENOMEM;
+	}
 	memset(conn, 0, sizeof(*conn));
-	INIT_LIST_HEAD(&conn->lh_conns);
 	APR_RING_INIT(&conn->send_msgs, mrpc_message, lh_msgs);
 	APR_RING_ELEM_INIT(conn, lh_event_conns);
 	APR_RING_INIT(&conn->events, mrpc_event, lh_events);
@@ -99,36 +110,26 @@ static int mrpc_conn_add(struct mrpc_conn_set *set, int fd,
 	conn->send_state=STATE_IDLE;
 	conn->recv_state=STATE_HEADER;
 	conn->set=set;
-	conn->fd=fd;
-	stat=apr_pool_create(&conn->pool, set->pool);
+	conn->sock=sock;
+	conn->pool=pool;
+	conn->pending_replies=apr_hash_make_custom(conn->pool, numeric_hash_fn);
+	stat=update_poll(set, sock, POLLEVENTS, conn);
 	if (stat) {
+		apr_pool_destroy(conn->pool);
 		free(conn);
 		return -APR_TO_OS_ERROR(stat);
 	}
-	conn->pending_replies=apr_hash_make_custom(conn->pool, numeric_hash_fn);
-	event.events=POLLEVENTS;
-	event.data.fd=fd;
-	if (epoll_ctl(set->epoll_fd, EPOLL_CTL_ADD, fd, &event)) {
-		ret=-errno;
-		apr_pool_destroy(conn->pool);
-		free(conn);
-		return ret;
-	}
-	pthread_mutex_lock(&set->conns_lock);
-	hash_add(set->conns, &conn->lh_conns);
-	pthread_mutex_unlock(&set->conns_lock);
 	*new_conn=conn;
 	return 0;
 }
+/* XXX unregister sock from pollset at pool release */
 
 static void mrpc_conn_remove(struct mrpc_connection *conn)
 {
 	struct mrpc_conn_set *set=conn->set;
 
 	/* XXX data already in buffer? */
-	pthread_mutex_lock(&set->conns_lock);
-	hash_remove(set->conns, &conn->lh_conns);
-	pthread_mutex_unlock(&set->conns_lock);
+	remove_poll(set, conn->sock);
 	apr_pool_destroy(conn->pool);
 	free(conn);
 }
@@ -189,10 +190,11 @@ exported int mrpc_listen(struct mrpc_conn_set *set, char *listenaddr,
 	struct addrinfo *info;
 	struct addrinfo *curinfo;
 	struct addrinfo hints={0};
-	struct epoll_event event={0};
 	char portbuf[8];
 	int fd;
 	int ret;
+	apr_status_t stat;
+	apr_socket_t *sock=NULL;
 	int count=0;
 
 	if (!set->config.protocol->is_server) {
@@ -216,7 +218,6 @@ exported int mrpc_listen(struct mrpc_conn_set *set, char *listenaddr,
 		return 0;
 	}
 
-	event.events=EPOLLIN;
 	for (curinfo=info; curinfo != NULL; curinfo=curinfo->ai_next) {
 		fd=socket(curinfo->ai_family, curinfo->ai_socktype,
 					curinfo->ai_protocol);
@@ -241,10 +242,18 @@ exported int mrpc_listen(struct mrpc_conn_set *set, char *listenaddr,
 			close(fd);
 			continue;
 		}
-		event.data.fd=fd;
-		if (epoll_ctl(set->epoll_fd, EPOLL_CTL_ADD, fd, &event)) {
-			ret=errno;
+		stat=apr_os_sock_put(&sock, &fd, set->pool);
+		if (stat) {
+			/* XXX shouldn't indirect through ret */
+			ret=-APR_TO_OS_ERROR(stat);
 			close(fd);
+			continue;
+		}
+		stat=update_poll(set, sock, APR_POLLIN, NULL);
+		if (stat) {
+			/* XXX shouldn't indirect through ret */
+			ret=-APR_TO_OS_ERROR(stat);
+			apr_socket_close(sock);
 			continue;
 		}
 		count++;
@@ -278,7 +287,7 @@ exported int mrpc_bind_fd(struct mrpc_conn_set *set, int fd, void *data,
 static void _conn_close(struct mrpc_connection *conn)
 {
 	/* XXX */
-	close(conn->fd);
+	apr_socket_close(conn->sock);
 }
 
 exported void mrpc_conn_close(struct mrpc_connection *conn)
@@ -296,17 +305,6 @@ exported mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
 	conn->operations=ops;
 	pthread_mutex_unlock(&conn->operations_lock);
 	return MINIRPC_OK;
-}
-
-static int need_writable(struct mrpc_connection *conn, int writable)
-{
-	struct epoll_event event={0};
-
-	event.data.fd=conn->fd;
-	event.events=POLLEVENTS;
-	if (writable)
-		event.events |= EPOLLOUT;
-	return epoll_ctl(conn->set->epoll_fd, EPOLL_CTL_MOD, conn->fd, &event);
 }
 
 static void conn_kill(struct mrpc_connection *conn,
@@ -350,9 +348,10 @@ static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
 
 static void try_read_conn(struct mrpc_connection *conn)
 {
-	ssize_t count;
+	apr_size_t count;
 	char *buf;
 	unsigned len;
+	apr_status_t stat;
 
 	while (1) {
 		if (conn->recv_msg == NULL) {
@@ -376,20 +375,21 @@ static void try_read_conn(struct mrpc_connection *conn)
 		}
 
 		if (conn->recv_offset < len) {
-			count=read(conn->fd, buf + conn->recv_offset,
-						len - conn->recv_offset);
-			if (count == -1 && errno == EINTR) {
-				continue;
-			} else if (count == -1 && errno == EAGAIN) {
-				return;
-			} else if (count == 0) {
-				conn_kill(conn, MRPC_DISC_CLOSED);
-				return;
-			} else if (count == -1) {
-				conn_kill(conn, MRPC_DISC_IOERR);
+			count = len - conn->recv_offset;
+			stat=apr_socket_recv(conn->sock,
+						buf + conn->recv_offset,
+						&count);
+			/* Errors can be returned even if count > 0.  Ignore
+			   them and pick them up on the next pass. */
+			if (count == 0) {
+				if (stat == APR_EOF) {
+					conn_kill(conn, MRPC_DISC_CLOSED);
+				} else if (stat != APR_EAGAIN) {
+					conn_kill(conn, MRPC_DISC_IOERR);
+				}
 				return;
 			}
-			printf("Read %d bytes\n", count);
+			printf("Read %d bytes\n", (int)count);
 			conn->recv_offset += count;
 		}
 
@@ -423,7 +423,7 @@ static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 
 	pthread_mutex_lock(&conn->send_msgs_lock);
 	if (APR_RING_EMPTY(&conn->send_msgs, mrpc_message, lh_msgs)) {
-		need_writable(conn, 0);
+		update_poll(conn->set, conn->sock, POLLEVENTS, conn);
 		pthread_mutex_unlock(&conn->send_msgs_lock);
 		return MINIRPC_OK;
 	}
@@ -444,9 +444,10 @@ static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 
 static void try_write_conn(struct mrpc_connection *conn)
 {
-	ssize_t count;
+	apr_size_t count;
 	char *buf;
 	unsigned len;
+	apr_status_t stat;
 
 	while (1) {
 		if (conn->send_msg == NULL) {
@@ -457,14 +458,15 @@ static void try_write_conn(struct mrpc_connection *conn)
 			}
 			if (conn->send_msg == NULL) {
 				if (conn->send_state != STATE_IDLE) {
-					setsockoptval(conn->fd, SOL_TCP,
-								TCP_CORK, 0);
+					apr_socket_opt_set(conn->sock,
+							APR_TCP_NOPUSH, 0);
 					conn->send_state=STATE_IDLE;
 				}
 				break;
 			}
 			if (conn->send_state == STATE_IDLE) {
-				setsockoptval(conn->fd, SOL_TCP, TCP_CORK, 1);
+				apr_socket_opt_set(conn->sock, APR_TCP_NOPUSH,
+							1);
 				conn->send_state=STATE_HEADER;
 			}
 		}
@@ -483,14 +485,14 @@ static void try_write_conn(struct mrpc_connection *conn)
 		}
 
 		if (conn->send_offset < len) {
-			count=write(conn->fd, buf + conn->send_offset,
-						len - conn->send_offset);
-			if (count == 0 || (count == -1 && errno == EAGAIN)) {
-				break;
-			} else if (count == -1 && errno == EINTR) {
-				continue;
-			} else if (count == -1) {
-				conn_kill(conn, MRPC_DISC_IOERR);
+			count = len - conn->send_offset;
+			stat=apr_socket_send(conn->sock, buf +
+						conn->send_offset, &count);
+			/* Errors can be returned even if count > 0.  Ignore
+			   them and pick them up on the next pass. */
+			if (count == 0) {
+				if (stat != APR_EAGAIN)
+					conn_kill(conn, MRPC_DISC_IOERR);
 				break;
 			}
 			conn->send_offset += count;
@@ -563,36 +565,40 @@ static void *listener(void *data)
 {
 	struct mrpc_conn_set *set=data;
 	struct mrpc_connection *conn;
-	struct epoll_event events[set->config.expected_fds];
+	const apr_pollfd_t *events;
 	int count;
 	int i;
+	int fd;
 
 	while (1) {
-		count=epoll_wait(set->epoll_fd, events,
-					set->config.expected_fds, -1);
+		if (apr_pollset_poll(set->pollset, -1, &count, &events))
+			/* XXX */;
 		for (i=0; i<count; i++) {
-			if (events[i].data.fd == set->shutdown_pipe[0])
+			if (events[i].client_data == set) {
+				/* Shutdown pipe */
 				return NULL;
-
-			pthread_mutex_lock(&set->conns_lock);
-			conn=conn_lookup(set, events[i].data.fd);
-			pthread_mutex_unlock(&set->conns_lock);
-			if (conn == NULL) {
-				/* Assume this is a listening socket */
-				try_accept(set, events[i].data.fd);
+			}
+			if (events[i].client_data == NULL) {
+				/* Listening socket */
+				if (apr_os_sock_get(&fd, events[i].desc.s))
+					/* XXX */;
+				try_accept(set, fd);
 				continue;
 			}
-			if (events[i].events & EPOLLERR) {
+			conn=events[i].client_data;
+			if (events[i].rtnevents & APR_POLLERR) {
 				conn_kill(conn, MRPC_DISC_IOERR);
 				continue;
 			}
-			if (events[i].events & EPOLLHUP) {
+			if (events[i].rtnevents & APR_POLLHUP) {
+				/* XXX select() won't give us this; maybe
+				   others too */
 				conn_kill(conn, MRPC_DISC_CLOSED);
 				continue;
 			}
-			if (events[i].events & EPOLLOUT)
+			if (events[i].rtnevents & APR_POLLOUT)
 				try_write_conn(conn);
-			if (events[i].events & EPOLLIN)
+			if (events[i].rtnevents & APR_POLLIN)
 				try_read_conn(conn);
 		}
 	}
@@ -603,8 +609,7 @@ mrpc_status_t send_message(struct mrpc_message *msg)
 	struct mrpc_connection *conn=msg->conn;
 
 	pthread_mutex_lock(&conn->send_msgs_lock);
-	/* XXX extra syscall even when we don't need it */
-	if (need_writable(conn, 1)) {
+	if (update_poll(conn->set, conn->sock, POLLEVENTS|APR_POLLOUT, conn)) {
 		pthread_mutex_unlock(&conn->send_msgs_lock);
 		mrpc_free_message(msg);
 		return MINIRPC_NETWORK_FAILURE;
@@ -621,8 +626,7 @@ static void validate_copy_config(const struct mrpc_config *from,
 			struct mrpc_config *to)
 {
 	to->protocol=from->protocol;
-	copy_default(from, to, expected_fds, 16);
-	copy_default(from, to, conn_buckets, 16);
+	copy_default(from, to, max_fds, 1024);
 	copy_default(from, to, msg_max_buf_len, 16000);
 	copy_default(from, to, listen_backlog, 16);
 }
@@ -633,7 +637,7 @@ exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
 			void *set_data,	struct mrpc_conn_set **new_set)
 {
 	struct mrpc_conn_set *set;
-	struct epoll_event event={0};
+	apr_pollfd_t pollfd;
 	int ret;
 	apr_status_t stat;
 
@@ -654,6 +658,7 @@ exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
 		if (ops->accept != NULL)
 			return -EINVAL;
 	}
+
 	ret=mrpc_get();
 	if (ret)
 		goto bad_init;
@@ -664,7 +669,6 @@ exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
 	}
 	memset(set, 0, sizeof(*set));
 	validate_copy_config(config, &set->config);
-	pthread_mutex_init(&set->conns_lock, NULL);
 	pthread_mutex_init(&set->events_lock, NULL);
 	pthread_cond_init(&set->events_threads_cond, NULL);
 	APR_RING_INIT(&set->event_conns, mrpc_connection, lh_event_conns);
@@ -675,58 +679,44 @@ exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
 		ret=-APR_TO_OS_ERROR(stat);
 		goto bad_pool;
 	}
-	set->conns=hash_alloc(set->config.conn_buckets, conn_hash);
-	if (set->conns == NULL) {
-		ret=-ENOMEM;
-		goto bad_conns;
-	}
-	if (pipe(set->shutdown_pipe)) {
-		ret=-errno;
-		goto bad_shutdown_pipe;
-	}
-	if (pipe(set->events_notify_pipe)) {
-		ret=-errno;
-		goto bad_events_pipe;
-	}
-	ret=set_nonblock(set->events_notify_pipe[0]);
-	if (ret)
-		goto bad_nonblock;
-	ret=set_nonblock(set->events_notify_pipe[1]);
-	if (ret)
-		goto bad_nonblock;
-	set->epoll_fd=epoll_create(set->config.expected_fds);
-	if (set->epoll_fd < 0) {
-		ret=-errno;
-		goto bad_epoll;
-	}
-	event.events=EPOLLIN;
-	event.data.fd=set->shutdown_pipe[0];
-	if (epoll_ctl(set->epoll_fd, EPOLL_CTL_ADD, set->shutdown_pipe[0],
-				&event)) {
-		ret=-errno;
-		goto bad_epoll_pipe;
-	}
+	stat=apr_file_pipe_create(&set->shutdown_pipe_read,
+				&set->shutdown_pipe_write, set->pool);
+	if (stat)
+		goto bad_apr;
+	stat=apr_file_pipe_create(&set->events_notify_pipe_read,
+				&set->events_notify_pipe_write, set->pool);
+	if (stat)
+		goto bad_apr;
+	stat=apr_file_pipe_timeout_set(set->events_notify_pipe_write, 0);
+	if (stat)
+		goto bad_apr;
+	stat=apr_file_pipe_timeout_set(set->events_notify_pipe_read, 0);
+	if (stat)
+		goto bad_apr;
+	/* XXX do we need an explicit check for APR_ENOTIMPL? */
+	stat=apr_pollset_create(&set->pollset, set->config.max_fds, set->pool,
+				APR_POLLSET_THREADSAFE);
+	if (stat)
+		goto bad_apr;
+	pollfd.p=set->pool;
+	pollfd.desc_type=APR_POLL_FILE;
+	pollfd.reqevents=APR_POLLIN;
+	pollfd.desc.f=set->shutdown_pipe_read;
+	pollfd.client_data=set;
+	stat=apr_pollset_add(set->pollset, &pollfd);
+	if (stat)
+		goto bad_apr;
 	ret=pthread_create(&set->thread, NULL, listener, set);
 	if (ret) {
 		ret=-ret;
-		goto bad_pthread;
+		goto bad_posix;
 	}
 	*new_set=set;
 	return 0;
 
-bad_pthread:
-bad_epoll_pipe:
-	close(set->epoll_fd);
-bad_epoll:
-bad_nonblock:
-	close(set->events_notify_pipe[0]);
-	close(set->events_notify_pipe[1]);
-bad_events_pipe:
-	close(set->shutdown_pipe[0]);
-	close(set->shutdown_pipe[1]);
-bad_shutdown_pipe:
-	hash_free(set->conns);
-bad_conns:
+bad_apr:
+	ret=-APR_TO_OS_ERROR(stat);
+bad_posix:
 	apr_pool_destroy(set->pool);
 bad_pool:
 	free(set);
@@ -739,14 +729,12 @@ bad_init:
 /* XXX drops lots of stuff on the floor */
 exported void mrpc_conn_set_free(struct mrpc_conn_set *set)
 {
-	write(set->shutdown_pipe[1], "s", 1);
+	apr_file_putc('s', set->shutdown_pipe_write);
 	pthread_mutex_lock(&set->events_lock);
 	while (set->events_threads)
 		pthread_cond_wait(&set->events_threads_cond, &set->events_lock);
 	pthread_mutex_unlock(&set->events_lock);
 	pthread_join(set->thread, NULL);
-	close(set->epoll_fd);
-	hash_free(set->conns);
 	apr_pool_destroy(set->pool);
 	free(set);
 	mrpc_put();
