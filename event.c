@@ -344,7 +344,8 @@ static void dispatch_event(struct mrpc_event *event)
 	default:
 		assert(0);
 	}
-	mrpc_unplug_event(event);
+	if (event->type != EVENT_DISCONNECT)
+		mrpc_unplug_event(event);
 	free(event);
 }
 
