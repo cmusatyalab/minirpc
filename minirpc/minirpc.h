@@ -55,19 +55,21 @@ struct mrpc_set_operations {
 };
 
 /* connection.c */
-int mrpc_conn_set_alloc(const struct mrpc_config *config,
+int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
+			const struct mrpc_config *config,
 			const struct mrpc_set_operations *ops,
-			void *set_data,	struct mrpc_conn_set **new_set);
+			void *set_data);
 void mrpc_conn_set_free(struct mrpc_conn_set *set);
-apr_status_t mrpc_conn_set_alloc_subpool(struct mrpc_conn_set *set,
-			apr_pool_t **new_pool);
-apr_status_t mrpc_connect(struct mrpc_conn_set *set, char *host, unsigned port,
-			void *data, struct mrpc_connection **new_conn);
+apr_status_t mrpc_conn_set_alloc_subpool(apr_pool_t **new_pool,
+			struct mrpc_conn_set *set);
+apr_status_t mrpc_connect(struct mrpc_connection **new_conn,
+			struct mrpc_conn_set *set, char *host, unsigned port,
+			void *data);
 apr_status_t mrpc_listen(struct mrpc_conn_set *set, char *listenaddr,
 			unsigned port, int *bound);
-apr_status_t mrpc_bind_fd(struct mrpc_conn_set *set, apr_socket_t *sock,
-			apr_pool_t *conn_pool, void *data,
-			struct mrpc_connection **new_conn);
+apr_status_t mrpc_bind_fd(struct mrpc_connection **new_conn,
+			struct mrpc_conn_set *set, apr_socket_t *sock,
+			apr_pool_t *conn_pool, void *data);
 void mrpc_conn_close(struct mrpc_connection *conn);
 
 /* event.c */

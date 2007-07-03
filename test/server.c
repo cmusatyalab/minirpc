@@ -161,7 +161,7 @@ int main(int argc, char **argv)
 	char errbuf[128];
 	apr_status_t stat;
 
-	if (mrpc_conn_set_alloc(&config, &set_ops, NULL, &set))
+	if (mrpc_conn_set_alloc(&set, &config, &set_ops, NULL))
 		die("Couldn't allocate connection set");
 	APR_RING_INIT(&pending, message_list_node, lh);
 	pthread_mutex_init(&lock, NULL);

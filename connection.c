@@ -52,14 +52,15 @@ static apr_status_t remove_poll(struct mrpc_conn_set *set, apr_socket_t *sock)
 }
 
 /* Ownership of the @conn_pool passes to the connection */
-static apr_status_t mrpc_conn_add(struct mrpc_conn_set *set,
-			apr_socket_t *sock, apr_pool_t *conn_pool,
-			struct mrpc_connection **new_conn)
+static apr_status_t mrpc_conn_add(struct mrpc_connection **new_conn,
+			struct mrpc_conn_set *set, apr_socket_t *sock,
+			apr_pool_t *conn_pool)
 {
 	struct mrpc_connection *conn;
 	pthread_mutexattr_t attr;
 	apr_status_t stat;
 
+	*new_conn=NULL;
 	apr_socket_opt_set(sock, APR_SO_KEEPALIVE, 1);
 	stat=apr_socket_opt_set(sock, APR_SO_NONBLOCK, 1);
 	if (stat)
@@ -101,9 +102,9 @@ void mrpc_conn_free(struct mrpc_connection *conn)
 	free(conn);
 }
 
-exported apr_status_t mrpc_connect(struct mrpc_conn_set *set, char *host,
-			unsigned port, void *data,
-			struct mrpc_connection **new_conn)
+exported apr_status_t mrpc_connect(struct mrpc_connection **new_conn,
+			struct mrpc_conn_set *set, char *host, unsigned port,
+			void *data)
 {
 	struct mrpc_connection *conn;
 	apr_pool_t *conn_pool;
@@ -111,6 +112,8 @@ exported apr_status_t mrpc_connect(struct mrpc_conn_set *set, char *host,
 	apr_sockaddr_t *sa;
 	apr_socket_t *sock;
 	apr_status_t stat;
+
+	*new_conn=NULL;
 
 	if (set->config.protocol->is_server)
 		return APR_EINVAL;
@@ -135,7 +138,7 @@ exported apr_status_t mrpc_connect(struct mrpc_conn_set *set, char *host,
 	apr_pool_destroy(lookup_pool);
 	if (stat)
 		goto bad;
-	stat=mrpc_conn_add(set, sock, conn_pool, &conn);
+	stat=mrpc_conn_add(&conn, set, sock, conn_pool);
 	if (stat)
 		goto bad;
 	conn->private = (data != NULL) ? data : conn;
@@ -203,8 +206,8 @@ exported apr_status_t mrpc_listen(struct mrpc_conn_set *set, char *listenaddr,
 	return APR_SUCCESS;
 }
 
-exported apr_status_t mrpc_conn_set_alloc_subpool(struct mrpc_conn_set *set,
-			apr_pool_t **new_pool)
+exported apr_status_t mrpc_conn_set_alloc_subpool(apr_pool_t **new_pool,
+			struct mrpc_conn_set *set)
 {
 	return apr_pool_create(new_pool, set->pool);
 }
@@ -212,14 +215,15 @@ exported apr_status_t mrpc_conn_set_alloc_subpool(struct mrpc_conn_set *set,
 /* The provided @sock must be a connected socket (i.e., not a listener).
    @conn_pool must be a subpool of the set pool.  Ownership of @conn_pool
    and @sock transfers to miniRPC. */
-exported apr_status_t mrpc_bind_fd(struct mrpc_conn_set *set,
-			apr_socket_t *sock, apr_pool_t *conn_pool, void *data,
-			struct mrpc_connection **new_conn)
+exported apr_status_t mrpc_bind_fd(struct mrpc_connection **new_conn,
+			struct mrpc_conn_set *set, apr_socket_t *sock,
+			apr_pool_t *conn_pool, void *data)
 {
 	struct mrpc_connection *conn;
 	apr_status_t stat;
 
-	stat=mrpc_conn_add(set, sock, conn_pool, &conn);
+	*new_conn=NULL;
+	stat=mrpc_conn_add(&conn, set, sock, conn_pool);
 	if (stat)
 		return stat;
 	conn->private = (data != NULL) ? data : conn;
@@ -477,7 +481,7 @@ static void try_accept(struct mrpc_conn_set *set, apr_socket_t *listensock)
 		stat=apr_socket_accept(&sock, listensock, pool);
 		if (stat)
 			break;
-		if (mrpc_conn_add(set, sock, pool, &conn)) {
+		if (mrpc_conn_add(&conn, set, sock, pool)) {
 			/* XXX */
 			apr_pool_destroy(pool);
 			continue;
@@ -562,15 +566,17 @@ static void validate_copy_config(const struct mrpc_config *from,
 }
 #undef copy_default
 
-exported int mrpc_conn_set_alloc(const struct mrpc_config *config,
+exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
+			const struct mrpc_config *config,
 			const struct mrpc_set_operations *ops,
-			void *set_data,	struct mrpc_conn_set **new_set)
+			void *set_data)
 {
 	struct mrpc_conn_set *set;
 	apr_pollfd_t pollfd;
 	int ret;
 	apr_status_t stat;
 
+	*new_set=NULL;
 	if (config == NULL || config->protocol == NULL || ops == NULL ||
 				new_set == NULL)
 		return -EINVAL;
