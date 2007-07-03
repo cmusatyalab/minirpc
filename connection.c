@@ -51,34 +51,22 @@ static apr_status_t remove_poll(struct mrpc_conn_set *set, apr_socket_t *sock)
 	return apr_pollset_remove(set->pollset, &pollfd);
 }
 
-static int mrpc_conn_add(struct mrpc_conn_set *set, int fd,
+/* Ownership of the @conn_pool passes to the connection */
+static apr_status_t mrpc_conn_add(struct mrpc_conn_set *set,
+			apr_socket_t *sock, apr_pool_t *conn_pool,
 			struct mrpc_connection **new_conn)
 {
 	struct mrpc_connection *conn;
 	pthread_mutexattr_t attr;
 	apr_status_t stat;
-	apr_socket_t *sock=NULL;
-	apr_pool_t *pool;
 
-	stat=apr_pool_create(&pool, set->pool);
-	if (stat)
-		return -APR_TO_OS_ERROR(stat);
-	stat=apr_os_sock_put(&sock, &fd, pool);
-	if (stat) {
-		apr_pool_destroy(pool);
-		return -APR_TO_OS_ERROR(stat);
-	}
 	apr_socket_opt_set(sock, APR_SO_KEEPALIVE, 1);
 	stat=apr_socket_opt_set(sock, APR_SO_NONBLOCK, 1);
-	if (stat) {
-		apr_pool_destroy(pool);
-		return -APR_TO_OS_ERROR(stat);
-	}
+	if (stat)
+		return stat;
 	conn=malloc(sizeof(*conn));
-	if (conn == NULL) {
-		apr_pool_destroy(pool);
-		return -ENOMEM;
-	}
+	if (conn == NULL)
+		return APR_ENOMEM;
 	memset(conn, 0, sizeof(*conn));
 	APR_RING_INIT(&conn->send_msgs, mrpc_message, lh_msgs);
 	APR_RING_ELEM_INIT(conn, lh_event_conns);
@@ -94,16 +82,15 @@ static int mrpc_conn_add(struct mrpc_conn_set *set, int fd,
 	conn->recv_state=STATE_HEADER;
 	conn->set=set;
 	conn->sock=sock;
-	conn->pool=pool;
+	conn->pool=conn_pool;
 	conn->pending_replies=apr_hash_make_custom(conn->pool, numeric_hash_fn);
 	stat=update_poll(set, sock, POLLEVENTS, conn);
 	if (stat) {
-		apr_pool_destroy(conn->pool);
 		free(conn);
-		return -APR_TO_OS_ERROR(stat);
+		return stat;
 	}
 	*new_conn=conn;
-	return 0;
+	return APR_SUCCESS;
 }
 /* XXX unregister sock from pollset at pool release */
 
@@ -114,53 +101,50 @@ void mrpc_conn_free(struct mrpc_connection *conn)
 	free(conn);
 }
 
-/* returns error description or NULL on success */
-exported const char *mrpc_connect(struct mrpc_conn_set *set, char *host,
+exported apr_status_t mrpc_connect(struct mrpc_conn_set *set, char *host,
 			unsigned port, void *data,
 			struct mrpc_connection **new_conn)
 {
 	struct mrpc_connection *conn;
-	struct addrinfo *info;
-	struct addrinfo *curinfo;
-	struct addrinfo hints={0};
-	char portbuf[8];
-	int fd=-1;
-	int ret;
+	apr_pool_t *conn_pool;
+	apr_pool_t *lookup_pool;
+	apr_sockaddr_t *sa;
+	apr_socket_t *sock;
+	apr_status_t stat;
 
 	if (set->config.protocol->is_server)
-		return "Servers cannot make outbound connections";
+		return APR_EINVAL;
 
-	ret=snprintf(portbuf, sizeof(portbuf), "%u", port);
-	if (ret == -1 || ret >= sizeof(portbuf))
-		return "Port number too long for buffer";
-	hints.ai_socktype=SOCK_STREAM;
-	ret=getaddrinfo(host, portbuf, &hints, &info);
-	if (ret)
-		return gai_strerror(ret);
-
-	for (curinfo=info; curinfo != NULL; curinfo=curinfo->ai_next) {
-		fd=socket(info->ai_family, info->ai_socktype,
-					info->ai_protocol);
-		if (fd == -1) {
-			ret=errno;
+	stat=apr_pool_create(&conn_pool, set->pool);
+	if (stat)
+		return stat;
+	stat=apr_pool_create(&lookup_pool, set->pool);
+	if (stat)
+		goto bad;
+	stat=apr_sockaddr_info_get(&sa, host, APR_UNSPEC, port, 0, lookup_pool);
+	for (; sa != NULL; sa=sa->next) {
+		apr_pool_clear(conn_pool);
+		stat=apr_socket_create(&sock, sa->family, SOCK_STREAM, 0,
+					conn_pool);
+		if (stat)
 			continue;
-		}
-		ret=connect(fd, info->ai_addr, info->ai_addrlen);
-		if (ret == 0)
+		stat=apr_socket_connect(sock, sa);
+		if (stat == APR_SUCCESS)
 			break;
-		ret=errno;
-		close(fd);
-		fd=-1;
 	}
-	freeaddrinfo(info);
-	if (fd == -1)
-		return strerror(ret);
-	ret=mrpc_conn_add(set, fd, &conn);
-	if (ret)
-		return strerror(-ret);
+	apr_pool_destroy(lookup_pool);
+	if (stat)
+		goto bad;
+	stat=mrpc_conn_add(set, sock, conn_pool, &conn);
+	if (stat)
+		goto bad;
 	conn->private = (data != NULL) ? data : conn;
 	*new_conn=conn;
-	return NULL;
+	return APR_SUCCESS;
+
+bad:
+	apr_pool_destroy(conn_pool);
+	return stat;
 }
 
 exported apr_status_t mrpc_listen(struct mrpc_conn_set *set, char *listenaddr,
@@ -219,22 +203,25 @@ exported apr_status_t mrpc_listen(struct mrpc_conn_set *set, char *listenaddr,
 	return APR_SUCCESS;
 }
 
-/* returns -errno */
-exported int mrpc_bind_fd(struct mrpc_conn_set *set, int fd, void *data,
+exported apr_status_t mrpc_conn_set_alloc_subpool(struct mrpc_conn_set *set,
+			apr_pool_t **new_pool)
+{
+	return apr_pool_create(new_pool, set->pool);
+}
+
+/* The provided @sock must be a connected socket (i.e., not a listener).
+   @conn_pool must be a subpool of the set pool.  Ownership of @conn_pool
+   and @sock transfers to miniRPC. */
+exported apr_status_t mrpc_bind_fd(struct mrpc_conn_set *set,
+			apr_socket_t *sock, apr_pool_t *conn_pool, void *data,
 			struct mrpc_connection **new_conn)
 {
 	struct mrpc_connection *conn;
-	int accepting;
-	socklen_t arglen=sizeof(accepting);
-	int ret;
+	apr_status_t stat;
 
-	if (getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &accepting, &arglen))
-		return -errno;
-	if (accepting)
-		return -EINVAL;
-	ret=mrpc_conn_add(set, fd, &conn);
-	if (ret)
-		return ret;
+	stat=mrpc_conn_add(set, sock, conn_pool, &conn);
+	if (stat)
+		return stat;
 	conn->private = (data != NULL) ? data : conn;
 	*new_conn=conn;
 	return 0;
@@ -474,47 +461,36 @@ static void try_write_conn(struct mrpc_connection *conn)
 	}
 }
 
-static void try_accept(struct mrpc_conn_set *set, int listenfd)
+static void try_accept(struct mrpc_conn_set *set, apr_socket_t *listensock)
 {
 	struct mrpc_connection *conn;
 	struct mrpc_event *event;
-	struct sockaddr *addr;
-	socklen_t addrlen;
-	int fd;
+	apr_pool_t *pool;
+	apr_socket_t *sock;
+	apr_status_t stat;
 
+	/* XXX error handling */
 	while (1) {
-		addrlen=sizeof(struct sockaddr_storage);
-		addr=malloc(addrlen);
-		if (addr == NULL)
-			/* XXX */;
-		fd=accept(listenfd, addr, &addrlen);
-		if (fd < 0) {
-			switch (errno) {
-			case EAGAIN:
-				free(addr);
-				return;
-			case EMFILE:
-			case ENFILE:
-			case ENOMEM:
-				/* XXX fail */
-				break;
-			default:
-				continue;
-			}
-		}
-		if (mrpc_conn_add(set, fd, &conn)) {
+		stat=apr_pool_create(&pool, set->pool);
+		if (stat)
+			return;
+		stat=apr_socket_accept(&sock, listensock, pool);
+		if (stat)
+			break;
+		if (mrpc_conn_add(set, sock, pool, &conn)) {
 			/* XXX */
-			close(fd);
-			free(addr);
+			apr_pool_destroy(pool);
 			continue;
 		}
 		event=mrpc_alloc_event(conn, EVENT_ACCEPT);
 		if (event == NULL)
 			/* XXX */;
-		event->addr=addr;
-		event->addrlen=addrlen;
+		stat=apr_socket_addr_get(&event->addr, APR_REMOTE, sock);
+		if (stat)
+			event->addr=NULL;
 		queue_event(event);
 	}
+	apr_pool_destroy(pool);
 }
 
 /* XXX signal handling */
@@ -525,7 +501,6 @@ static void *listener(void *data)
 	const apr_pollfd_t *events;
 	int count;
 	int i;
-	int fd;
 
 	while (1) {
 		if (apr_pollset_poll(set->pollset, -1, &count, &events))
@@ -537,9 +512,7 @@ static void *listener(void *data)
 			}
 			if (events[i].client_data == NULL) {
 				/* Listening socket */
-				if (apr_os_sock_get(&fd, events[i].desc.s))
-					/* XXX */;
-				try_accept(set, fd);
+				try_accept(set, events[i].desc.s);
 				continue;
 			}
 			conn=events[i].client_data;

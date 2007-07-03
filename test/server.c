@@ -118,7 +118,7 @@ void ops_disconnect(void *conn_data, enum mrpc_disc_reason reason)
 }
 
 void *ops_accept(void *set_data, struct mrpc_connection *conn,
-			struct sockaddr *from, socklen_t fromlen)
+			apr_sockaddr_t *from)
 {
 	warn("New connection");
 	if (test_server_set_operations(conn, &ops))

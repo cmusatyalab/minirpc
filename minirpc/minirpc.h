@@ -14,6 +14,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <apr_network_io.h>
 #include <apr_errno.h>
 
 struct mrpc_protocol;
@@ -48,7 +49,7 @@ enum mrpc_disc_reason {
 
 struct mrpc_set_operations {
 	void *(*accept)(void *set_data, struct mrpc_connection *conn,
-				struct sockaddr *from, socklen_t fromlen);
+				apr_sockaddr_t *from);
 	void (*disconnect)(void *conn_data, enum mrpc_disc_reason reason);
 	void (*ioerr)(void *conn_data, char *message);
 };
@@ -58,11 +59,14 @@ int mrpc_conn_set_alloc(const struct mrpc_config *config,
 			const struct mrpc_set_operations *ops,
 			void *set_data,	struct mrpc_conn_set **new_set);
 void mrpc_conn_set_free(struct mrpc_conn_set *set);
-const char *mrpc_connect(struct mrpc_conn_set *set, char *host, unsigned port,
+apr_status_t mrpc_conn_set_alloc_subpool(struct mrpc_conn_set *set,
+			apr_pool_t **new_pool);
+apr_status_t mrpc_connect(struct mrpc_conn_set *set, char *host, unsigned port,
 			void *data, struct mrpc_connection **new_conn);
 apr_status_t mrpc_listen(struct mrpc_conn_set *set, char *listenaddr,
 			unsigned port, int *bound);
-int mrpc_bind_fd(struct mrpc_conn_set *set, int fd, void *data,
+apr_status_t mrpc_bind_fd(struct mrpc_conn_set *set, apr_socket_t *sock,
+			apr_pool_t *conn_pool, void *data,
 			struct mrpc_connection **new_conn);
 void mrpc_conn_close(struct mrpc_connection *conn);
 
