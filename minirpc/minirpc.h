@@ -55,7 +55,7 @@ struct mrpc_set_operations {
 };
 
 /* connection.c */
-int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
+apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 			const struct mrpc_config *config,
 			const struct mrpc_set_operations *ops,
 			void *set_data);
@@ -76,7 +76,7 @@ void mrpc_conn_close(struct mrpc_connection *conn);
 int mrpc_get_event_fd(struct mrpc_conn_set *set);
 int mrpc_dispatch_one(struct mrpc_conn_set *set);
 int mrpc_dispatch_all(struct mrpc_conn_set *set);
-int mrpc_dispatch_loop(struct mrpc_conn_set *set);
+apr_status_t mrpc_dispatch_loop(struct mrpc_conn_set *set);
 mrpc_status_t mrpc_plug_conn(struct mrpc_connection *conn);
 mrpc_status_t mrpc_unplug_conn(struct mrpc_connection *conn);
 mrpc_status_t mrpc_unplug_message(struct mrpc_message *msg);

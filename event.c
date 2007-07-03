@@ -369,7 +369,7 @@ exported int mrpc_dispatch_all(struct mrpc_conn_set *set)
 	return i;
 }
 
-exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
+exported apr_status_t mrpc_dispatch_loop(struct mrpc_conn_set *set)
 {
 	apr_pool_t *pool;
 	apr_pollset_t *pollset;
@@ -379,7 +379,6 @@ exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 	int i;
 	int count;
 	apr_status_t stat;
-	int ret=0;
 
 	pthread_mutex_lock(&set->events_lock);
 	set->events_threads++;
@@ -388,31 +387,35 @@ exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 
 	stat=apr_pool_create(&pool, set->pool);
 	if (stat)
-		goto bad_apr;
+		goto out;
 	stat=apr_pollset_create(&pollset, 2, pool, 0);
 	if (stat)
-		goto bad_apr;
+		goto out;
 	pollfd.p=pool;
 	pollfd.desc_type=APR_POLL_FILE;
 	pollfd.reqevents=APR_POLLIN;
 	pollfd.desc.f=set->events_notify_pipe_read;
 	stat=apr_pollset_add(pollset, &pollfd);
 	if (stat)
-		goto bad_apr;
+		goto out;
 	pollfd.desc.f=set->shutdown_pipe_read;
 	stat=apr_pollset_add(pollset, &pollfd);
 	if (stat)
-		goto bad_apr;
+		goto out;
 
 	while (1) {
 		event=unqueue_event(set);
 		if (event == NULL) {
 			stat=apr_pollset_poll(pollset, -1, &count, &ready);
-			if (stat && stat != APR_EINTR)
-				goto bad_apr;
-			for (i=0; i<count; i++)
-				if (ready[i].desc.f == set->shutdown_pipe_read)
+			if (stat && !APR_STATUS_IS_EINTR(stat))
+				goto out;
+			for (i=0; i<count; i++) {
+				if (ready[i].desc.f ==
+						set->shutdown_pipe_read) {
+					stat=APR_SUCCESS;
 					goto out;
+				}
+			}
 		} else {
 			dispatch_event(event);
 		}
@@ -424,9 +427,5 @@ out:
 	set->events_threads--;
 	pthread_cond_broadcast(&set->events_threads_cond);
 	pthread_mutex_unlock(&set->events_lock);
-	return ret;
-
-bad_apr:
-	ret=-APR_TO_OS_ERROR(stat);
-	goto out;
+	return stat;
 }

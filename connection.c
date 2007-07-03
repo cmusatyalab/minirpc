@@ -566,7 +566,7 @@ static void validate_copy_config(const struct mrpc_config *from,
 }
 #undef copy_default
 
-exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
+exported apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 			const struct mrpc_config *config,
 			const struct mrpc_set_operations *ops,
 			void *set_data)
@@ -579,7 +579,7 @@ exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 	*new_set=NULL;
 	if (config == NULL || config->protocol == NULL || ops == NULL ||
 				new_set == NULL)
-		return -EINVAL;
+		return APR_EINVAL;
 	if (config->protocol->is_server) {
 		/* We require the accept method to exist.  Without it, the
 		   connection will never have a non-NULL operations pointer and
@@ -587,20 +587,20 @@ exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 		   exists, so the connecting client will be forever stuck in
 		   PROCEDURE_UNAVAIL limbo. */
 		if (ops->accept == NULL)
-			return -EINVAL;
+			return APR_EINVAL;
 	} else {
 		/* The accept method is irrelevant for clients.  Tell the
 		   application if its assumptions are wrong. */
 		if (ops->accept != NULL)
-			return -EINVAL;
+			return APR_EINVAL;
 	}
 
-	ret=mrpc_get();
-	if (ret)
+	stat=mrpc_get();
+	if (stat)
 		goto bad_init;
 	set=malloc(sizeof(*set));
 	if (set == NULL) {
-		ret=-ENOMEM;
+		stat=APR_ENOMEM;
 		goto bad_alloc;
 	}
 	memset(set, 0, sizeof(*set));
@@ -611,29 +611,27 @@ exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 	set->ops=ops;
 	set->private = (set_data != NULL) ? set_data : set;
 	stat=apr_pool_create(&set->pool, mrpc_pool);
-	if (stat) {
-		ret=-APR_TO_OS_ERROR(stat);
+	if (stat)
 		goto bad_pool;
-	}
 	stat=apr_file_pipe_create(&set->shutdown_pipe_read,
 				&set->shutdown_pipe_write, set->pool);
 	if (stat)
-		goto bad_apr;
+		goto bad;
 	stat=apr_file_pipe_create(&set->events_notify_pipe_read,
 				&set->events_notify_pipe_write, set->pool);
 	if (stat)
-		goto bad_apr;
+		goto bad;
 	stat=apr_file_pipe_timeout_set(set->events_notify_pipe_write, 0);
 	if (stat)
-		goto bad_apr;
+		goto bad;
 	stat=apr_file_pipe_timeout_set(set->events_notify_pipe_read, 0);
 	if (stat)
-		goto bad_apr;
+		goto bad;
 	/* XXX do we need an explicit check for APR_ENOTIMPL? */
 	stat=apr_pollset_create(&set->pollset, set->config.max_fds, set->pool,
 				APR_POLLSET_THREADSAFE);
 	if (stat)
-		goto bad_apr;
+		goto bad;
 	pollfd.p=set->pool;
 	pollfd.desc_type=APR_POLL_FILE;
 	pollfd.reqevents=APR_POLLIN;
@@ -641,25 +639,23 @@ exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 	pollfd.client_data=set;
 	stat=apr_pollset_add(set->pollset, &pollfd);
 	if (stat)
-		goto bad_apr;
+		goto bad;
 	ret=pthread_create(&set->thread, NULL, listener, set);
 	if (ret) {
-		ret=-ret;
-		goto bad_posix;
+		stat=APR_FROM_OS_ERROR(ret);
+		goto bad;
 	}
 	*new_set=set;
 	return 0;
 
-bad_apr:
-	ret=-APR_TO_OS_ERROR(stat);
-bad_posix:
+bad:
 	apr_pool_destroy(set->pool);
 bad_pool:
 	free(set);
 bad_alloc:
 	mrpc_put();
 bad_init:
-	return ret;
+	return stat;
 }
 
 /* XXX drops lots of stuff on the floor */

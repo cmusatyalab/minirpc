@@ -149,7 +149,7 @@ struct mrpc_connection {
 
 /* init.c */
 extern apr_pool_t *mrpc_pool;
-int mrpc_get(void);
+apr_status_t mrpc_get(void);
 void mrpc_put(void);
 
 /* connection.c */

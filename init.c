@@ -22,7 +22,7 @@ apr_pool_t *mrpc_pool;
 static unsigned init_count;
 static pthread_mutex_t init_lock=PTHREAD_MUTEX_INITIALIZER;
 
-int mrpc_get(void)
+apr_status_t mrpc_get(void)
 {
 	apr_status_t stat=APR_SUCCESS;
 
@@ -40,7 +40,7 @@ int mrpc_get(void)
 		goto bad_atomic;
 done:
 	pthread_mutex_unlock(&init_lock);
-	return -APR_TO_OS_ERROR(stat);
+	return stat;
 
 bad_atomic:
 	apr_pool_destroy(mrpc_pool);
