@@ -148,8 +148,7 @@ struct mrpc_connection {
 	(APR_RING_NEXT((ep), link) == (ep))
 
 /* init.c */
-apr_status_t mrpc_get(void);
-void mrpc_put(void);
+apr_status_t mrpc_init(void);
 
 /* connection.c */
 mrpc_status_t send_message(struct mrpc_message *msg);

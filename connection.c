@@ -592,12 +592,12 @@ exported apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 			return APR_EINVAL;
 	}
 
-	stat=mrpc_get();
+	stat=mrpc_init();
 	if (stat)
 		return stat;
 	stat=apr_pool_create(&pool, parent_pool);
 	if (stat)
-		goto bad_pool;
+		return stat;
 	set=apr_pcalloc(pool, sizeof(*set));
 	if (set == NULL) {
 		stat=APR_ENOMEM;
@@ -647,8 +647,6 @@ exported apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 
 bad:
 	apr_pool_destroy(pool);
-bad_pool:
-	mrpc_put();
 	return stat;
 }
 
@@ -662,5 +660,4 @@ exported void mrpc_conn_set_free(struct mrpc_conn_set *set)
 	pthread_mutex_unlock(&set->events_lock);
 	pthread_join(set->thread, NULL);
 	apr_pool_destroy(set->pool);
-	mrpc_put();
 }
