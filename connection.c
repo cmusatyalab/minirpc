@@ -65,10 +65,9 @@ static apr_status_t mrpc_conn_add(struct mrpc_connection **new_conn,
 	stat=apr_socket_opt_set(sock, APR_SO_NONBLOCK, 1);
 	if (stat)
 		return stat;
-	conn=malloc(sizeof(*conn));
+	conn=apr_pcalloc(conn_pool, sizeof(*conn));
 	if (conn == NULL)
 		return APR_ENOMEM;
-	memset(conn, 0, sizeof(*conn));
 	APR_RING_INIT(&conn->send_msgs, mrpc_message, lh_msgs);
 	APR_RING_ELEM_INIT(conn, lh_event_conns);
 	APR_RING_INIT(&conn->events, mrpc_event, lh_events);
@@ -86,10 +85,8 @@ static apr_status_t mrpc_conn_add(struct mrpc_connection **new_conn,
 	conn->pool=conn_pool;
 	conn->pending_replies=apr_hash_make_custom(conn->pool, numeric_hash_fn);
 	stat=update_poll(set, sock, POLLEVENTS, conn);
-	if (stat) {
-		free(conn);
+	if (stat)
 		return stat;
-	}
 	*new_conn=conn;
 	return APR_SUCCESS;
 }
@@ -99,7 +96,6 @@ void mrpc_conn_free(struct mrpc_connection *conn)
 {
 	/* XXX data already in buffer? */
 	apr_pool_destroy(conn->pool);
-	free(conn);
 }
 
 exported apr_status_t mrpc_connect(struct mrpc_connection **new_conn,
@@ -569,9 +565,10 @@ static void validate_copy_config(const struct mrpc_config *from,
 exported apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 			const struct mrpc_config *config,
 			const struct mrpc_set_operations *ops,
-			void *set_data)
+			void *set_data, apr_pool_t *parent_pool)
 {
 	struct mrpc_conn_set *set;
+	apr_pool_t *pool;
 	apr_pollfd_t pollfd;
 	int ret;
 	apr_status_t stat;
@@ -597,28 +594,28 @@ exported apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 
 	stat=mrpc_get();
 	if (stat)
-		goto bad_init;
-	set=malloc(sizeof(*set));
+		return stat;
+	stat=apr_pool_create(&pool, parent_pool);
+	if (stat)
+		goto bad_pool;
+	set=apr_pcalloc(pool, sizeof(*set));
 	if (set == NULL) {
 		stat=APR_ENOMEM;
-		goto bad_alloc;
+		goto bad;
 	}
-	memset(set, 0, sizeof(*set));
 	validate_copy_config(config, &set->config);
 	pthread_mutex_init(&set->events_lock, NULL);
 	pthread_cond_init(&set->events_threads_cond, NULL);
 	APR_RING_INIT(&set->event_conns, mrpc_connection, lh_event_conns);
+	set->pool=pool;
 	set->ops=ops;
 	set->private = (set_data != NULL) ? set_data : set;
-	stat=apr_pool_create(&set->pool, mrpc_pool);
-	if (stat)
-		goto bad_pool;
 	stat=apr_file_pipe_create(&set->shutdown_pipe_read,
-				&set->shutdown_pipe_write, set->pool);
+				&set->shutdown_pipe_write, pool);
 	if (stat)
 		goto bad;
 	stat=apr_file_pipe_create(&set->events_notify_pipe_read,
-				&set->events_notify_pipe_write, set->pool);
+				&set->events_notify_pipe_write, pool);
 	if (stat)
 		goto bad;
 	stat=apr_file_pipe_timeout_set(set->events_notify_pipe_write, 0);
@@ -628,11 +625,11 @@ exported apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 	if (stat)
 		goto bad;
 	/* XXX do we need an explicit check for APR_ENOTIMPL? */
-	stat=apr_pollset_create(&set->pollset, set->config.max_fds, set->pool,
+	stat=apr_pollset_create(&set->pollset, set->config.max_fds, pool,
 				APR_POLLSET_THREADSAFE);
 	if (stat)
 		goto bad;
-	pollfd.p=set->pool;
+	pollfd.p=pool;
 	pollfd.desc_type=APR_POLL_FILE;
 	pollfd.reqevents=APR_POLLIN;
 	pollfd.desc.f=set->shutdown_pipe_read;
@@ -646,15 +643,12 @@ exported apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 		goto bad;
 	}
 	*new_set=set;
-	return 0;
+	return APR_SUCCESS;
 
 bad:
-	apr_pool_destroy(set->pool);
+	apr_pool_destroy(pool);
 bad_pool:
-	free(set);
-bad_alloc:
 	mrpc_put();
-bad_init:
 	return stat;
 }
 
@@ -668,6 +662,5 @@ exported void mrpc_conn_set_free(struct mrpc_conn_set *set)
 	pthread_mutex_unlock(&set->events_lock);
 	pthread_join(set->thread, NULL);
 	apr_pool_destroy(set->pool);
-	free(set);
 	mrpc_put();
 }

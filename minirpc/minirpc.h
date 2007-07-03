@@ -14,6 +14,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <apr_pools.h>
 #include <apr_network_io.h>
 #include <apr_errno.h>
 
@@ -58,7 +59,7 @@ struct mrpc_set_operations {
 apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 			const struct mrpc_config *config,
 			const struct mrpc_set_operations *ops,
-			void *set_data);
+			void *set_data, apr_pool_t *parent_pool);
 void mrpc_conn_set_free(struct mrpc_conn_set *set);
 apr_status_t mrpc_conn_set_alloc_subpool(apr_pool_t **new_pool,
 			struct mrpc_conn_set *set);

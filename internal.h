@@ -148,7 +148,6 @@ struct mrpc_connection {
 	(APR_RING_NEXT((ep), link) == (ep))
 
 /* init.c */
-extern apr_pool_t *mrpc_pool;
 apr_status_t mrpc_get(void);
 void mrpc_put(void);
 

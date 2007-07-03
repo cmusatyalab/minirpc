@@ -15,8 +15,7 @@
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
-apr_pool_t *mrpc_pool;
-
+static apr_pool_t *mrpc_pool;
 /* We can't use an APR atomic variable, because we haven't yet initialized
    the atomic module */
 static unsigned init_count;
