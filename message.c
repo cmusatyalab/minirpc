@@ -30,13 +30,6 @@ struct pending_reply {
 	} data;
 };
 
-unsigned numeric_hash_fn(const char *key, apr_ssize_t *klen)
-{
-	const unsigned *kp=(const unsigned *)key;
-	assert(*klen == sizeof(unsigned));
-	return *kp;
-}
-
 static mrpc_status_t pending_alloc(struct mrpc_message *request,
 			struct pending_reply **pending_reply)
 {
@@ -58,14 +51,13 @@ static mrpc_status_t send_request_pending(struct mrpc_message *request,
 	mrpc_status_t ret;
 
 	pthread_mutex_lock(&conn->pending_replies_lock);
-	apr_hash_set(conn->pending_replies, &pending->sequence,
-				sizeof(pending->sequence), pending);
+	g_hash_table_replace(conn->pending_replies, &pending->sequence,
+				pending);
 	pthread_mutex_unlock(&conn->pending_replies_lock);
 	ret=send_message(request);
 	if (ret) {
 		pthread_mutex_lock(&conn->pending_replies_lock);
-		apr_hash_set(conn->pending_replies, &pending->sequence,
-					sizeof(pending->sequence), NULL);
+		g_hash_table_remove(conn->pending_replies, &pending->sequence);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
 		free(pending);
 	}
@@ -207,12 +199,9 @@ void process_incoming_message(struct mrpc_message *msg)
 		queue_event(event);
 	} else {
 		pthread_mutex_lock(&conn->pending_replies_lock);
-		pending=apr_hash_get(conn->pending_replies, &msg->hdr.sequence,
-					sizeof(msg->hdr.sequence));
-		if (pending != NULL)
-			apr_hash_set(conn->pending_replies, &pending->sequence,
-						sizeof(pending->sequence),
-						NULL);
+		pending=g_hash_table_lookup(conn->pending_replies,
+					&msg->hdr.sequence);
+		g_hash_table_remove(conn->pending_replies, &msg->hdr.sequence);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
 		if (pending == NULL || pending->cmd != msg->hdr.cmd ||
 					(msg->hdr.status != 0 &&

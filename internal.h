@@ -20,7 +20,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <glib.h>
-#include <apr_hash.h>
 #include <apr_pools.h>
 #include <apr_poll.h>
 #include <minirpc/minirpc.h>
@@ -118,7 +117,7 @@ struct mrpc_connection {
 	enum conn_state recv_state;
 	struct mrpc_message *recv_msg;
 
-	apr_hash_t *pending_replies;
+	GHashTable *pending_replies;
 	pthread_mutex_t pending_replies_lock;
 	pthread_mutex_t sync_wakeup_lock;
 
@@ -138,7 +137,6 @@ mrpc_status_t send_message(struct mrpc_message *msg);
 void mrpc_conn_free(struct mrpc_connection *conn);
 
 /* message.c */
-unsigned numeric_hash_fn(const char *key, apr_ssize_t *klen);
 void process_incoming_message(struct mrpc_message *msg);
 
 /* event.c */

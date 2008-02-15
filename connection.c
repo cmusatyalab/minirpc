@@ -82,7 +82,7 @@ static apr_status_t mrpc_conn_add(struct mrpc_connection **new_conn,
 	conn->set=set;
 	conn->sock=sock;
 	conn->pool=conn_pool;
-	conn->pending_replies=apr_hash_make_custom(conn->pool, numeric_hash_fn);
+	conn->pending_replies=g_hash_table_new(g_int_hash, g_int_equal);
 	stat=update_poll(set, sock, POLLEVENTS, conn);
 	if (stat)
 		return stat;
