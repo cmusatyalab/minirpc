@@ -69,8 +69,8 @@ static apr_status_t mrpc_conn_add(struct mrpc_connection **new_conn,
 	if (conn == NULL)
 		return APR_ENOMEM;
 	conn->send_msgs=g_queue_new();
+	conn->events=g_queue_new();
 	APR_RING_ELEM_INIT(conn, lh_event_conns);
-	APR_RING_INIT(&conn->events, mrpc_event, lh_events);
 	pthread_mutexattr_init(&attr);
 	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
 	pthread_mutex_init(&conn->operations_lock, &attr);

@@ -36,7 +36,6 @@
 #endif
 
 APR_RING_HEAD(conn_ring, mrpc_connection);
-APR_RING_HEAD(event_ring, mrpc_event);
 
 struct mrpc_conn_set {
 	struct mrpc_config config;
@@ -67,7 +66,6 @@ enum event_type {
 };
 
 struct mrpc_event {
-	APR_RING_ENTRY(mrpc_event) lh_events;
 	enum event_type type;
 	struct mrpc_connection *conn;
 
@@ -128,7 +126,7 @@ struct mrpc_connection {
 	pthread_mutex_t sync_wakeup_lock;
 
 	APR_RING_ENTRY(mrpc_connection) lh_event_conns;
-	struct event_ring events;	/* protected by set->events_lock */
+	GQueue *events;	/* protected by set->events_lock */
 	struct mrpc_event *plugged_event;
 	unsigned plugged_user;
 

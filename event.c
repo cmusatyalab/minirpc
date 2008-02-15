@@ -26,7 +26,6 @@ struct mrpc_event *mrpc_alloc_event(struct mrpc_connection *conn,
 	if (event == NULL)
 		return NULL;
 	memset(event, 0, sizeof(*event));
-	APR_RING_ELEM_INIT(event, lh_events);
 	event->type=type;
 	event->conn=conn;
 	return event;
@@ -67,9 +66,7 @@ static void try_queue_conn(struct mrpc_connection *conn)
 {
 	struct mrpc_conn_set *set=conn->set;
 
-	if (conn_is_plugged(conn) ||
-				APR_RING_EMPTY(&conn->events, mrpc_event,
-				lh_events) ||
+	if (conn_is_plugged(conn) || g_queue_is_empty(conn->events) ||
 				!APR_RING_ELEM_EMPTY(conn, lh_event_conns))
 		return;
 	if (APR_RING_EMPTY(&set->event_conns, mrpc_connection, lh_event_conns))
@@ -82,9 +79,8 @@ void queue_event(struct mrpc_event *event)
 {
 	struct mrpc_connection *conn=event->conn;
 
-	assert(APR_RING_ELEM_EMPTY(event, lh_events));
 	pthread_mutex_lock(&conn->set->events_lock);
-	APR_RING_INSERT_TAIL(&conn->events, event, mrpc_event, lh_events);
+	g_queue_push_tail(conn->events, event);
 	try_queue_conn(conn);
 	pthread_mutex_unlock(&conn->set->events_lock);
 }
@@ -106,9 +102,8 @@ static struct mrpc_event *unqueue_event(struct mrpc_conn_set *set)
 					lh_event_conns))
 			if (empty_pipe(set->events_notify_pipe_read) != 1)
 				/* XXX */;
-		assert(!APR_RING_EMPTY(&conn->events, mrpc_event, lh_events));
-		event=APR_RING_FIRST(&conn->events);
-		APR_RING_REMOVE_INIT(event, lh_events);
+		event=g_queue_pop_head(conn->events);
+		assert(event != NULL);
 		conn->plugged_event=event;
 	}
 	pthread_mutex_unlock(&set->events_lock);
