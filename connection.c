@@ -68,7 +68,7 @@ static apr_status_t mrpc_conn_add(struct mrpc_connection **new_conn,
 	conn=apr_pcalloc(conn_pool, sizeof(*conn));
 	if (conn == NULL)
 		return APR_ENOMEM;
-	APR_RING_INIT(&conn->send_msgs, mrpc_message, lh_msgs);
+	conn->send_msgs=g_queue_new();
 	APR_RING_ELEM_INIT(conn, lh_event_conns);
 	APR_RING_INIT(&conn->events, mrpc_event, lh_events);
 	pthread_mutexattr_init(&attr);
@@ -366,13 +366,12 @@ static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 	mrpc_status_t ret;
 
 	pthread_mutex_lock(&conn->send_msgs_lock);
-	if (APR_RING_EMPTY(&conn->send_msgs, mrpc_message, lh_msgs)) {
+	if (g_queue_is_empty(conn->send_msgs)) {
 		update_poll(conn->set, conn->sock, POLLEVENTS, conn);
 		pthread_mutex_unlock(&conn->send_msgs_lock);
 		return MINIRPC_OK;
 	}
-	conn->send_msg=APR_RING_FIRST(&conn->send_msgs);
-	APR_RING_REMOVE_INIT(conn->send_msg, lh_msgs);
+	conn->send_msg=g_queue_pop_head(conn->send_msgs);
 	pthread_mutex_unlock(&conn->send_msgs_lock);
 
 	ret=serialize_len((xdrproc_t)xdr_mrpc_header, &conn->send_msg->hdr,
@@ -544,7 +543,7 @@ mrpc_status_t send_message(struct mrpc_message *msg)
 		mrpc_free_message(msg);
 		return MINIRPC_NETWORK_FAILURE;
 	}
-	APR_RING_INSERT_TAIL(&conn->send_msgs, msg, mrpc_message, lh_msgs);
+	g_queue_push_tail(conn->send_msgs, msg);
 	pthread_mutex_unlock(&conn->send_msgs_lock);
 	return MINIRPC_OK;
 }
