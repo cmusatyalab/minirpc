@@ -20,7 +20,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <glib.h>
-#include <apr_ring.h>
 #include <apr_hash.h>
 #include <apr_pools.h>
 #include <apr_poll.h>
@@ -130,17 +129,6 @@ struct mrpc_connection {
 
 	apr_uint32_t next_sequence;  /* atomic operations only */
 };
-
-#define APR_RING_REMOVE_INIT(ep, link) \
-	do { \
-		APR_RING_UNSPLICE((ep), (ep), link); \
-		APR_RING_ELEM_INIT((ep), link); \
-	} while (0)
-/* We don't want people accidentally using the unclean version */
-#undef APR_RING_REMOVE
-
-#define APR_RING_ELEM_EMPTY(ep, link) \
-	(APR_RING_NEXT((ep), link) == (ep))
 
 /* init.c */
 apr_status_t mrpc_init(void);
