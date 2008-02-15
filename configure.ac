@@ -1,7 +1,7 @@
 #
 # configure.ac - build infrastructure for miniRPC
 #
-# Copyright (C) 2007 Carnegie Mellon University
+# Copyright (C) 2007-2008 Carnegie Mellon University
 #
 # This software is distributed under the terms of the Eclipse Public License,
 # Version 1.0 which can be found in the file named LICENSE.  ANY USE,
@@ -14,7 +14,7 @@
 AC_PREREQ(2.59)
 AC_INIT([miniRPC], [0.1])
 AM_INIT_AUTOMAKE([foreign])
-AC_COPYRIGHT([Copyright (C) 2007 Carnegie Mellon University])
+AC_COPYRIGHT([Copyright (C) 2007-2008 Carnegie Mellon University])
 AC_CONFIG_SRCDIR([connection.c])
 
 # Generating a config.h prevents the introduction of several lines' worth of
@@ -35,8 +35,9 @@ fi
 
 # Checks for libraries.
 PKG_CHECK_MODULES([APR], [apr-1])
-CFLAGS="$CFLAGS $APR_CFLAGS"
-LIBS="$LIBS $APR_LIBS"
+PKG_CHECK_MODULES([GLIB], [glib-2.0])
+CFLAGS="$CFLAGS $APR_CFLAGS $GLIB_CFLAGS"
+LIBS="$LIBS $APR_LIBS $GLIB_LIBS"
 
 # Checks for supported compiler options.
 CHECK_COMPILER_OPTION([-fvisibility=hidden], [HAVE_VISIBILITY])
