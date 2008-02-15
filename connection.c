@@ -70,7 +70,6 @@ static apr_status_t mrpc_conn_add(struct mrpc_connection **new_conn,
 		return APR_ENOMEM;
 	conn->send_msgs=g_queue_new();
 	conn->events=g_queue_new();
-	APR_RING_ELEM_INIT(conn, lh_event_conns);
 	pthread_mutexattr_init(&attr);
 	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
 	pthread_mutex_init(&conn->operations_lock, &attr);
@@ -605,7 +604,7 @@ exported apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 	validate_copy_config(config, &set->config);
 	pthread_mutex_init(&set->events_lock, NULL);
 	pthread_cond_init(&set->events_threads_cond, NULL);
-	APR_RING_INIT(&set->event_conns, mrpc_connection, lh_event_conns);
+	set->event_conns=g_queue_new();
 	set->pool=pool;
 	set->ops=ops;
 	set->private = (set_data != NULL) ? set_data : set;

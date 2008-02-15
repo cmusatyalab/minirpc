@@ -67,12 +67,12 @@ static void try_queue_conn(struct mrpc_connection *conn)
 	struct mrpc_conn_set *set=conn->set;
 
 	if (conn_is_plugged(conn) || g_queue_is_empty(conn->events) ||
-				!APR_RING_ELEM_EMPTY(conn, lh_event_conns))
+				conn->lh_event_conns != NULL)
 		return;
-	if (APR_RING_EMPTY(&set->event_conns, mrpc_connection, lh_event_conns))
+	if (g_queue_is_empty(set->event_conns))
 		apr_file_putc('a', set->events_notify_pipe_write);
-	APR_RING_INSERT_TAIL(&set->event_conns, conn, mrpc_connection,
-				lh_event_conns);
+	conn->lh_event_conns=g_list_append(NULL, conn);
+	g_queue_push_tail_link(set->event_conns, conn->lh_event_conns);
 }
 
 void queue_event(struct mrpc_event *event)
@@ -91,15 +91,13 @@ static struct mrpc_event *unqueue_event(struct mrpc_conn_set *set)
 	struct mrpc_event *event=NULL;
 
 	pthread_mutex_lock(&set->events_lock);
-	if (APR_RING_EMPTY(&set->event_conns, mrpc_connection,
-				lh_event_conns)) {
+	conn=g_queue_pop_head(set->event_conns);
+	if (conn == NULL) {
 		if (empty_pipe(set->events_notify_pipe_read))
 			/* XXX */;
 	} else {
-		conn=APR_RING_FIRST(&set->event_conns);
-		APR_RING_REMOVE_INIT(conn, lh_event_conns);
-		if (APR_RING_EMPTY(&set->event_conns, mrpc_connection,
-					lh_event_conns))
+		conn->lh_event_conns=NULL;
+		if (g_queue_is_empty(set->event_conns))
 			if (empty_pipe(set->events_notify_pipe_read) != 1)
 				/* XXX */;
 		event=g_queue_pop_head(conn->events);
@@ -118,7 +116,7 @@ static mrpc_status_t _mrpc_unplug_event(struct mrpc_connection *conn,
 		pthread_mutex_unlock(&conn->set->events_lock);
 		return MINIRPC_INVALID_ARGUMENT;
 	}
-	assert(APR_RING_ELEM_EMPTY(conn, lh_event_conns));
+	assert(conn->lh_event_conns == NULL);
 	conn->plugged_event=NULL;
 	try_queue_conn(conn);
 	pthread_mutex_unlock(&conn->set->events_lock);
@@ -140,8 +138,11 @@ exported mrpc_status_t mrpc_plug_conn(struct mrpc_connection *conn)
 {
 	pthread_mutex_lock(&conn->set->events_lock);
 	conn->plugged_user++;
-	if (!APR_RING_ELEM_EMPTY(conn, lh_event_conns))
-		APR_RING_REMOVE_INIT(conn, lh_event_conns);
+	if (conn->lh_event_conns != NULL) {
+		g_queue_delete_link(conn->set->event_conns,
+					conn->lh_event_conns);
+		conn->lh_event_conns=NULL;
+	}
 	pthread_mutex_unlock(&conn->set->events_lock);
 	return MINIRPC_OK;
 }

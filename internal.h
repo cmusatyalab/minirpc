@@ -35,8 +35,6 @@
 #define exported
 #endif
 
-APR_RING_HEAD(conn_ring, mrpc_connection);
-
 struct mrpc_conn_set {
 	struct mrpc_config config;
 	const struct mrpc_set_operations *ops;
@@ -44,7 +42,7 @@ struct mrpc_conn_set {
 
 	apr_pool_t *pool;
 
-	struct conn_ring event_conns;
+	GQueue *event_conns;
 	apr_file_t *events_notify_pipe_read;
 	apr_file_t *events_notify_pipe_write;
 	pthread_mutex_t events_lock;
@@ -125,7 +123,7 @@ struct mrpc_connection {
 	pthread_mutex_t pending_replies_lock;
 	pthread_mutex_t sync_wakeup_lock;
 
-	APR_RING_ENTRY(mrpc_connection) lh_event_conns;
+	GList *lh_event_conns;
 	GQueue *events;	/* protected by set->events_lock */
 	struct mrpc_event *plugged_event;
 	unsigned plugged_user;
