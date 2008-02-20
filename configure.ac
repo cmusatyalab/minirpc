@@ -42,6 +42,11 @@ LIBS="$LIBS $APR_LIBS $GLIB_LIBS"
 # Checks for supported compiler options.
 CHECK_COMPILER_OPTION([-fvisibility=hidden], [HAVE_VISIBILITY])
 
+# Check for epoll support.
+CHECK_LINK([for epoll], [AC_LANG_PROGRAM([#include <sys/epoll.h>],
+			[int fd=epoll_create(8)])], HAVE_EPOLL,
+			[Define if the C library supports the epoll system calls.])
+
 AC_CONFIG_FILES([minirpc.pc
 		Makefile
 		test/Makefile])

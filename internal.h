@@ -146,6 +146,22 @@ struct mrpc_event *mrpc_alloc_message_event(struct mrpc_message *msg,
 			enum event_type type);
 void queue_event(struct mrpc_event *event);
 
+/* pollset.c */
+typedef unsigned poll_flags_t;
+#define POLLSET_READABLE	((poll_flags_t) 0x1)
+#define POLLSET_WRITABLE	((poll_flags_t) 0x2)
+typedef void (*poll_callback_fn)(void *private, int fd);
+struct pollset *pollset_alloc(void);
+void pollset_free(struct pollset *pset);
+int pollset_add(struct pollset *pset, int fd, poll_flags_t flags,
+			void *private, poll_callback_fn readable,
+			poll_callback_fn writable, poll_callback_fn hangup,
+			poll_callback_fn error);
+int pollset_modify(struct pollset *pset, int fd, poll_flags_t flags);
+void pollset_del(struct pollset *pset, int fd);
+int pollset_poll(struct pollset *pset);
+void pollset_wake(struct pollset *pset);
+
 /* selfpipe.c */
 struct selfpipe *selfpipe_create(void);
 void selfpipe_destroy(struct selfpipe *sp);
