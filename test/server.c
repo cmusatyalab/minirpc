@@ -160,7 +160,7 @@ int main(int argc, char **argv)
 	struct mrpc_conn_set *set;
 	int ret;
 
-	if (mrpc_conn_set_alloc(&set, &config, &set_ops, NULL, NULL))
+	if (mrpc_conn_set_alloc(&set, &config, &set_ops, NULL))
 		die("Couldn't allocate connection set");
 	APR_RING_INIT(&pending, message_list_node, lh);
 	pthread_mutex_init(&lock, NULL);

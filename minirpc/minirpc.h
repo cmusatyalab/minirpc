@@ -57,8 +57,7 @@ struct mrpc_set_operations {
 /* connection.c */
 apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 			const struct mrpc_config *config,
-			const struct mrpc_set_operations *ops,
-			void *set_data, apr_pool_t *parent_pool);
+			const struct mrpc_set_operations *ops, void *set_data);
 void mrpc_conn_set_free(struct mrpc_conn_set *set);
 int mrpc_connect(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 			const char *host, unsigned port, void *data);

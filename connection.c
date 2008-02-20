@@ -52,7 +52,6 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 {
 	struct mrpc_connection *conn;
 	pthread_mutexattr_t attr;
-	apr_pool_t *conn_pool;
 	int ret;
 
 	*new_conn=NULL;
@@ -62,11 +61,7 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 	ret=set_nonblock(fd);
 	if (ret)
 		return ret;
-	if (apr_pool_create(&conn_pool, set->pool))
-		return -ENOMEM;
-	conn=apr_pcalloc(conn_pool, sizeof(*conn));
-	if (conn == NULL)
-		return -ENOMEM;
+	conn=g_slice_new0(struct mrpc_connection);
 	conn->send_msgs=g_queue_new();
 	conn->events=g_queue_new();
 	pthread_mutexattr_init(&attr);
@@ -80,7 +75,6 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 	conn->recv_state=STATE_HEADER;
 	conn->set=set;
 	conn->fd=fd;
-	conn->pool=conn_pool;
 	conn->pending_replies=g_hash_table_new(g_int_hash, g_int_equal);
 	ret=pollset_add(set->pollset, fd, POLLSET_READABLE, conn,
 				try_read_conn, try_write_conn, conn_hangup,
@@ -89,7 +83,7 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 		g_hash_table_destroy(conn->pending_replies);
 		g_queue_free(conn->events);
 		g_queue_free(conn->send_msgs);
-		apr_pool_destroy(conn->pool);
+		g_slice_free(struct mrpc_connection, conn);
 		return ret;
 	}
 	*new_conn=conn;
@@ -100,7 +94,7 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 void mrpc_conn_free(struct mrpc_connection *conn)
 {
 	/* XXX data already in buffer? */
-	apr_pool_destroy(conn->pool);
+	g_slice_free(struct mrpc_connection, conn);
 }
 
 static int lookup_addr(struct addrinfo **res, const char *host, unsigned port,
@@ -581,11 +575,9 @@ static void validate_copy_config(const struct mrpc_config *from,
 
 exported apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 			const struct mrpc_config *config,
-			const struct mrpc_set_operations *ops,
-			void *set_data, apr_pool_t *parent_pool)
+			const struct mrpc_set_operations *ops, void *set_data)
 {
 	struct mrpc_conn_set *set;
-	apr_pool_t *pool;
 	int ret;
 	apr_status_t stat;
 
@@ -611,19 +603,11 @@ exported apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 	stat=mrpc_init();
 	if (stat)
 		return stat;
-	stat=apr_pool_create(&pool, parent_pool);
-	if (stat)
-		return stat;
-	set=apr_pcalloc(pool, sizeof(*set));
-	if (set == NULL) {
-		stat=APR_ENOMEM;
-		goto bad;
-	}
+	set=g_slice_new0(struct mrpc_conn_set);
 	validate_copy_config(config, &set->config);
 	pthread_mutex_init(&set->events_lock, NULL);
 	pthread_cond_init(&set->events_threads_cond, NULL);
 	set->event_conns=g_queue_new();
-	set->pool=pool;
 	set->ops=ops;
 	set->private = (set_data != NULL) ? set_data : set;
 	set->shutdown_pipe=selfpipe_create();
@@ -659,7 +643,7 @@ bad:
 		selfpipe_destroy(set->events_notify_pipe);
 	if (set->shutdown_pipe)
 		selfpipe_destroy(set->shutdown_pipe);
-	apr_pool_destroy(pool);
+	g_slice_free(struct mrpc_conn_set, set);
 	return stat;
 }
 
@@ -675,5 +659,5 @@ exported void mrpc_conn_set_free(struct mrpc_conn_set *set)
 	pollset_free(set->pollset);
 	selfpipe_destroy(set->events_notify_pipe);
 	selfpipe_destroy(set->shutdown_pipe);
-	apr_pool_destroy(set->pool);
+	g_slice_free(struct mrpc_conn_set, set);
 }

@@ -177,7 +177,7 @@ int main(int argc, char **argv)
 	if (argc != 2)
 		die("Usage: %s hostname", argv[0]);
 
-	if (mrpc_conn_set_alloc(&set, &config, &set_ops, NULL, NULL))
+	if (mrpc_conn_set_alloc(&set, &config, &set_ops, NULL))
 		die("Couldn't allocate conn set");
 
 	ret=mrpc_connect(&conn, set, argv[1], 58000, NULL);

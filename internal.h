@@ -38,8 +38,6 @@ struct mrpc_conn_set {
 	const struct mrpc_set_operations *ops;
 	void *private;
 
-	apr_pool_t *pool;
-
 	GQueue *event_conns;
 	struct selfpipe *events_notify_pipe;
 	pthread_mutex_t events_lock;
@@ -98,7 +96,6 @@ struct mrpc_connection {
 	struct mrpc_conn_set *set;
 	int fd;
 	void *private;
-	apr_pool_t *pool;
 
 	const void *operations;
 	pthread_mutex_t operations_lock;
