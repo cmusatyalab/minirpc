@@ -69,8 +69,7 @@ int mrpc_bind_fd(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 void mrpc_conn_close(struct mrpc_connection *conn);
 
 /* event.c */
-apr_status_t mrpc_get_event_fd(apr_file_t **file, struct mrpc_conn_set *set,
-			apr_pool_t *pool);
+int mrpc_get_event_fd(struct mrpc_conn_set *set);
 int mrpc_dispatch_one(struct mrpc_conn_set *set);
 int mrpc_dispatch_all(struct mrpc_conn_set *set);
 apr_status_t mrpc_dispatch_loop(struct mrpc_conn_set *set);

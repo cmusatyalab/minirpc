@@ -153,19 +153,17 @@ exported mrpc_status_t mrpc_unplug_conn(struct mrpc_connection *conn)
    never inadvertently cause SIGPIPE by closing the read end of the notify
    pipe, and also ensures that we don't close the fd out from under the
    application when the connection set is destroyed.  The application must
-   close the apr_file_t when done with it.  The application must not read or
-   write the fd, only poll on it.  When an event is ready to be processed, the
-   fd will be readable.  @file must point to an existing apr_file_t or to
-   NULL. */
-exported apr_status_t mrpc_get_event_fd(apr_file_t **file,
-			struct mrpc_conn_set *set, apr_pool_t *pool)
+   close the fd when done with it.  The application must not read or write
+   the fd, only poll on it.  When an event is ready to be processed, the
+   fd will be readable.  Returns -errno on error. */
+exported int mrpc_get_event_fd(struct mrpc_conn_set *set)
 {
-	int newfd;
+	int fd;
 
-	newfd=dup(selfpipe_fd(set->events_notify_pipe));
-	if (newfd == -1)
-		return APR_FROM_OS_ERROR(errno);
-	return apr_os_file_put(file, &newfd, 0, pool);
+	fd=dup(selfpipe_fd(set->events_notify_pipe));
+	if (fd == -1)
+		return -errno;
+	return fd;
 }
 
 static void fail_request(struct mrpc_message *request, mrpc_status_t err)
