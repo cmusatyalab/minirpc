@@ -146,6 +146,13 @@ struct mrpc_event *mrpc_alloc_message_event(struct mrpc_message *msg,
 			enum event_type type);
 void queue_event(struct mrpc_event *event);
 
+/* selfpipe.c */
+struct selfpipe *selfpipe_create(void);
+void selfpipe_destroy(struct selfpipe *sp);
+void selfpipe_set(struct selfpipe *sp);
+void selfpipe_clear(struct selfpipe *sp);
+int selfpipe_fd(struct selfpipe *sp);
+
 /* serialize.c */
 struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn);
 void mrpc_free_message(struct mrpc_message *msg);
