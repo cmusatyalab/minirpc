@@ -11,7 +11,6 @@
 
 #include <assert.h>
 #include <pthread.h>
-#include <apr_atomic.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
@@ -157,7 +156,9 @@ mrpc_status_t format_request(struct mrpc_connection *conn, unsigned cmd,
 	ret=format_message(conn, type, data, &msg);
 	if (ret)
 		return ret;
-	msg->hdr.sequence=apr_atomic_inc32(&conn->next_sequence);
+	pthread_mutex_lock(&conn->next_sequence_lock);
+	msg->hdr.sequence=conn->next_sequence++;
+	pthread_mutex_unlock(&conn->next_sequence_lock);
 	msg->hdr.status=MINIRPC_PENDING;
 	msg->hdr.cmd=cmd;
 	*result=msg;
