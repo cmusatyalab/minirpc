@@ -354,11 +354,10 @@ exported int mrpc_dispatch_all(struct mrpc_conn_set *set)
 	return i;
 }
 
-exported apr_status_t mrpc_dispatch_loop(struct mrpc_conn_set *set)
+exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 {
 	struct pollset *pset;
 	struct mrpc_event *event;
-	apr_status_t stat;
 	int ret;
 
 	pthread_mutex_lock(&set->events_lock);
@@ -368,37 +367,31 @@ exported apr_status_t mrpc_dispatch_loop(struct mrpc_conn_set *set)
 
 	pset=pollset_alloc();
 	if (pset == NULL) {
-		stat=APR_ENOMEM;
+		ret=-ENOMEM;
 		goto out;
 	}
 	ret=pollset_add(pset, selfpipe_fd(set->events_notify_pipe),
 				POLLSET_READABLE, NULL, NULL, NULL, NULL,
 				NULL);
-	if (ret) {
-		stat=APR_FROM_OS_ERROR(ret);
+	if (ret)
 		goto out;
-	}
 	ret=pollset_add(pset, selfpipe_fd(set->shutdown_pipe),
 				POLLSET_READABLE, NULL, NULL, NULL, NULL,
 				NULL);
-	if (ret) {
-		stat=APR_FROM_OS_ERROR(ret);
+	if (ret)
 		goto out;
-	}
 
 	while (!selfpipe_is_set(set->shutdown_pipe)) {
 		event=unqueue_event(set);
 		if (event == NULL) {
 			ret=pollset_poll(pset);
-			if (ret) {
-				stat=APR_FROM_OS_ERROR(ret);
+			if (ret)
 				goto out;
-			}
 		} else {
 			dispatch_event(event);
 		}
 	}
-	stat=APR_SUCCESS;
+	ret=0;
 
 out:
 	pollset_free(pset);
@@ -406,5 +399,5 @@ out:
 	set->events_threads--;
 	pthread_cond_broadcast(&set->events_threads_cond);
 	pthread_mutex_unlock(&set->events_lock);
-	return stat;
+	return ret;
 }
