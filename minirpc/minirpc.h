@@ -60,8 +60,6 @@ apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 			const struct mrpc_set_operations *ops,
 			void *set_data, apr_pool_t *parent_pool);
 void mrpc_conn_set_free(struct mrpc_conn_set *set);
-apr_status_t mrpc_conn_set_alloc_subpool(apr_pool_t **new_pool,
-			struct mrpc_conn_set *set);
 int mrpc_connect(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 			const char *host, unsigned port, void *data);
 int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,

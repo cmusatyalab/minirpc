@@ -247,12 +247,6 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 	return 0;
 }
 
-exported apr_status_t mrpc_conn_set_alloc_subpool(apr_pool_t **new_pool,
-			struct mrpc_conn_set *set)
-{
-	return apr_pool_create(new_pool, set->pool);
-}
-
 /* The provided @fd must be a connected socket (i.e., not a listener).
    Ownership of @fd transfers to miniRPC. */
 exported int mrpc_bind_fd(struct mrpc_connection **new_conn,
