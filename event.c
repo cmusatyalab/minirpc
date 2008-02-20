@@ -12,7 +12,7 @@
 #include <sys/poll.h>
 #include <unistd.h>
 #include <assert.h>
-#include <apr_portable.h>  /* XXX */
+#include <errno.h>
 #include <pthread.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"

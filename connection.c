@@ -20,7 +20,6 @@
 #include <errno.h>
 #include <assert.h>
 #include <pthread.h>
-#include <apr_portable.h>  /* XXX */
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
@@ -600,8 +599,6 @@ exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 			return -EINVAL;
 	}
 
-	if (mrpc_init())
-		return -ENOMEM;
 	set=g_slice_new0(struct mrpc_conn_set);
 	validate_copy_config(config, &set->config);
 	pthread_mutex_init(&set->events_lock, NULL);

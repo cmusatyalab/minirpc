@@ -12,6 +12,7 @@
 #include <pthread.h>
 #include <assert.h>
 #include <poll.h>
+#include <errno.h>
 #define MINIRPC_POLLSET
 #define MINIRPC_INTERNAL
 #include "internal.h"

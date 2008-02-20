@@ -20,8 +20,6 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <glib.h>
-#include <apr_pools.h>
-#include <apr_poll.h>
 #include <minirpc/minirpc.h>
 #include <minirpc/protocol.h>
 #include "minirpc_xdr.h"
@@ -125,9 +123,6 @@ struct mrpc_connection {
 	unsigned next_sequence;
 	pthread_mutex_t next_sequence_lock;
 };
-
-/* init.c */
-apr_status_t mrpc_init(void);
 
 /* connection.c */
 mrpc_status_t send_message(struct mrpc_message *msg);

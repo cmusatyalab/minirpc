@@ -14,9 +14,6 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
-#include <apr_pools.h>
-#include <apr_network_io.h>
-#include <apr_errno.h>
 
 struct mrpc_protocol;
 struct mrpc_conn_set;
