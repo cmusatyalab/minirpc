@@ -30,6 +30,23 @@ static void try_accept(void *data, int fd);
 static void conn_hangup(void *data, int fd);
 static void conn_error(void *data, int fd);
 
+static int setsockoptval(int fd, int level, int optname, int value)
+{
+	return setsockopt(fd, level, optname, &value, sizeof(value));
+}
+
+static int set_nonblock(int fd)
+{
+	int flags;
+
+	flags=fcntl(fd, F_GETFL);
+	if (flags == -1)
+		return -errno;
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK))
+		return -errno;
+	return 0;
+}
+
 /* Ownership of the @conn_pool passes to the connection */
 static apr_status_t mrpc_conn_add(struct mrpc_connection **new_conn,
 			struct mrpc_conn_set *set, apr_socket_t *sock,
@@ -42,10 +59,13 @@ static apr_status_t mrpc_conn_add(struct mrpc_connection **new_conn,
 	int ret;
 
 	*new_conn=NULL;
-	apr_socket_opt_set(sock, APR_SO_KEEPALIVE, 1);
-	stat=apr_socket_opt_set(sock, APR_SO_NONBLOCK, 1);
-	if (stat)
-		return stat;
+	apr_os_sock_get(&fd, sock);
+	ret=setsockoptval(fd, SOL_SOCKET, SO_KEEPALIVE, 1);
+	if (ret)
+		return APR_FROM_OS_ERROR(ret);
+	ret=set_nonblock(fd);
+	if (ret)
+		return APR_FROM_OS_ERROR(ret);
 	conn=apr_pcalloc(conn_pool, sizeof(*conn));
 	if (conn == NULL)
 		return APR_ENOMEM;
@@ -61,10 +81,9 @@ static apr_status_t mrpc_conn_add(struct mrpc_connection **new_conn,
 	conn->send_state=STATE_IDLE;
 	conn->recv_state=STATE_HEADER;
 	conn->set=set;
-	conn->sock=sock;
+	conn->fd=fd;
 	conn->pool=conn_pool;
 	conn->pending_replies=g_hash_table_new(g_int_hash, g_int_equal);
-	apr_os_sock_get(&fd, sock);
 	ret=pollset_add(set->pollset, fd, POLLSET_READABLE, conn,
 				try_read_conn, try_write_conn, conn_hangup,
 				conn_error);
@@ -219,12 +238,9 @@ exported apr_status_t mrpc_bind_fd(struct mrpc_connection **new_conn,
 
 static void _conn_close(struct mrpc_connection *conn)
 {
-	int fd;
-
 	/* XXX */
-	apr_os_sock_get(&fd, conn->sock);
-	pollset_del(conn->set->pollset, fd);
-	apr_socket_close(conn->sock);
+	pollset_del(conn->set->pollset, conn->fd);
+	close(conn->fd);
 }
 
 exported void mrpc_conn_close(struct mrpc_connection *conn)
@@ -286,10 +302,10 @@ static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
 static void try_read_conn(void *data, int fd)
 {
 	struct mrpc_connection *conn=data;
-	apr_size_t count;
+	size_t count;
+	ssize_t rcount;
 	char *buf;
 	unsigned len;
-	apr_status_t stat;
 
 	while (1) {
 		if (conn->recv_msg == NULL) {
@@ -314,21 +330,16 @@ static void try_read_conn(void *data, int fd)
 
 		if (conn->recv_offset < len) {
 			count = len - conn->recv_offset;
-			stat=apr_socket_recv(conn->sock,
-						buf + conn->recv_offset,
-						&count);
-			/* Errors can be returned even if count > 0.  Ignore
-			   them and pick them up on the next pass. */
-			if (count == 0) {
-				if (APR_STATUS_IS_EOF(stat)) {
+			rcount=read(conn->fd, buf + conn->recv_offset, count);
+			if (rcount <= 0) {
+				if (rcount == 0)
 					conn_kill(conn, MRPC_DISC_CLOSED);
-				} else if (!APR_STATUS_IS_EAGAIN(stat)) {
+				else if (errno != EAGAIN && errno != EINTR)
 					conn_kill(conn, MRPC_DISC_IOERR);
-				}
 				return;
 			}
-			printf("Read %d bytes\n", (int)count);
-			conn->recv_offset += count;
+			printf("Read %d bytes\n", rcount);
+			conn->recv_offset += rcount;
 		}
 
 		if (conn->recv_offset == len) {
@@ -358,12 +369,10 @@ static void try_read_conn(void *data, int fd)
 static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 {
 	mrpc_status_t ret;
-	int fd;
 
 	pthread_mutex_lock(&conn->send_msgs_lock);
 	if (g_queue_is_empty(conn->send_msgs)) {
-		apr_os_sock_get(&fd, conn->sock);
-		pollset_modify(conn->set->pollset, fd, POLLSET_READABLE);
+		pollset_modify(conn->set->pollset, conn->fd, POLLSET_READABLE);
 		pthread_mutex_unlock(&conn->send_msgs_lock);
 		return MINIRPC_OK;
 	}
@@ -384,10 +393,10 @@ static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 static void try_write_conn(void *data, int fd)
 {
 	struct mrpc_connection *conn=data;
-	apr_size_t count;
+	size_t count;
+	ssize_t rcount;
 	char *buf;
 	unsigned len;
-	apr_status_t stat;
 
 	while (1) {
 		if (conn->send_msg == NULL) {
@@ -398,14 +407,14 @@ static void try_write_conn(void *data, int fd)
 			}
 			if (conn->send_msg == NULL) {
 				if (conn->send_state != STATE_IDLE) {
-					apr_socket_opt_set(conn->sock,
-							APR_TCP_NOPUSH, 0);
+					setsockoptval(conn->fd, IPPROTO_TCP,
+							TCP_CORK, 0);
 					conn->send_state=STATE_IDLE;
 				}
 				break;
 			}
 			if (conn->send_state == STATE_IDLE) {
-				apr_socket_opt_set(conn->sock, APR_TCP_NOPUSH,
+				setsockoptval(conn->fd, IPPROTO_TCP, TCP_CORK,
 							1);
 				conn->send_state=STATE_HEADER;
 			}
@@ -426,16 +435,13 @@ static void try_write_conn(void *data, int fd)
 
 		if (conn->send_offset < len) {
 			count = len - conn->send_offset;
-			stat=apr_socket_send(conn->sock, buf +
-						conn->send_offset, &count);
-			/* Errors can be returned even if count > 0.  Ignore
-			   them and pick them up on the next pass. */
-			if (count == 0) {
-				if (!APR_STATUS_IS_EAGAIN(stat))
-					conn_kill(conn, MRPC_DISC_IOERR);
-				break;
+			rcount=write(conn->fd, buf + conn->send_offset, count);
+			if (rcount == -1 && errno != EAGAIN
+						&& errno != EINTR) {
+				conn_kill(conn, MRPC_DISC_IOERR);
+				return;
 			}
-			conn->send_offset += count;
+			conn->send_offset += rcount;
 		}
 
 		if (conn->send_offset == len) {
@@ -529,11 +535,9 @@ static void *listener(void *data)
 mrpc_status_t send_message(struct mrpc_message *msg)
 {
 	struct mrpc_connection *conn=msg->conn;
-	int fd;
 
 	pthread_mutex_lock(&conn->send_msgs_lock);
-	apr_os_sock_get(&fd, conn->sock);
-	if (pollset_modify(conn->set->pollset, fd,
+	if (pollset_modify(conn->set->pollset, conn->fd,
 				POLLSET_READABLE|POLLSET_WRITABLE)) {
 		pthread_mutex_unlock(&conn->send_msgs_lock);
 		mrpc_free_message(msg);

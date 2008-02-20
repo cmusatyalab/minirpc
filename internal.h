@@ -95,7 +95,7 @@ enum conn_state {
 
 struct mrpc_connection {
 	struct mrpc_conn_set *set;
-	apr_socket_t *sock;
+	int fd;
 	void *private;
 	apr_pool_t *pool;
 
