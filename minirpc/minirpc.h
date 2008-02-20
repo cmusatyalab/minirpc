@@ -55,7 +55,7 @@ struct mrpc_set_operations {
 };
 
 /* connection.c */
-apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
+int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 			const struct mrpc_config *config,
 			const struct mrpc_set_operations *ops, void *set_data);
 void mrpc_conn_set_free(struct mrpc_conn_set *set);

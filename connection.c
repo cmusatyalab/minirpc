@@ -574,18 +574,17 @@ static void validate_copy_config(const struct mrpc_config *from,
 }
 #undef copy_default
 
-exported apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
+exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 			const struct mrpc_config *config,
 			const struct mrpc_set_operations *ops, void *set_data)
 {
 	struct mrpc_conn_set *set;
 	int ret;
-	apr_status_t stat;
 
 	*new_set=NULL;
 	if (config == NULL || config->protocol == NULL || ops == NULL ||
 				new_set == NULL)
-		return APR_EINVAL;
+		return -EINVAL;
 	if (config->protocol->is_server) {
 		/* We require the accept method to exist.  Without it, the
 		   connection will never have a non-NULL operations pointer and
@@ -593,17 +592,16 @@ exported apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 		   exists, so the connecting client will be forever stuck in
 		   PROCEDURE_UNAVAIL limbo. */
 		if (ops->accept == NULL)
-			return APR_EINVAL;
+			return -EINVAL;
 	} else {
 		/* The accept method is irrelevant for clients.  Tell the
 		   application if its assumptions are wrong. */
 		if (ops->accept != NULL)
-			return APR_EINVAL;
+			return -EINVAL;
 	}
 
-	stat=mrpc_init();
-	if (stat)
-		return stat;
+	if (mrpc_init())
+		return -ENOMEM;
 	set=g_slice_new0(struct mrpc_conn_set);
 	validate_copy_config(config, &set->config);
 	pthread_mutex_init(&set->events_lock, NULL);
@@ -614,28 +612,24 @@ exported apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 	set->shutdown_pipe=selfpipe_create();
 	set->events_notify_pipe=selfpipe_create();
 	if (set->shutdown_pipe == NULL || set->events_notify_pipe == NULL) {
-		stat=APR_ENOMEM;
+		ret=-ENOMEM;
 		goto bad;
 	}
 	set->pollset=pollset_alloc();
 	if (set->pollset == NULL) {
-		stat=APR_ENOMEM;
+		ret=-ENOMEM;
 		goto bad;
 	}
 	ret=pollset_add(set->pollset, selfpipe_fd(set->shutdown_pipe),
 				POLLSET_READABLE, NULL, NULL, NULL, NULL,
 				pipe_error);
-	if (ret) {
-		stat=APR_FROM_OS_ERROR(ret);
+	if (ret)
 		goto bad;
-	}
 	ret=pthread_create(&set->thread, NULL, listener, set);
-	if (ret) {
-		stat=APR_FROM_OS_ERROR(ret);
+	if (ret)
 		goto bad;
-	}
 	*new_set=set;
-	return APR_SUCCESS;
+	return 0;
 
 bad:
 	if (set->pollset)
@@ -645,7 +639,7 @@ bad:
 	if (set->shutdown_pipe)
 		selfpipe_destroy(set->shutdown_pipe);
 	g_slice_free(struct mrpc_conn_set, set);
-	return stat;
+	return ret;
 }
 
 /* XXX drops lots of stuff on the floor */
