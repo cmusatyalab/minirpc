@@ -64,7 +64,8 @@ struct mrpc_event {
 	struct mrpc_connection *conn;
 
 	/* accept */
-	apr_sockaddr_t *addr;
+	struct sockaddr *addr;
+	socklen_t addrlen;
 
 	/* request/reply */
 	struct mrpc_message *msg;

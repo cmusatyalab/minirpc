@@ -312,7 +312,8 @@ static void dispatch_event(struct mrpc_event *event)
 	case EVENT_ACCEPT:
 		assert(ops->accept != NULL);
 		conn->private=ops->accept(conn->set->private, conn,
-					event->addr);
+					event->addr, event->addrlen);
+		g_free(event->addr);
 		break;
 	case EVENT_REQUEST:
 		dispatch_request(event);

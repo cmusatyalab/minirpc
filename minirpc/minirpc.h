@@ -49,7 +49,7 @@ enum mrpc_disc_reason {
 
 struct mrpc_set_operations {
 	void *(*accept)(void *set_data, struct mrpc_connection *conn,
-				apr_sockaddr_t *from);
+				struct sockaddr *from, socklen_t from_len);
 	void (*disconnect)(void *conn_data, enum mrpc_disc_reason reason);
 	void (*ioerr)(void *conn_data, char *message);
 };
@@ -62,14 +62,12 @@ apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 void mrpc_conn_set_free(struct mrpc_conn_set *set);
 apr_status_t mrpc_conn_set_alloc_subpool(apr_pool_t **new_pool,
 			struct mrpc_conn_set *set);
-apr_status_t mrpc_connect(struct mrpc_connection **new_conn,
-			struct mrpc_conn_set *set, char *host, unsigned port,
-			void *data);
-apr_status_t mrpc_listen(struct mrpc_conn_set *set, char *listenaddr,
+int mrpc_connect(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
+			const char *host, unsigned port, void *data);
+int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 			unsigned port, int *bound);
-apr_status_t mrpc_bind_fd(struct mrpc_connection **new_conn,
-			struct mrpc_conn_set *set, apr_socket_t *sock,
-			apr_pool_t *conn_pool, void *data);
+int mrpc_bind_fd(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
+			int fd, void *data);
 void mrpc_conn_close(struct mrpc_connection *conn);
 
 /* event.c */

@@ -118,7 +118,7 @@ void ops_disconnect(void *conn_data, enum mrpc_disc_reason reason)
 }
 
 void *ops_accept(void *set_data, struct mrpc_connection *conn,
-			apr_sockaddr_t *from)
+			struct sockaddr *from, socklen_t from_len)
 {
 	warn("New connection");
 	if (test_server_set_operations(conn, &ops))
@@ -158,8 +158,7 @@ static void *run_callbacks(void *ignored)
 int main(int argc, char **argv)
 {
 	struct mrpc_conn_set *set;
-	char errbuf[128];
-	apr_status_t stat;
+	int ret;
 
 	if (mrpc_conn_set_alloc(&set, &config, &set_ops, NULL, NULL))
 		die("Couldn't allocate connection set");
@@ -168,11 +167,9 @@ int main(int argc, char **argv)
 	pthread_cond_init(&cond, NULL);
 	if (pthread_create(&callback_thread, NULL, run_callbacks, NULL))
 		die("Couldn't start callback thread");
-	stat=mrpc_listen(set, NULL, 58000, NULL);
-	if (stat) {
-		apr_strerror(stat, errbuf, sizeof(errbuf));
-		die("%s", errbuf);
-	}
+	ret=mrpc_listen(set, NULL, 58000, NULL);
+	if (ret)
+		die("%s", strerror(-ret));
 	mrpc_dispatch_loop(set);
 	return 0;
 }

@@ -47,28 +47,26 @@ static int set_nonblock(int fd)
 	return 0;
 }
 
-/* Ownership of the @conn_pool passes to the connection */
-static apr_status_t mrpc_conn_add(struct mrpc_connection **new_conn,
-			struct mrpc_conn_set *set, apr_socket_t *sock,
-			apr_pool_t *conn_pool)
+static int mrpc_conn_add(struct mrpc_connection **new_conn,
+			struct mrpc_conn_set *set, int fd)
 {
 	struct mrpc_connection *conn;
 	pthread_mutexattr_t attr;
-	apr_status_t stat;
-	int fd;
+	apr_pool_t *conn_pool;
 	int ret;
 
 	*new_conn=NULL;
-	apr_os_sock_get(&fd, sock);
 	ret=setsockoptval(fd, SOL_SOCKET, SO_KEEPALIVE, 1);
 	if (ret)
-		return APR_FROM_OS_ERROR(ret);
+		return ret;
 	ret=set_nonblock(fd);
 	if (ret)
-		return APR_FROM_OS_ERROR(ret);
+		return ret;
+	if (apr_pool_create(&conn_pool, set->pool))
+		return -ENOMEM;
 	conn=apr_pcalloc(conn_pool, sizeof(*conn));
 	if (conn == NULL)
-		return APR_ENOMEM;
+		return -ENOMEM;
 	conn->send_msgs=g_queue_new();
 	conn->events=g_queue_new();
 	pthread_mutexattr_init(&attr);
@@ -88,11 +86,14 @@ static apr_status_t mrpc_conn_add(struct mrpc_connection **new_conn,
 				try_read_conn, try_write_conn, conn_hangup,
 				conn_error);
 	if (ret) {
-		stat=APR_FROM_OS_ERROR(ret);
-		return stat;
+		g_hash_table_destroy(conn->pending_replies);
+		g_queue_free(conn->events);
+		g_queue_free(conn->send_msgs);
+		apr_pool_destroy(conn->pool);
+		return ret;
 	}
 	*new_conn=conn;
-	return APR_SUCCESS;
+	return 0;
 }
 /* XXX unregister sock from pollset at pool release */
 
@@ -102,113 +103,148 @@ void mrpc_conn_free(struct mrpc_connection *conn)
 	apr_pool_destroy(conn->pool);
 }
 
-exported apr_status_t mrpc_connect(struct mrpc_connection **new_conn,
-			struct mrpc_conn_set *set, char *host, unsigned port,
-			void *data)
+static int lookup_addr(struct addrinfo **res, const char *host, unsigned port,
+			int passive)
 {
-	struct mrpc_connection *conn;
-	apr_pool_t *conn_pool;
-	apr_pool_t *lookup_pool;
-	apr_sockaddr_t *sa;
-	apr_socket_t *sock;
-	apr_status_t stat;
+	char *portstr;
+	int ret;
+	struct addrinfo hints = {
+		.ai_family = AF_UNSPEC,
+		.ai_socktype = SOCK_STREAM,
+		.ai_flags = AI_NUMERICSERV
+	};
 
-	*new_conn=NULL;
+	if (asprintf(&portstr, "%u", port) == -1)
+		return -ENOMEM;
+	if (passive)
+		hints.ai_flags |= AI_PASSIVE;
+	ret=getaddrinfo(host, portstr, &hints, res);
+	free(portstr);
 
-	if (set->config.protocol->is_server)
-		return APR_EINVAL;
-
-	stat=apr_pool_create(&conn_pool, set->pool);
-	if (stat)
-		return stat;
-	stat=apr_pool_create(&lookup_pool, set->pool);
-	if (stat)
-		goto bad;
-	stat=apr_sockaddr_info_get(&sa, host, APR_UNSPEC, port, 0, lookup_pool);
-	for (; sa != NULL; sa=sa->next) {
-		apr_pool_clear(conn_pool);
-		stat=apr_socket_create(&sock, sa->family, SOCK_STREAM, 0,
-					conn_pool);
-		if (stat)
-			continue;
-		stat=apr_socket_connect(sock, sa);
-		if (stat == APR_SUCCESS)
-			break;
+	switch (ret) {
+	case 0:
+		return 0;
+	case EAI_ADDRFAMILY:
+		return -EADDRNOTAVAIL;
+	case EAI_AGAIN:
+		return -EAGAIN;
+	case EAI_BADFLAGS:
+		return -EINVAL;
+	case EAI_FAIL:
+		return -EIO;
+	case EAI_FAMILY:
+		return -EAFNOSUPPORT;
+	case EAI_MEMORY:
+		return -ENOMEM;
+	case EAI_NODATA:
+		return -EIO;
+	case EAI_NONAME:
+		return -EIO;
+	case EAI_SERVICE:
+		return -EOPNOTSUPP;
+	case EAI_SOCKTYPE:
+		return -ESOCKTNOSUPPORT;
+	case EAI_SYSTEM:
+		return -errno;
+	default:
+		return -EIO;
 	}
-	apr_pool_destroy(lookup_pool);
-	if (stat)
-		goto bad;
-	stat=mrpc_conn_add(&conn, set, sock, conn_pool);
-	if (stat)
-		goto bad;
-	conn->private = (data != NULL) ? data : conn;
-	*new_conn=conn;
-	return APR_SUCCESS;
-
-bad:
-	apr_pool_destroy(conn_pool);
-	return stat;
 }
 
-exported apr_status_t mrpc_listen(struct mrpc_conn_set *set, char *listenaddr,
+exported int mrpc_connect(struct mrpc_connection **new_conn,
+			struct mrpc_conn_set *set, const char *host,
+			unsigned port, void *data)
+{
+	struct mrpc_connection *conn;
+	struct addrinfo *ai;
+	struct addrinfo *cur;
+	int fd;
+	int ret;
+
+	*new_conn=NULL;
+	if (set->config.protocol->is_server)
+		return -EINVAL;
+	ret=lookup_addr(&ai, host, port, 0);
+	if (ret)
+		return ret;
+	for (cur=ai; cur != NULL; cur=cur->ai_next) {
+		fd=socket(cur->ai_family, cur->ai_socktype, cur->ai_protocol);
+		if (fd == -1) {
+			ret=-errno;
+			continue;
+		}
+		ret=connect(fd, cur->ai_addr, cur->ai_addrlen);
+		if (!ret)
+			break;
+		close(fd);
+	}
+	freeaddrinfo(ai);
+	ret=mrpc_conn_add(&conn, set, fd);
+	if (ret) {
+		close(fd);
+		return ret;
+	}
+	conn->private = (data != NULL) ? data : conn;
+	*new_conn=conn;
+	return 0;
+}
+
+exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 			unsigned port, int *bound)
 {
-	apr_pool_t *pool;
-	apr_sockaddr_t *sa;
-	apr_socket_t *sock;
-	apr_status_t stat;
+	struct addrinfo *ai;
+	struct addrinfo *cur;
+	int fd;
 	int count=0;
 	int ret;
-	int fd;
 
 	if (bound)
 		*bound=0;
 	if (!set->config.protocol->is_server)
-		return APR_EINVAL;
-	stat=apr_pool_create(&pool, set->pool);
-	if (stat)
-		return stat;
-	stat=apr_sockaddr_info_get(&sa, listenaddr, APR_UNSPEC, port, 0, pool);
-	for (; sa != NULL; sa=sa->next) {
-		stat=apr_socket_create(&sock, sa->family, SOCK_STREAM, 0,
-					set->pool);
-		if (stat)
-			continue;
-		stat=apr_socket_opt_set(sock, APR_SO_REUSEADDR, 1);
-		if (stat) {
-			apr_socket_close(sock);
+		return -EINVAL;
+	ret=lookup_addr(&ai, listenaddr, port, 1);
+	if (ret)
+		return ret;
+	for (cur=ai; cur != NULL; cur=cur->ai_next) {
+		fd=socket(cur->ai_family, cur->ai_socktype, cur->ai_protocol);
+		if (fd == -1) {
+			ret=-errno;
 			continue;
 		}
-		stat=apr_socket_opt_set(sock, APR_SO_NONBLOCK, 1);
-		if (stat) {
-			apr_socket_close(sock);
+		ret=setsockoptval(fd, SOL_SOCKET, SO_REUSEADDR, 1);
+		if (ret) {
+			close(fd);
 			continue;
 		}
-		stat=apr_socket_bind(sock, sa);
-		if (stat) {
-			apr_socket_close(sock);
+		ret=set_nonblock(fd);
+		if (ret) {
+			close(fd);
 			continue;
 		}
-		if (apr_socket_listen(sock, set->config.listen_backlog)) {
-			apr_socket_close(sock);
+		if (bind(fd, cur->ai_addr, cur->ai_addrlen)) {
+			ret=-errno;
+			close(fd);
 			continue;
 		}
-		apr_os_sock_get(&fd, sock);
+		if (listen(fd, set->config.listen_backlog)) {
+			ret=-errno;
+			close(fd);
+			continue;
+		}
 		ret=pollset_add(set->pollset, fd, POLLSET_READABLE,
 					set, try_accept, NULL, NULL, NULL);
 		if (ret) {
-			apr_socket_close(sock);
-			stat=APR_FROM_OS_ERROR(ret);
+			close(fd);
 			continue;
 		}
 		count++;
 	}
-	apr_pool_destroy(pool);
+	freeaddrinfo(ai);
 	if (bound)
 		*bound=count;
 	if (count == 0)
-		return stat;
-	return APR_SUCCESS;
+		return ret;
+	return 0;
 }
 
 exported apr_status_t mrpc_conn_set_alloc_subpool(apr_pool_t **new_pool,
@@ -217,20 +253,18 @@ exported apr_status_t mrpc_conn_set_alloc_subpool(apr_pool_t **new_pool,
 	return apr_pool_create(new_pool, set->pool);
 }
 
-/* The provided @sock must be a connected socket (i.e., not a listener).
-   @conn_pool must be a subpool of the set pool.  Ownership of @conn_pool
-   and @sock transfers to miniRPC. */
-exported apr_status_t mrpc_bind_fd(struct mrpc_connection **new_conn,
-			struct mrpc_conn_set *set, apr_socket_t *sock,
-			apr_pool_t *conn_pool, void *data)
+/* The provided @fd must be a connected socket (i.e., not a listener).
+   Ownership of @fd transfers to miniRPC. */
+exported int mrpc_bind_fd(struct mrpc_connection **new_conn,
+			struct mrpc_conn_set *set, int fd, void *data)
 {
 	struct mrpc_connection *conn;
-	apr_status_t stat;
+	int ret;
 
 	*new_conn=NULL;
-	stat=mrpc_conn_add(&conn, set, sock, conn_pool);
-	if (stat)
-		return stat;
+	ret=mrpc_conn_add(&conn, set, fd);
+	if (ret)
+		return ret;
 	conn->private = (data != NULL) ? data : conn;
 	*new_conn=conn;
 	return 0;
@@ -463,41 +497,32 @@ static void try_write_conn(void *data, int fd)
 	}
 }
 
-static void try_accept(void *data, int fd)
+static void try_accept(void *data, int listenfd)
 {
 	struct mrpc_conn_set *set=data;
 	struct mrpc_connection *conn;
 	struct mrpc_event *event;
-	apr_pool_t *pool;
-	apr_socket_t *listensock=NULL;
-	apr_socket_t *sock;
-	apr_status_t stat;
+	struct sockaddr_storage sa;
+	socklen_t len;
+	int fd;
 
 	/* XXX error handling */
 	while (1) {
-		stat=apr_pool_create(&pool, set->pool);
-		if (stat)
-			return;
-		stat=apr_os_sock_put(&listensock, &fd, pool);
-		if (stat)
-			return;
-		stat=apr_socket_accept(&sock, listensock, pool);
-		if (stat)
+		len=sizeof(sa);
+		fd=accept(listenfd, (struct sockaddr *)&sa, &len);
+		if (fd == -1)
 			break;
-		if (mrpc_conn_add(&conn, set, sock, pool)) {
-			/* XXX */
-			apr_pool_destroy(pool);
+		if (mrpc_conn_add(&conn, set, fd)) {
+			close(fd);
 			continue;
 		}
 		event=mrpc_alloc_event(conn, EVENT_ACCEPT);
 		if (event == NULL)
 			/* XXX */;
-		stat=apr_socket_addr_get(&event->addr, APR_REMOTE, sock);
-		if (stat)
-			event->addr=NULL;
+		event->addr=g_memdup(&sa, len);
+		event->addrlen=len;
 		queue_event(event);
 	}
-	apr_pool_destroy(pool);
 }
 
 static void conn_hangup(void *data, int fd)

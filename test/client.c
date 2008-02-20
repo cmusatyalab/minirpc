@@ -173,8 +173,6 @@ int main(int argc, char **argv)
 	struct mrpc_conn_set *set;
 	struct mrpc_connection *conn;
 	int ret;
-	apr_status_t stat;
-	char errbuf[128];
 
 	if (argc != 2)
 		die("Usage: %s hostname", argv[0]);
@@ -182,11 +180,9 @@ int main(int argc, char **argv)
 	if (mrpc_conn_set_alloc(&set, &config, &set_ops, NULL, NULL))
 		die("Couldn't allocate conn set");
 
-	stat=mrpc_connect(&conn, set, argv[1], 58000, NULL);
-	if (stat) {
-		apr_strerror(stat, errbuf, sizeof(errbuf));
-		die("%s", errbuf);
-	}
+	ret=mrpc_connect(&conn, set, argv[1], 58000, NULL);
+	if (ret)
+		die("%s", strerror(-ret));
 
 	ret=pthread_create(&thread, NULL, runner, set);
 	if (ret)
