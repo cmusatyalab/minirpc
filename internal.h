@@ -49,8 +49,6 @@ struct mrpc_conn_set {
 	pthread_t thread;
 	unsigned events_threads;		/* protected by events_lock */
 	pthread_cond_t events_threads_cond;
-
-	int shutdown;
 };
 
 enum event_type {
@@ -167,6 +165,7 @@ struct selfpipe *selfpipe_create(void);
 void selfpipe_destroy(struct selfpipe *sp);
 void selfpipe_set(struct selfpipe *sp);
 void selfpipe_clear(struct selfpipe *sp);
+int selfpipe_is_set(struct selfpipe *sp);
 int selfpipe_fd(struct selfpipe *sp);
 
 /* serialize.c */

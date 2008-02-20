@@ -355,20 +355,12 @@ exported int mrpc_dispatch_all(struct mrpc_conn_set *set)
 	return i;
 }
 
-static void mrpc_dispatch_shutdown(void *data, int fd)
-{
-	int *shutdown=data;
-
-	*shutdown=1;
-}
-
 exported apr_status_t mrpc_dispatch_loop(struct mrpc_conn_set *set)
 {
 	struct pollset *pset;
 	struct mrpc_event *event;
 	apr_status_t stat;
 	int ret;
-	int shutdown=0;
 
 	pthread_mutex_lock(&set->events_lock);
 	set->events_threads++;
@@ -388,14 +380,14 @@ exported apr_status_t mrpc_dispatch_loop(struct mrpc_conn_set *set)
 		goto out;
 	}
 	ret=pollset_add(pset, selfpipe_fd(set->shutdown_pipe),
-				POLLSET_READABLE, &shutdown,
-				mrpc_dispatch_shutdown, NULL, NULL, NULL);
+				POLLSET_READABLE, NULL, NULL, NULL, NULL,
+				NULL);
 	if (ret) {
 		stat=APR_FROM_OS_ERROR(ret);
 		goto out;
 	}
 
-	while (!shutdown) {
+	while (!selfpipe_is_set(set->shutdown_pipe)) {
 		event=unqueue_event(set);
 		if (event == NULL) {
 			ret=pollset_poll(pset);

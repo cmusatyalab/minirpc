@@ -11,11 +11,14 @@
 
 #include <unistd.h>
 #include <fcntl.h>
+#include <pthread.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
 struct selfpipe {
 	int pipe[2];
+	int set;
+	pthread_mutex_t lock;
 };
 
 struct selfpipe *selfpipe_create(void)
@@ -25,6 +28,7 @@ struct selfpipe *selfpipe_create(void)
 	int i;
 
 	sp=g_slice_new0(struct selfpipe);
+	pthread_mutex_init(&sp->lock, NULL);
 	if (pipe(sp->pipe))
 		goto bad_free;
 	for (i=0; i < 2; i++) {
@@ -53,17 +57,33 @@ void selfpipe_destroy(struct selfpipe *sp)
 
 void selfpipe_set(struct selfpipe *sp)
 {
+	pthread_mutex_lock(&sp->lock);
 	/* In order to be resilient to someone else (improperly) reading
 	   from the read end of the pipe, we always write even if the pipe
 	   is already readable. */
 	write(sp->pipe[1], "a", 1);
+	sp->set=1;
+	pthread_mutex_unlock(&sp->lock);
 }
 
 void selfpipe_clear(struct selfpipe *sp)
 {
 	char buf[32];
 
+	pthread_mutex_lock(&sp->lock);
 	while (read(sp->pipe[0], buf, sizeof(buf)) == sizeof(buf));
+	sp->set=0;
+	pthread_mutex_unlock(&sp->lock);
+}
+
+int selfpipe_is_set(struct selfpipe *sp)
+{
+	int ret;
+
+	pthread_mutex_lock(&sp->lock);
+	ret=sp->set;
+	pthread_mutex_unlock(&sp->lock);
+	return ret;
 }
 
 int selfpipe_fd(struct selfpipe *sp)

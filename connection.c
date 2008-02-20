@@ -509,13 +509,6 @@ static void conn_error(void *data, int fd)
 	conn_kill(conn, MRPC_DISC_IOERR);
 }
 
-static void listener_shutdown(void *data, int fd)
-{
-	struct mrpc_conn_set *set=data;
-
-	set->shutdown=1;
-}
-
 static void pipe_error(void *data, int fd)
 {
 	assert(0);
@@ -526,7 +519,7 @@ static void *listener(void *data)
 {
 	struct mrpc_conn_set *set=data;
 
-	while (!set->shutdown) {
+	while (!selfpipe_is_set(set->shutdown_pipe)) {
 		if (pollset_poll(set->pollset))
 			/* XXX */;
 	}
@@ -622,8 +615,8 @@ exported apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 		goto bad;
 	}
 	ret=pollset_add(set->pollset, selfpipe_fd(set->shutdown_pipe),
-				POLLSET_READABLE, set, listener_shutdown,
-				NULL, NULL, pipe_error);
+				POLLSET_READABLE, NULL, NULL, NULL, NULL,
+				pipe_error);
 	if (ret) {
 		stat=APR_FROM_OS_ERROR(ret);
 		goto bad;
