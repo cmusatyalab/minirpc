@@ -45,17 +45,6 @@ struct mrpc_event *mrpc_alloc_message_event(struct mrpc_message *msg,
 	return event;
 }
 
-static int empty_pipe(apr_file_t *pipe)
-{
-	char buf[8];
-	int total;
-	apr_size_t count=sizeof(buf);
-
-	for (total=0; count == sizeof(buf); total += count)
-		apr_file_read(pipe, buf, &count);
-	return total;
-}
-
 static int conn_is_plugged(struct mrpc_connection *conn)
 {
 	return (conn->plugged_event != NULL || conn->plugged_user != 0);
@@ -70,7 +59,7 @@ static void try_queue_conn(struct mrpc_connection *conn)
 				conn->lh_event_conns != NULL)
 		return;
 	if (g_queue_is_empty(set->event_conns))
-		apr_file_putc('a', set->events_notify_pipe_write);
+		selfpipe_set(set->events_notify_pipe);
 	conn->lh_event_conns=g_list_append(NULL, conn);
 	g_queue_push_tail_link(set->event_conns, conn->lh_event_conns);
 }
@@ -93,13 +82,11 @@ static struct mrpc_event *unqueue_event(struct mrpc_conn_set *set)
 	pthread_mutex_lock(&set->events_lock);
 	conn=g_queue_pop_head(set->event_conns);
 	if (conn == NULL) {
-		if (empty_pipe(set->events_notify_pipe_read))
-			/* XXX */;
+		selfpipe_clear(set->events_notify_pipe);
 	} else {
 		conn->lh_event_conns=NULL;
 		if (g_queue_is_empty(set->event_conns))
-			if (empty_pipe(set->events_notify_pipe_read) != 1)
-				/* XXX */;
+			selfpipe_clear(set->events_notify_pipe);
 		event=g_queue_pop_head(conn->events);
 		assert(event != NULL);
 		conn->plugged_event=event;
@@ -173,7 +160,12 @@ exported mrpc_status_t mrpc_unplug_conn(struct mrpc_connection *conn)
 exported apr_status_t mrpc_get_event_fd(apr_file_t **file,
 			struct mrpc_conn_set *set, apr_pool_t *pool)
 {
-	return apr_file_dup(file, set->events_notify_pipe_read, pool);
+	int newfd;
+
+	newfd=dup(selfpipe_fd(set->events_notify_pipe));
+	if (newfd == -1)
+		return APR_FROM_OS_ERROR(errno);
+	return apr_os_file_put(file, &newfd, 0, pool);
 }
 
 static void fail_request(struct mrpc_message *request, mrpc_status_t err)
@@ -363,60 +355,62 @@ exported int mrpc_dispatch_all(struct mrpc_conn_set *set)
 	return i;
 }
 
+static void mrpc_dispatch_shutdown(void *data, int fd)
+{
+	int *shutdown=data;
+
+	*shutdown=1;
+}
+
 exported apr_status_t mrpc_dispatch_loop(struct mrpc_conn_set *set)
 {
-	apr_pool_t *pool;
-	apr_pollset_t *pollset;
-	apr_pollfd_t pollfd;
-	const apr_pollfd_t *ready;
+	struct pollset *pset;
 	struct mrpc_event *event;
-	int i;
-	int count;
 	apr_status_t stat;
+	int ret;
+	int shutdown=0;
 
 	pthread_mutex_lock(&set->events_lock);
 	set->events_threads++;
 	pthread_cond_broadcast(&set->events_threads_cond);
 	pthread_mutex_unlock(&set->events_lock);
 
-	stat=apr_pool_create(&pool, set->pool);
-	if (stat)
+	pset=pollset_alloc();
+	if (pset == NULL) {
+		stat=APR_ENOMEM;
 		goto out;
-	stat=apr_pollset_create(&pollset, 2, pool, 0);
-	if (stat)
+	}
+	ret=pollset_add(pset, selfpipe_fd(set->events_notify_pipe),
+				POLLSET_READABLE, NULL, NULL, NULL, NULL,
+				NULL);
+	if (ret) {
+		stat=APR_FROM_OS_ERROR(ret);
 		goto out;
-	pollfd.p=pool;
-	pollfd.desc_type=APR_POLL_FILE;
-	pollfd.reqevents=APR_POLLIN;
-	pollfd.desc.f=set->events_notify_pipe_read;
-	stat=apr_pollset_add(pollset, &pollfd);
-	if (stat)
+	}
+	ret=pollset_add(pset, selfpipe_fd(set->shutdown_pipe),
+				POLLSET_READABLE, &shutdown,
+				mrpc_dispatch_shutdown, NULL, NULL, NULL);
+	if (ret) {
+		stat=APR_FROM_OS_ERROR(ret);
 		goto out;
-	pollfd.desc.f=set->shutdown_pipe_read;
-	stat=apr_pollset_add(pollset, &pollfd);
-	if (stat)
-		goto out;
+	}
 
-	while (1) {
+	while (!shutdown) {
 		event=unqueue_event(set);
 		if (event == NULL) {
-			stat=apr_pollset_poll(pollset, -1, &count, &ready);
-			if (stat && !APR_STATUS_IS_EINTR(stat))
+			ret=pollset_poll(pset);
+			if (ret) {
+				stat=APR_FROM_OS_ERROR(ret);
 				goto out;
-			for (i=0; i<count; i++) {
-				if (ready[i].desc.f ==
-						set->shutdown_pipe_read) {
-					stat=APR_SUCCESS;
-					goto out;
-				}
 			}
 		} else {
 			dispatch_event(event);
 		}
 	}
+	stat=APR_SUCCESS;
 
 out:
-	apr_pool_destroy(pool);
+	pollset_free(pset);
 	pthread_mutex_lock(&set->events_lock);
 	set->events_threads--;
 	pthread_cond_broadcast(&set->events_threads_cond);

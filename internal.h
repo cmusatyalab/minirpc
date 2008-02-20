@@ -41,13 +41,11 @@ struct mrpc_conn_set {
 	apr_pool_t *pool;
 
 	GQueue *event_conns;
-	apr_file_t *events_notify_pipe_read;
-	apr_file_t *events_notify_pipe_write;
+	struct selfpipe *events_notify_pipe;
 	pthread_mutex_t events_lock;
 
 	struct pollset *pollset;
-	apr_file_t *shutdown_pipe_read;
-	apr_file_t *shutdown_pipe_write;
+	struct selfpipe *shutdown_pipe;
 	pthread_t thread;
 	unsigned events_threads;		/* protected by events_lock */
 	pthread_cond_t events_threads_cond;

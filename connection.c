@@ -572,7 +572,6 @@ exported apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 	apr_pool_t *pool;
 	int ret;
 	apr_status_t stat;
-	int fd;
 
 	*new_set=NULL;
 	if (config == NULL || config->protocol == NULL || ops == NULL ||
@@ -611,43 +610,39 @@ exported apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 	set->pool=pool;
 	set->ops=ops;
 	set->private = (set_data != NULL) ? set_data : set;
-	stat=apr_file_pipe_create(&set->shutdown_pipe_read,
-				&set->shutdown_pipe_write, pool);
-	if (stat)
+	set->shutdown_pipe=selfpipe_create();
+	set->events_notify_pipe=selfpipe_create();
+	if (set->shutdown_pipe == NULL || set->events_notify_pipe == NULL) {
+		stat=APR_ENOMEM;
 		goto bad;
-	stat=apr_file_pipe_create(&set->events_notify_pipe_read,
-				&set->events_notify_pipe_write, pool);
-	if (stat)
-		goto bad;
-	stat=apr_file_pipe_timeout_set(set->events_notify_pipe_write, 0);
-	if (stat)
-		goto bad;
-	stat=apr_file_pipe_timeout_set(set->events_notify_pipe_read, 0);
-	if (stat)
-		goto bad;
+	}
 	set->pollset=pollset_alloc();
 	if (set->pollset == NULL) {
 		stat=APR_ENOMEM;
 		goto bad;
 	}
-	apr_os_file_get(&fd, set->shutdown_pipe_read);
-	ret=pollset_add(set->pollset, fd, POLLSET_READABLE, set,
-				listener_shutdown, NULL, NULL, pipe_error);
+	ret=pollset_add(set->pollset, selfpipe_fd(set->shutdown_pipe),
+				POLLSET_READABLE, set, listener_shutdown,
+				NULL, NULL, pipe_error);
 	if (ret) {
 		stat=APR_FROM_OS_ERROR(ret);
-		goto bad2;
+		goto bad;
 	}
 	ret=pthread_create(&set->thread, NULL, listener, set);
 	if (ret) {
 		stat=APR_FROM_OS_ERROR(ret);
-		goto bad2;
+		goto bad;
 	}
 	*new_set=set;
 	return APR_SUCCESS;
 
-bad2:
-	pollset_free(set->pollset);
 bad:
+	if (set->pollset)
+		pollset_free(set->pollset);
+	if (set->events_notify_pipe)
+		selfpipe_destroy(set->events_notify_pipe);
+	if (set->shutdown_pipe)
+		selfpipe_destroy(set->shutdown_pipe);
 	apr_pool_destroy(pool);
 	return stat;
 }
@@ -655,11 +650,14 @@ bad:
 /* XXX drops lots of stuff on the floor */
 exported void mrpc_conn_set_free(struct mrpc_conn_set *set)
 {
-	apr_file_putc('s', set->shutdown_pipe_write);
+	selfpipe_set(set->shutdown_pipe);
 	pthread_mutex_lock(&set->events_lock);
 	while (set->events_threads)
 		pthread_cond_wait(&set->events_threads_cond, &set->events_lock);
 	pthread_mutex_unlock(&set->events_lock);
 	pthread_join(set->thread, NULL);
+	pollset_free(set->pollset);
+	selfpipe_destroy(set->events_notify_pipe);
+	selfpipe_destroy(set->shutdown_pipe);
 	apr_pool_destroy(set->pool);
 }
