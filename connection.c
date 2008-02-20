@@ -24,32 +24,11 @@
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
-#define POLLEVENTS (APR_POLLIN|APR_POLLERR|APR_POLLHUP)
-
-static apr_status_t update_poll(struct mrpc_conn_set *set, apr_socket_t *sock,
-			unsigned reqevents, void *data)
-{
-	apr_pollfd_t pollfd;
-
-	pollfd.p=set->pool;
-	pollfd.desc_type=APR_POLL_SOCKET;
-	pollfd.reqevents=reqevents;
-	pollfd.desc.s=sock;
-	pollfd.client_data=data;
-	/* We can't update an existing reqevents set, so we remove the fd
-	   (which may fail) and re-add it. */
-	apr_pollset_remove(set->pollset, &pollfd);
-	return apr_pollset_add(set->pollset, &pollfd);
-}
-
-static apr_status_t remove_poll(struct mrpc_conn_set *set, apr_socket_t *sock)
-{
-	apr_pollfd_t pollfd={0};
-
-	pollfd.desc_type=APR_POLL_SOCKET;
-	pollfd.desc.s=sock;
-	return apr_pollset_remove(set->pollset, &pollfd);
-}
+static void try_read_conn(void *data, int fd);
+static void try_write_conn(void *data, int fd);
+static void try_accept(void *data, int fd);
+static void conn_hangup(void *data, int fd);
+static void conn_error(void *data, int fd);
 
 /* Ownership of the @conn_pool passes to the connection */
 static apr_status_t mrpc_conn_add(struct mrpc_connection **new_conn,
@@ -59,6 +38,8 @@ static apr_status_t mrpc_conn_add(struct mrpc_connection **new_conn,
 	struct mrpc_connection *conn;
 	pthread_mutexattr_t attr;
 	apr_status_t stat;
+	int fd;
+	int ret;
 
 	*new_conn=NULL;
 	apr_socket_opt_set(sock, APR_SO_KEEPALIVE, 1);
@@ -83,9 +64,14 @@ static apr_status_t mrpc_conn_add(struct mrpc_connection **new_conn,
 	conn->sock=sock;
 	conn->pool=conn_pool;
 	conn->pending_replies=g_hash_table_new(g_int_hash, g_int_equal);
-	stat=update_poll(set, sock, POLLEVENTS, conn);
-	if (stat)
+	apr_os_sock_get(&fd, sock);
+	ret=pollset_add(set->pollset, fd, POLLSET_READABLE, conn,
+				try_read_conn, try_write_conn, conn_hangup,
+				conn_error);
+	if (ret) {
+		stat=APR_FROM_OS_ERROR(ret);
 		return stat;
+	}
 	*new_conn=conn;
 	return APR_SUCCESS;
 }
@@ -153,6 +139,8 @@ exported apr_status_t mrpc_listen(struct mrpc_conn_set *set, char *listenaddr,
 	apr_socket_t *sock;
 	apr_status_t stat;
 	int count=0;
+	int ret;
+	int fd;
 
 	if (bound)
 		*bound=0;
@@ -186,9 +174,12 @@ exported apr_status_t mrpc_listen(struct mrpc_conn_set *set, char *listenaddr,
 			apr_socket_close(sock);
 			continue;
 		}
-		stat=update_poll(set, sock, APR_POLLIN, NULL);
-		if (stat) {
+		apr_os_sock_get(&fd, sock);
+		ret=pollset_add(set->pollset, fd, POLLSET_READABLE,
+					set, try_accept, NULL, NULL, NULL);
+		if (ret) {
 			apr_socket_close(sock);
+			stat=APR_FROM_OS_ERROR(ret);
 			continue;
 		}
 		count++;
@@ -228,8 +219,11 @@ exported apr_status_t mrpc_bind_fd(struct mrpc_connection **new_conn,
 
 static void _conn_close(struct mrpc_connection *conn)
 {
+	int fd;
+
 	/* XXX */
-	remove_poll(conn->set, conn->sock);
+	apr_os_sock_get(&fd, conn->sock);
+	pollset_del(conn->set->pollset, fd);
 	apr_socket_close(conn->sock);
 }
 
@@ -289,8 +283,9 @@ static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
 	return MINIRPC_OK;
 }
 
-static void try_read_conn(struct mrpc_connection *conn)
+static void try_read_conn(void *data, int fd)
 {
+	struct mrpc_connection *conn=data;
 	apr_size_t count;
 	char *buf;
 	unsigned len;
@@ -363,10 +358,12 @@ static void try_read_conn(struct mrpc_connection *conn)
 static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 {
 	mrpc_status_t ret;
+	int fd;
 
 	pthread_mutex_lock(&conn->send_msgs_lock);
 	if (g_queue_is_empty(conn->send_msgs)) {
-		update_poll(conn->set, conn->sock, POLLEVENTS, conn);
+		apr_os_sock_get(&fd, conn->sock);
+		pollset_modify(conn->set->pollset, fd, POLLSET_READABLE);
 		pthread_mutex_unlock(&conn->send_msgs_lock);
 		return MINIRPC_OK;
 	}
@@ -384,8 +381,9 @@ static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 	return MINIRPC_OK;
 }
 
-static void try_write_conn(struct mrpc_connection *conn)
+static void try_write_conn(void *data, int fd)
 {
+	struct mrpc_connection *conn=data;
 	apr_size_t count;
 	char *buf;
 	unsigned len;
@@ -459,17 +457,22 @@ static void try_write_conn(struct mrpc_connection *conn)
 	}
 }
 
-static void try_accept(struct mrpc_conn_set *set, apr_socket_t *listensock)
+static void try_accept(void *data, int fd)
 {
+	struct mrpc_conn_set *set=data;
 	struct mrpc_connection *conn;
 	struct mrpc_event *event;
 	apr_pool_t *pool;
+	apr_socket_t *listensock=NULL;
 	apr_socket_t *sock;
 	apr_status_t stat;
 
 	/* XXX error handling */
 	while (1) {
 		stat=apr_pool_create(&pool, set->pool);
+		if (stat)
+			return;
+		stat=apr_os_sock_put(&listensock, &fd, pool);
 		if (stat)
 			return;
 		stat=apr_socket_accept(&sock, listensock, pool);
@@ -491,53 +494,54 @@ static void try_accept(struct mrpc_conn_set *set, apr_socket_t *listensock)
 	apr_pool_destroy(pool);
 }
 
+static void conn_hangup(void *data, int fd)
+{
+	struct mrpc_connection *conn=data;
+
+	/* XXX we may not get this */
+	conn_kill(conn, MRPC_DISC_CLOSED);
+}
+
+static void conn_error(void *data, int fd)
+{
+	struct mrpc_connection *conn=data;
+
+	conn_kill(conn, MRPC_DISC_IOERR);
+}
+
+static void listener_shutdown(void *data, int fd)
+{
+	struct mrpc_conn_set *set=data;
+
+	set->shutdown=1;
+}
+
+static void pipe_error(void *data, int fd)
+{
+	assert(0);
+}
+
 /* XXX signal handling */
 static void *listener(void *data)
 {
 	struct mrpc_conn_set *set=data;
-	struct mrpc_connection *conn;
-	const apr_pollfd_t *events;
-	int count;
-	int i;
 
-	while (1) {
-		if (apr_pollset_poll(set->pollset, -1, &count, &events))
+	while (!set->shutdown) {
+		if (pollset_poll(set->pollset))
 			/* XXX */;
-		for (i=0; i<count; i++) {
-			if (events[i].client_data == set) {
-				/* Shutdown pipe */
-				return NULL;
-			}
-			if (events[i].client_data == NULL) {
-				/* Listening socket */
-				try_accept(set, events[i].desc.s);
-				continue;
-			}
-			conn=events[i].client_data;
-			if (events[i].rtnevents & APR_POLLERR) {
-				conn_kill(conn, MRPC_DISC_IOERR);
-				continue;
-			}
-			if (events[i].rtnevents & APR_POLLHUP) {
-				/* XXX select() won't give us this; maybe
-				   others too */
-				conn_kill(conn, MRPC_DISC_CLOSED);
-				continue;
-			}
-			if (events[i].rtnevents & APR_POLLOUT)
-				try_write_conn(conn);
-			if (events[i].rtnevents & APR_POLLIN)
-				try_read_conn(conn);
-		}
 	}
+	return NULL;
 }
 
 mrpc_status_t send_message(struct mrpc_message *msg)
 {
 	struct mrpc_connection *conn=msg->conn;
+	int fd;
 
 	pthread_mutex_lock(&conn->send_msgs_lock);
-	if (update_poll(conn->set, conn->sock, POLLEVENTS|APR_POLLOUT, conn)) {
+	apr_os_sock_get(&fd, conn->sock);
+	if (pollset_modify(conn->set->pollset, fd,
+				POLLSET_READABLE|POLLSET_WRITABLE)) {
 		pthread_mutex_unlock(&conn->send_msgs_lock);
 		mrpc_free_message(msg);
 		return MINIRPC_NETWORK_FAILURE;
@@ -554,7 +558,6 @@ static void validate_copy_config(const struct mrpc_config *from,
 			struct mrpc_config *to)
 {
 	to->protocol=from->protocol;
-	copy_default(from, to, max_fds, 1024);
 	copy_default(from, to, msg_max_buf_len, 16000);
 	copy_default(from, to, listen_backlog, 16);
 }
@@ -567,9 +570,9 @@ exported apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 {
 	struct mrpc_conn_set *set;
 	apr_pool_t *pool;
-	apr_pollfd_t pollfd;
 	int ret;
 	apr_status_t stat;
+	int fd;
 
 	*new_set=NULL;
 	if (config == NULL || config->protocol == NULL || ops == NULL ||
@@ -622,27 +625,28 @@ exported apr_status_t mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 	stat=apr_file_pipe_timeout_set(set->events_notify_pipe_read, 0);
 	if (stat)
 		goto bad;
-	/* XXX do we need an explicit check for APR_ENOTIMPL? */
-	stat=apr_pollset_create(&set->pollset, set->config.max_fds, pool,
-				APR_POLLSET_THREADSAFE);
-	if (stat)
+	set->pollset=pollset_alloc();
+	if (set->pollset == NULL) {
+		stat=APR_ENOMEM;
 		goto bad;
-	pollfd.p=pool;
-	pollfd.desc_type=APR_POLL_FILE;
-	pollfd.reqevents=APR_POLLIN;
-	pollfd.desc.f=set->shutdown_pipe_read;
-	pollfd.client_data=set;
-	stat=apr_pollset_add(set->pollset, &pollfd);
-	if (stat)
-		goto bad;
+	}
+	apr_os_file_get(&fd, set->shutdown_pipe_read);
+	ret=pollset_add(set->pollset, fd, POLLSET_READABLE, set,
+				listener_shutdown, NULL, NULL, pipe_error);
+	if (ret) {
+		stat=APR_FROM_OS_ERROR(ret);
+		goto bad2;
+	}
 	ret=pthread_create(&set->thread, NULL, listener, set);
 	if (ret) {
 		stat=APR_FROM_OS_ERROR(ret);
-		goto bad;
+		goto bad2;
 	}
 	*new_set=set;
 	return APR_SUCCESS;
 
+bad2:
+	pollset_free(set->pollset);
 bad:
 	apr_pool_destroy(pool);
 	return stat;

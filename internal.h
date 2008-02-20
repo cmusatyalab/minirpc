@@ -45,12 +45,14 @@ struct mrpc_conn_set {
 	apr_file_t *events_notify_pipe_write;
 	pthread_mutex_t events_lock;
 
-	apr_pollset_t *pollset;
+	struct pollset *pollset;
 	apr_file_t *shutdown_pipe_read;
 	apr_file_t *shutdown_pipe_write;
 	pthread_t thread;
 	unsigned events_threads;		/* protected by events_lock */
 	pthread_cond_t events_threads_cond;
+
+	int shutdown;
 };
 
 enum event_type {

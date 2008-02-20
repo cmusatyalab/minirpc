@@ -37,7 +37,6 @@ typedef int mrpc_status_t;
 
 struct mrpc_config {
 	const struct mrpc_protocol *protocol;
-	unsigned max_fds;
 	unsigned msg_max_buf_len;
 	unsigned listen_backlog;
 };
