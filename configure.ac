@@ -34,10 +34,9 @@ if test z$RPCGEN = z ; then
 fi
 
 # Checks for libraries.
-PKG_CHECK_MODULES([APR], [apr-1])
 PKG_CHECK_MODULES([GLIB], [glib-2.0])
-CFLAGS="$CFLAGS $APR_CFLAGS $GLIB_CFLAGS"
-LIBS="$LIBS $APR_LIBS $GLIB_LIBS"
+CFLAGS="$CFLAGS $GLIB_CFLAGS"
+LIBS="$LIBS $GLIB_LIBS"
 
 # Checks for supported compiler options.
 CHECK_COMPILER_OPTION([-fvisibility=hidden], [HAVE_VISIBILITY])

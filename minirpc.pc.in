@@ -6,6 +6,6 @@ includedir=@includedir@
 Name: miniRPC
 Description: TCP RPC library with asynchronous operations and TLS support
 Version: @VERSION@
-Requires.private: apr-1, glib-2.0 >= 2.12
+Requires.private: glib-2.0 >= 2.12
 Libs: -L${libdir} -lminirpc
 Cflags: -I${includedir}
