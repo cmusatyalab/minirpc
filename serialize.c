@@ -18,10 +18,7 @@ struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn)
 {
 	struct mrpc_message *msg;
 
-	msg=malloc(sizeof(*msg));
-	if (msg == NULL)
-		return NULL;
-	memset(msg, 0, sizeof(*msg));
+	msg=g_slice_new0(struct mrpc_message);
 	msg->conn=conn;
 	return msg;
 }
@@ -35,7 +32,7 @@ void cond_free(void *ptr)
 void mrpc_free_message(struct mrpc_message *msg)
 {
 	cond_free(msg->data);
-	free(msg);
+	g_slice_free(struct mrpc_message, msg);
 }
 
 static mrpc_status_t serialize_common(enum xdr_op direction, xdrproc_t xdr_proc,
@@ -110,8 +107,6 @@ static mrpc_status_t format_message(struct mrpc_connection *conn,
 	mrpc_status_t ret;
 
 	msg=mrpc_alloc_message(conn);
-	if (msg == NULL)
-		return MINIRPC_NOMEM;
 	ret=serialize(type, data, &msg->data, &msg->hdr.datalen);
 	if (ret) {
 		mrpc_free_message(msg);

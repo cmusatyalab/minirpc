@@ -318,12 +318,8 @@ static void try_read_conn(void *data, int fd)
 	unsigned len;
 
 	while (1) {
-		if (conn->recv_msg == NULL) {
+		if (conn->recv_msg == NULL)
 			conn->recv_msg=mrpc_alloc_message(conn);
-			if (conn->recv_msg == NULL) {
-				/* XXX */
-			}
-		}
 
 		switch (conn->recv_state) {
 		case STATE_HEADER:
