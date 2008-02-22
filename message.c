@@ -35,9 +35,7 @@ static mrpc_status_t pending_alloc(struct mrpc_message *request,
 {
 	struct pending_reply *pending;
 
-	pending=malloc(sizeof(*pending));
-	if (pending == NULL)
-		return MINIRPC_NOMEM;
+	pending=g_slice_new(struct pending_reply);
 	pending->sequence=request->hdr.sequence;
 	pending->cmd=request->hdr.cmd;
 	*pending_reply=pending;
@@ -59,7 +57,7 @@ static mrpc_status_t send_request_pending(struct mrpc_message *request,
 		pthread_mutex_lock(&conn->pending_replies_lock);
 		g_hash_table_remove(conn->pending_replies, &pending->sequence);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
-		free(pending);
+		g_slice_free(struct pending_reply, pending);
 	}
 	return ret;
 }
@@ -194,8 +192,6 @@ void process_incoming_message(struct mrpc_message *msg)
 
 	if (msg->hdr.status == MINIRPC_PENDING) {
 		event=mrpc_alloc_message_event(msg, EVENT_REQUEST);
-		if (event == NULL)
-			/* XXX */;
 		queue_event(event);
 	} else {
 		pthread_mutex_lock(&conn->pending_replies_lock);
@@ -219,13 +215,11 @@ void process_incoming_message(struct mrpc_message *msg)
 			}
 			mrpc_free_message(msg);
 			if (pending != NULL)
-				free(pending);
+				g_slice_free(struct pending_reply, pending);
 			return;
 		}
 		if (pending->async) {
 			event=mrpc_alloc_message_event(msg, EVENT_REPLY);
-			if (event == NULL)
-				/* XXX */;
 			event->callback=pending->data.async.callback;
 			event->private=pending->data.async.private;
 			queue_event(event);
@@ -235,6 +229,6 @@ void process_incoming_message(struct mrpc_message *msg)
 			pthread_mutex_unlock(&conn->sync_wakeup_lock);
 			pthread_cond_signal(pending->data.sync.cond);
 		}
-		free(pending);
+		g_slice_free(struct pending_reply, pending);
 	}
 }

@@ -22,10 +22,7 @@ struct mrpc_event *mrpc_alloc_event(struct mrpc_connection *conn,
 {
 	struct mrpc_event *event;
 
-	event=malloc(sizeof(*event));
-	if (event == NULL)
-		return NULL;
-	memset(event, 0, sizeof(*event));
+	event=g_slice_new0(struct mrpc_event);
 	event->type=type;
 	event->conn=conn;
 	return event;
@@ -38,8 +35,6 @@ struct mrpc_event *mrpc_alloc_message_event(struct mrpc_message *msg,
 
 	assert(msg->event == NULL);
 	event=mrpc_alloc_event(msg->conn, type);
-	if (event == NULL)
-		return NULL;
 	event->msg=msg;
 	msg->event=event;
 	return event;
@@ -333,7 +328,7 @@ static void dispatch_event(struct mrpc_event *event)
 	}
 	if (event->type != EVENT_DISCONNECT)
 		mrpc_unplug_event(event);
-	free(event);
+	g_slice_free(struct mrpc_event, event);
 }
 
 exported int mrpc_dispatch_one(struct mrpc_conn_set *set)
