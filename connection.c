@@ -594,12 +594,12 @@ exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 	set->event_conns=g_queue_new();
 	set->ops=ops;
 	set->private = (set_data != NULL) ? set_data : set;
-	set->shutdown_pipe=selfpipe_create();
-	set->events_notify_pipe=selfpipe_create();
-	if (set->shutdown_pipe == NULL || set->events_notify_pipe == NULL) {
-		ret=-ENOMEM;
+	ret=selfpipe_create(&set->shutdown_pipe);
+	if (ret)
 		goto bad;
-	}
+	ret=selfpipe_create(&set->events_notify_pipe);
+	if (ret)
+		goto bad;
 	ret=pollset_alloc(&set->pollset);
 	if (ret)
 		goto bad;

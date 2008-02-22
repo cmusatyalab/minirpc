@@ -155,7 +155,7 @@ int pollset_poll(struct pollset *pset);
 void pollset_wake(struct pollset *pset);
 
 /* selfpipe.c */
-struct selfpipe *selfpipe_create(void);
+int selfpipe_create(struct selfpipe **new);
 void selfpipe_destroy(struct selfpipe *sp);
 void selfpipe_set(struct selfpipe *sp);
 void selfpipe_clear(struct selfpipe *sp);

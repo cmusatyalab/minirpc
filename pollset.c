@@ -53,10 +53,10 @@ int pollset_alloc(struct pollset **new)
 
 	*new=NULL;
 	pset=g_slice_new0(struct pollset);
-	pset->wakeup=selfpipe_create();
-	if (pset->wakeup == NULL) {
+	ret=selfpipe_create(&pset->wakeup);
+	if (ret) {
 		g_slice_free(struct pollset, pset);
-		return -ENOMEM;
+		return ret;
 	}
 	pthread_mutex_init(&pset->lock, NULL);
 	pthread_mutex_init(&pset->poll_lock, NULL);

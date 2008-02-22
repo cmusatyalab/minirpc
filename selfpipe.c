@@ -35,26 +35,33 @@ int set_nonblock(int fd)
 	return 0;
 }
 
-struct selfpipe *selfpipe_create(void)
+int selfpipe_create(struct selfpipe **new)
 {
 	struct selfpipe *sp;
 	int i;
+	int ret;
 
+	*new=NULL;
 	sp=g_slice_new0(struct selfpipe);
 	pthread_mutex_init(&sp->lock, NULL);
-	if (pipe(sp->pipe))
+	if (pipe(sp->pipe)) {
+		ret=-errno;
 		goto bad_free;
-	for (i=0; i < 2; i++)
-		if (set_nonblock(sp->pipe[i]))
+	}
+	for (i=0; i < 2; i++) {
+		ret=set_nonblock(sp->pipe[i]);
+		if (ret)
 			goto bad_close;
-	return sp;
+	}
+	*new=sp;
+	return 0;
 
 bad_close:
 	close(sp->pipe[1]);
 	close(sp->pipe[0]);
 bad_free:
 	g_slice_free(struct selfpipe, sp);
-	return NULL;
+	return ret;
 }
 
 void selfpipe_destroy(struct selfpipe *sp)
