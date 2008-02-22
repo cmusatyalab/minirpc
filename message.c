@@ -30,16 +30,14 @@ struct pending_reply {
 	} data;
 };
 
-static mrpc_status_t pending_alloc(struct mrpc_message *request,
-			struct pending_reply **pending_reply)
+static struct pending_reply *pending_alloc(struct mrpc_message *request)
 {
 	struct pending_reply *pending;
 
 	pending=g_slice_new(struct pending_reply);
 	pending->sequence=request->hdr.sequence;
 	pending->cmd=request->hdr.cmd;
-	*pending_reply=pending;
-	return MINIRPC_OK;
+	return pending;
 }
 
 static mrpc_status_t send_request_pending(struct mrpc_message *request,
@@ -79,11 +77,7 @@ exported mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
 	ret=format_request(conn, cmd, in, &request);
 	if (ret)
 		return ret;
-	ret=pending_alloc(request, &pending);
-	if (ret) {
-		mrpc_free_message(request);
-		return ret;
-	}
+	pending=pending_alloc(request);
 	pending->async=0;
 	pending->data.sync.cond=&cond;
 	pending->data.sync.reply=&reply;
@@ -116,11 +110,7 @@ exported mrpc_status_t mrpc_send_request_async(
 	ret=format_request(conn, cmd, in, &msg);
 	if (ret)
 		return ret;
-	ret=pending_alloc(msg, &pending);
-	if (ret) {
-		mrpc_free_message(msg);
-		return ret;
-	}
+	pending=pending_alloc(msg);
 	pending->async=1;
 	pending->data.async.callback=callback;
 	pending->data.async.private=private;
