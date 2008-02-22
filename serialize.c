@@ -48,7 +48,7 @@ static mrpc_status_t serialize_common(enum xdr_op direction, xdrproc_t xdr_proc,
 	return ret;
 }
 
-mrpc_status_t serialize_len(xdrproc_t xdr_proc, void *in, char *out,
+mrpc_status_t serialize(xdrproc_t xdr_proc, void *in, char *out,
 			unsigned out_len)
 {
 	return serialize_common(XDR_ENCODE, xdr_proc, in, out, out_len);
@@ -68,49 +68,36 @@ mrpc_status_t unserialize(xdrproc_t xdr_proc, char *in, unsigned in_len,
 	return ret;
 }
 
-static mrpc_status_t serialize(xdrproc_t xdr_proc, void *in, char **out,
-			unsigned *out_len)
-{
-	XDR xdrs;
-	char *buf=NULL;
-	unsigned len;
-	mrpc_status_t ret;
-
-	xdrlen_create(&xdrs);
-	if (!xdr_proc(&xdrs, in)) {
-		xdr_destroy(&xdrs);
-		return MINIRPC_ENCODING_ERR;
-	}
-	len=xdr_getpos(&xdrs);
-	xdr_destroy(&xdrs);
-
-	if (len) {
-		buf=malloc(len);
-		if (buf == NULL)
-			return MINIRPC_NOMEM;
-		ret=serialize_len(xdr_proc, in, buf, len);
-		if (ret) {
-			free(buf);
-			return ret;
-		}
-	}
-	*out=buf;
-	*out_len=len;
-	return MINIRPC_OK;
-}
-
 static mrpc_status_t format_message(struct mrpc_connection *conn,
-			xdrproc_t type, void *data,
+			xdrproc_t xdr_proc, void *data,
 			struct mrpc_message **result)
 {
 	struct mrpc_message *msg;
+	XDR xdrs;
 	mrpc_status_t ret;
 
 	msg=mrpc_alloc_message(conn);
-	ret=serialize(type, data, &msg->data, &msg->hdr.datalen);
-	if (ret) {
+	xdrlen_create(&xdrs);
+	if (!xdr_proc(&xdrs, data)) {
+		xdr_destroy(&xdrs);
 		mrpc_free_message(msg);
-		return ret;
+		return MINIRPC_ENCODING_ERR;
+	}
+	msg->hdr.datalen=xdr_getpos(&xdrs);
+	xdr_destroy(&xdrs);
+
+	if (msg->hdr.datalen) {
+		msg->data=malloc(msg->hdr.datalen);
+		if (msg->data == NULL) {
+			mrpc_free_message(msg);
+			return MINIRPC_NOMEM;
+		}
+		ret=serialize(xdr_proc, data, msg->data, msg->hdr.datalen);
+		if (ret) {
+			free(msg->data);
+			mrpc_free_message(msg);
+			return ret;
+		}
 	}
 	*result=msg;
 	return MINIRPC_OK;

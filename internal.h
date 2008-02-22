@@ -167,7 +167,7 @@ int set_nonblock(int fd);
 struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn);
 void mrpc_free_message(struct mrpc_message *msg);
 void cond_free(void *ptr);
-mrpc_status_t serialize_len(xdrproc_t xdr_proc, void *in, char *out,
+mrpc_status_t serialize(xdrproc_t xdr_proc, void *in, char *out,
 			unsigned out_len);
 mrpc_status_t unserialize(xdrproc_t xdr_proc, char *in, unsigned in_len,
 			void *out, unsigned out_len);

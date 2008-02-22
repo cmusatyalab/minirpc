@@ -385,7 +385,7 @@ static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 	conn->send_msg=g_queue_pop_head(conn->send_msgs);
 	pthread_mutex_unlock(&conn->send_msgs_lock);
 
-	ret=serialize_len((xdrproc_t)xdr_mrpc_header, &conn->send_msg->hdr,
+	ret=serialize((xdrproc_t)xdr_mrpc_header, &conn->send_msg->hdr,
 				conn->send_hdr_buf, MINIRPC_HEADER_LEN);
 	if (ret) {
 		/* XXX message dropped on floor */
