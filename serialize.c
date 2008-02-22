@@ -23,16 +23,30 @@ struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn)
 	return msg;
 }
 
+void mrpc_free_message(struct mrpc_message *msg)
+{
+	mrpc_free_message_data(msg);
+	g_slice_free(struct mrpc_message, msg);
+}
+
+void mrpc_alloc_message_data(struct mrpc_message *msg, unsigned len)
+{
+	assert(msg->data == NULL);
+	msg->data=g_malloc(len);
+}
+
+void mrpc_free_message_data(struct mrpc_message *msg)
+{
+	if (msg->data) {
+		g_free(msg->data);
+		msg->data=NULL;
+	}
+}
+
 void cond_free(void *ptr)
 {
 	if (ptr)
 		free(ptr);
-}
-
-void mrpc_free_message(struct mrpc_message *msg)
-{
-	cond_free(msg->data);
-	g_slice_free(struct mrpc_message, msg);
 }
 
 static mrpc_status_t serialize_common(enum xdr_op direction, xdrproc_t xdr_proc,
@@ -87,14 +101,9 @@ static mrpc_status_t format_message(struct mrpc_connection *conn,
 	xdr_destroy(&xdrs);
 
 	if (msg->hdr.datalen) {
-		msg->data=malloc(msg->hdr.datalen);
-		if (msg->data == NULL) {
-			mrpc_free_message(msg);
-			return MINIRPC_NOMEM;
-		}
+		mrpc_alloc_message_data(msg, msg->hdr.datalen);
 		ret=serialize(xdr_proc, data, msg->data, msg->hdr.datalen);
 		if (ret) {
-			free(msg->data);
 			mrpc_free_message(msg);
 			return ret;
 		}

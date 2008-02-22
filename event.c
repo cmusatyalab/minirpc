@@ -224,8 +224,7 @@ static void dispatch_request(struct mrpc_event *event)
 	}
 	/* We don't need the serialized request data anymore.  The request
 	   struct may stay around for a while, so free up some memory. */
-	cond_free(request->data);
-	request->data=NULL;
+	mrpc_free_message_data(request);
 
 	pthread_mutex_lock(&conn->operations_lock);
 	if (conn->set->config.protocol->request != NULL)

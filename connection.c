@@ -297,15 +297,10 @@ static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
   		return MINIRPC_ENCODING_ERR;
 	}
 
-	if (conn->recv_msg->hdr.datalen) {
-		conn->recv_msg->data=malloc(conn->recv_msg->hdr.datalen);
-		if (conn->recv_msg->data == NULL) {
-			/* XXX */
-			return MINIRPC_NOMEM;
-		}
-	} else {
-		conn->recv_msg->data=NULL;
-	}
+	if (conn->recv_msg->hdr.datalen)
+		mrpc_alloc_message_data(conn->recv_msg,
+					conn->recv_msg->hdr.datalen);
+
 	return MINIRPC_OK;
 }
 
