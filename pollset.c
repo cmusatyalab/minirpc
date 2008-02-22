@@ -46,16 +46,17 @@ static void wakeup_pipe_err(void *ignored, int fd)
 	assert(0);
 }
 
-struct pollset *pollset_alloc(void)
+int pollset_alloc(struct pollset **new)
 {
 	struct pollset *pset;
 	int ret;
 
+	*new=NULL;
 	pset=g_slice_new0(struct pollset);
 	pset->wakeup=selfpipe_create();
 	if (pset->wakeup == NULL) {
 		g_slice_free(struct pollset, pset);
-		return NULL;
+		return -ENOMEM;
 	}
 	pthread_mutex_init(&pset->lock, NULL);
 	pthread_mutex_init(&pset->poll_lock, NULL);
@@ -73,19 +74,21 @@ again:
 	} else if (ret) {
 		goto cleanup;
 	}
-	if (pollset_add(pset, selfpipe_fd(pset->wakeup), POLLSET_READABLE,
-				NULL, NULL, NULL, NULL, wakeup_pipe_err)) {
+	ret=pollset_add(pset, selfpipe_fd(pset->wakeup), POLLSET_READABLE,
+				NULL, NULL, NULL, NULL, wakeup_pipe_err);
+	if (ret) {
 		pset->ops->destroy(pset);
 		goto cleanup;
 	}
-	return pset;
+	*new=pset;
+	return 0;
 
 cleanup:
 	g_hash_table_destroy(pset->members);
 	g_queue_free(pset->dead);
 	selfpipe_destroy(pset->wakeup);
 	g_slice_free(struct pollset, pset);
-	return NULL;
+	return ret;
 }
 
 void pollset_free(struct pollset *pset)

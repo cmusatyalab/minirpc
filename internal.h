@@ -143,7 +143,7 @@ typedef unsigned poll_flags_t;
 #define POLLSET_READABLE	((poll_flags_t) 0x1)
 #define POLLSET_WRITABLE	((poll_flags_t) 0x2)
 typedef void (*poll_callback_fn)(void *private, int fd);
-struct pollset *pollset_alloc(void);
+int pollset_alloc(struct pollset **new);
 void pollset_free(struct pollset *pset);
 int pollset_add(struct pollset *pset, int fd, poll_flags_t flags,
 			void *private, poll_callback_fn readable,

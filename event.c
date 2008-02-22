@@ -365,11 +365,9 @@ exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 	pthread_cond_broadcast(&set->events_threads_cond);
 	pthread_mutex_unlock(&set->events_lock);
 
-	pset=pollset_alloc();
-	if (pset == NULL) {
-		ret=-ENOMEM;
+	ret=pollset_alloc(&pset);
+	if (ret)
 		goto out;
-	}
 	ret=pollset_add(pset, selfpipe_fd(set->events_notify_pipe),
 				POLLSET_READABLE, NULL, NULL, NULL, NULL,
 				NULL);

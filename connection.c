@@ -600,11 +600,9 @@ exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 		ret=-ENOMEM;
 		goto bad;
 	}
-	set->pollset=pollset_alloc();
-	if (set->pollset == NULL) {
-		ret=-ENOMEM;
+	ret=pollset_alloc(&set->pollset);
+	if (ret)
 		goto bad;
-	}
 	ret=pollset_add(set->pollset, selfpipe_fd(set->shutdown_pipe),
 				POLLSET_READABLE, NULL, NULL, NULL, NULL,
 				pipe_error);
