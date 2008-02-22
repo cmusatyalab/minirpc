@@ -11,6 +11,7 @@
 
 #include <unistd.h>
 #include <fcntl.h>
+#include <errno.h>
 #include <pthread.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
@@ -21,23 +22,31 @@ struct selfpipe {
 	pthread_mutex_t lock;
 };
 
+/* Also used by connection.c; there's no good place to put this */
+int set_nonblock(int fd)
+{
+	int flags;
+
+	flags=fcntl(fd, F_GETFL);
+	if (flags == -1)
+		return -errno;
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK))
+		return -errno;
+	return 0;
+}
+
 struct selfpipe *selfpipe_create(void)
 {
 	struct selfpipe *sp;
-	int flags;
 	int i;
 
 	sp=g_slice_new0(struct selfpipe);
 	pthread_mutex_init(&sp->lock, NULL);
 	if (pipe(sp->pipe))
 		goto bad_free;
-	for (i=0; i < 2; i++) {
-		flags=fcntl(sp->pipe[i], F_GETFL);
-		if (flags == -1)
+	for (i=0; i < 2; i++)
+		if (set_nonblock(sp->pipe[i]))
 			goto bad_close;
-		if (fcntl(sp->pipe[i], F_SETFL, flags | O_NONBLOCK))
-			goto bad_close;
-	}
 	return sp;
 
 bad_close:

@@ -34,18 +34,6 @@ static int setsockoptval(int fd, int level, int optname, int value)
 	return setsockopt(fd, level, optname, &value, sizeof(value));
 }
 
-static int set_nonblock(int fd)
-{
-	int flags;
-
-	flags=fcntl(fd, F_GETFL);
-	if (flags == -1)
-		return -errno;
-	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK))
-		return -errno;
-	return 0;
-}
-
 static int mrpc_conn_add(struct mrpc_connection **new_conn,
 			struct mrpc_conn_set *set, int fd)
 {

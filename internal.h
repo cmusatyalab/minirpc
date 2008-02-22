@@ -161,6 +161,7 @@ void selfpipe_set(struct selfpipe *sp);
 void selfpipe_clear(struct selfpipe *sp);
 int selfpipe_is_set(struct selfpipe *sp);
 int selfpipe_fd(struct selfpipe *sp);
+int set_nonblock(int fd);
 
 /* serialize.c */
 struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn);
