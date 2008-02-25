@@ -23,227 +23,9 @@
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
-static void try_read_conn(void *data, int fd);
-static void try_write_conn(void *data, int fd);
-static void try_accept(void *data, int fd);
-static void conn_hangup(void *data, int fd);
-static void conn_error(void *data, int fd);
-
 static int setsockoptval(int fd, int level, int optname, int value)
 {
 	return setsockopt(fd, level, optname, &value, sizeof(value));
-}
-
-static int mrpc_conn_add(struct mrpc_connection **new_conn,
-			struct mrpc_conn_set *set, int fd)
-{
-	struct mrpc_connection *conn;
-	pthread_mutexattr_t attr;
-	int ret;
-
-	*new_conn=NULL;
-	ret=setsockoptval(fd, SOL_SOCKET, SO_KEEPALIVE, 1);
-	if (ret)
-		return ret;
-	ret=set_nonblock(fd);
-	if (ret)
-		return ret;
-	conn=g_slice_new0(struct mrpc_connection);
-	conn->send_msgs=g_queue_new();
-	conn->events=g_queue_new();
-	pthread_mutexattr_init(&attr);
-	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
-	pthread_mutex_init(&conn->operations_lock, &attr);
-	pthread_mutexattr_destroy(&attr);
-	pthread_mutex_init(&conn->send_msgs_lock, NULL);
-	pthread_mutex_init(&conn->pending_replies_lock, NULL);
-	pthread_mutex_init(&conn->sync_wakeup_lock, NULL);
-	pthread_mutex_init(&conn->next_sequence_lock, NULL);
-	conn->send_state=STATE_IDLE;
-	conn->recv_state=STATE_HEADER;
-	conn->set=set;
-	conn->fd=fd;
-	conn->pending_replies=g_hash_table_new(g_int_hash, g_int_equal);
-	ret=pollset_add(set->pollset, fd, POLLSET_READABLE, conn,
-				try_read_conn, try_write_conn, conn_hangup,
-				conn_error);
-	if (ret) {
-		g_hash_table_destroy(conn->pending_replies);
-		g_queue_free(conn->events);
-		g_queue_free(conn->send_msgs);
-		g_slice_free(struct mrpc_connection, conn);
-		return ret;
-	}
-	*new_conn=conn;
-	return 0;
-}
-/* XXX unregister sock from pollset at pool release */
-
-void mrpc_conn_free(struct mrpc_connection *conn)
-{
-	/* XXX data already in buffer? */
-	g_slice_free(struct mrpc_connection, conn);
-}
-
-static int lookup_addr(struct addrinfo **res, const char *host, unsigned port,
-			int passive)
-{
-	char *portstr;
-	int ret;
-	struct addrinfo hints = {
-		.ai_family = AF_UNSPEC,
-		.ai_socktype = SOCK_STREAM,
-		.ai_flags = AI_NUMERICSERV
-	};
-
-	if (asprintf(&portstr, "%u", port) == -1)
-		return -ENOMEM;
-	if (passive)
-		hints.ai_flags |= AI_PASSIVE;
-	ret=getaddrinfo(host, portstr, &hints, res);
-	free(portstr);
-
-	switch (ret) {
-	case 0:
-		return 0;
-	case EAI_ADDRFAMILY:
-		return -EADDRNOTAVAIL;
-	case EAI_AGAIN:
-		return -EAGAIN;
-	case EAI_BADFLAGS:
-		return -EINVAL;
-	case EAI_FAIL:
-		return -EIO;
-	case EAI_FAMILY:
-		return -EAFNOSUPPORT;
-	case EAI_MEMORY:
-		return -ENOMEM;
-	case EAI_NODATA:
-		return -EIO;
-	case EAI_NONAME:
-		return -EIO;
-	case EAI_SERVICE:
-		return -EOPNOTSUPP;
-	case EAI_SOCKTYPE:
-		return -ESOCKTNOSUPPORT;
-	case EAI_SYSTEM:
-		return -errno;
-	default:
-		return -EIO;
-	}
-}
-
-exported int mrpc_connect(struct mrpc_connection **new_conn,
-			struct mrpc_conn_set *set, const char *host,
-			unsigned port, void *data)
-{
-	struct mrpc_connection *conn;
-	struct addrinfo *ai;
-	struct addrinfo *cur;
-	int fd;
-	int ret;
-
-	*new_conn=NULL;
-	if (set->config.protocol->is_server)
-		return -EINVAL;
-	ret=lookup_addr(&ai, host, port, 0);
-	if (ret)
-		return ret;
-	for (cur=ai; cur != NULL; cur=cur->ai_next) {
-		fd=socket(cur->ai_family, cur->ai_socktype, cur->ai_protocol);
-		if (fd == -1) {
-			ret=-errno;
-			continue;
-		}
-		ret=connect(fd, cur->ai_addr, cur->ai_addrlen);
-		if (!ret)
-			break;
-		close(fd);
-	}
-	freeaddrinfo(ai);
-	ret=mrpc_conn_add(&conn, set, fd);
-	if (ret) {
-		close(fd);
-		return ret;
-	}
-	conn->private = (data != NULL) ? data : conn;
-	*new_conn=conn;
-	return 0;
-}
-
-exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
-			unsigned port, int *bound)
-{
-	struct addrinfo *ai;
-	struct addrinfo *cur;
-	int fd;
-	int count=0;
-	int ret;
-
-	if (bound)
-		*bound=0;
-	if (!set->config.protocol->is_server)
-		return -EINVAL;
-	ret=lookup_addr(&ai, listenaddr, port, 1);
-	if (ret)
-		return ret;
-	for (cur=ai; cur != NULL; cur=cur->ai_next) {
-		fd=socket(cur->ai_family, cur->ai_socktype, cur->ai_protocol);
-		if (fd == -1) {
-			ret=-errno;
-			continue;
-		}
-		ret=setsockoptval(fd, SOL_SOCKET, SO_REUSEADDR, 1);
-		if (ret) {
-			close(fd);
-			continue;
-		}
-		ret=set_nonblock(fd);
-		if (ret) {
-			close(fd);
-			continue;
-		}
-		if (bind(fd, cur->ai_addr, cur->ai_addrlen)) {
-			ret=-errno;
-			close(fd);
-			continue;
-		}
-		if (listen(fd, set->config.listen_backlog)) {
-			ret=-errno;
-			close(fd);
-			continue;
-		}
-		ret=pollset_add(set->pollset, fd, POLLSET_READABLE,
-					set, try_accept, NULL, NULL, NULL);
-		if (ret) {
-			close(fd);
-			continue;
-		}
-		count++;
-	}
-	freeaddrinfo(ai);
-	if (bound)
-		*bound=count;
-	if (count == 0)
-		return ret;
-	return 0;
-}
-
-/* The provided @fd must be a connected socket (i.e., not a listener).
-   Ownership of @fd transfers to miniRPC. */
-exported int mrpc_bind_fd(struct mrpc_connection **new_conn,
-			struct mrpc_conn_set *set, int fd, void *data)
-{
-	struct mrpc_connection *conn;
-	int ret;
-
-	*new_conn=NULL;
-	ret=mrpc_conn_add(&conn, set, fd);
-	if (ret)
-		return ret;
-	conn->private = (data != NULL) ? data : conn;
-	*new_conn=conn;
-	return 0;
 }
 
 static void _conn_close(struct mrpc_connection *conn)
@@ -251,23 +33,6 @@ static void _conn_close(struct mrpc_connection *conn)
 	/* XXX */
 	pollset_del(conn->set->pollset, conn->fd);
 	close(conn->fd);
-}
-
-exported void mrpc_conn_close(struct mrpc_connection *conn)
-{
-	_conn_close(conn);
-	mrpc_conn_free(conn);
-}
-
-exported mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
-			struct mrpc_protocol *protocol, const void *ops)
-{
-	if (conn->set->config.protocol != protocol)
-		return MINIRPC_INVALID_ARGUMENT;
-	pthread_mutex_lock(&conn->operations_lock);
-	conn->operations=ops;
-	pthread_mutex_unlock(&conn->operations_lock);
-	return MINIRPC_OK;
 }
 
 static void conn_kill(struct mrpc_connection *conn,
@@ -464,6 +229,72 @@ static void try_write_conn(void *data, int fd)
 	}
 }
 
+static void conn_hangup(void *data, int fd)
+{
+	struct mrpc_connection *conn=data;
+
+	/* XXX we may not get this */
+	conn_kill(conn, MRPC_DISC_CLOSED);
+}
+
+static void conn_error(void *data, int fd)
+{
+	struct mrpc_connection *conn=data;
+
+	conn_kill(conn, MRPC_DISC_IOERR);
+}
+
+static int mrpc_conn_add(struct mrpc_connection **new_conn,
+			struct mrpc_conn_set *set, int fd)
+{
+	struct mrpc_connection *conn;
+	pthread_mutexattr_t attr;
+	int ret;
+
+	*new_conn=NULL;
+	ret=setsockoptval(fd, SOL_SOCKET, SO_KEEPALIVE, 1);
+	if (ret)
+		return ret;
+	ret=set_nonblock(fd);
+	if (ret)
+		return ret;
+	conn=g_slice_new0(struct mrpc_connection);
+	conn->send_msgs=g_queue_new();
+	conn->events=g_queue_new();
+	pthread_mutexattr_init(&attr);
+	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
+	pthread_mutex_init(&conn->operations_lock, &attr);
+	pthread_mutexattr_destroy(&attr);
+	pthread_mutex_init(&conn->send_msgs_lock, NULL);
+	pthread_mutex_init(&conn->pending_replies_lock, NULL);
+	pthread_mutex_init(&conn->sync_wakeup_lock, NULL);
+	pthread_mutex_init(&conn->next_sequence_lock, NULL);
+	conn->send_state=STATE_IDLE;
+	conn->recv_state=STATE_HEADER;
+	conn->set=set;
+	conn->fd=fd;
+	conn->pending_replies=g_hash_table_new(g_int_hash, g_int_equal);
+	ret=pollset_add(set->pollset, fd, POLLSET_READABLE, conn,
+				try_read_conn, try_write_conn, conn_hangup,
+				conn_error);
+	if (ret) {
+		g_hash_table_destroy(conn->pending_replies);
+		g_queue_free(conn->events);
+		g_queue_free(conn->send_msgs);
+		g_slice_free(struct mrpc_connection, conn);
+		return ret;
+	}
+	*new_conn=conn;
+	return 0;
+}
+/* XXX unregister sock from pollset at pool release */
+
+void mrpc_conn_free(struct mrpc_connection *conn)
+{
+	/* XXX data already in buffer? */
+	g_slice_free(struct mrpc_connection, conn);
+}
+
 static void try_accept(void *data, int listenfd)
 {
 	struct mrpc_conn_set *set=data;
@@ -492,36 +323,182 @@ static void try_accept(void *data, int listenfd)
 	}
 }
 
-static void conn_hangup(void *data, int fd)
+static int lookup_addr(struct addrinfo **res, const char *host, unsigned port,
+			int passive)
 {
-	struct mrpc_connection *conn=data;
+	char *portstr;
+	int ret;
+	struct addrinfo hints = {
+		.ai_family = AF_UNSPEC,
+		.ai_socktype = SOCK_STREAM,
+		.ai_flags = AI_NUMERICSERV
+	};
 
-	/* XXX we may not get this */
-	conn_kill(conn, MRPC_DISC_CLOSED);
-}
+	if (asprintf(&portstr, "%u", port) == -1)
+		return -ENOMEM;
+	if (passive)
+		hints.ai_flags |= AI_PASSIVE;
+	ret=getaddrinfo(host, portstr, &hints, res);
+	free(portstr);
 
-static void conn_error(void *data, int fd)
-{
-	struct mrpc_connection *conn=data;
-
-	conn_kill(conn, MRPC_DISC_IOERR);
-}
-
-static void pipe_error(void *data, int fd)
-{
-	assert(0);
-}
-
-/* XXX signal handling */
-static void *listener(void *data)
-{
-	struct mrpc_conn_set *set=data;
-
-	while (!selfpipe_is_set(set->shutdown_pipe)) {
-		if (pollset_poll(set->pollset))
-			/* XXX */;
+	switch (ret) {
+	case 0:
+		return 0;
+	case EAI_ADDRFAMILY:
+		return -EADDRNOTAVAIL;
+	case EAI_AGAIN:
+		return -EAGAIN;
+	case EAI_BADFLAGS:
+		return -EINVAL;
+	case EAI_FAIL:
+		return -EIO;
+	case EAI_FAMILY:
+		return -EAFNOSUPPORT;
+	case EAI_MEMORY:
+		return -ENOMEM;
+	case EAI_NODATA:
+		return -EIO;
+	case EAI_NONAME:
+		return -EIO;
+	case EAI_SERVICE:
+		return -EOPNOTSUPP;
+	case EAI_SOCKTYPE:
+		return -ESOCKTNOSUPPORT;
+	case EAI_SYSTEM:
+		return -errno;
+	default:
+		return -EIO;
 	}
-	return NULL;
+}
+
+exported int mrpc_connect(struct mrpc_connection **new_conn,
+			struct mrpc_conn_set *set, const char *host,
+			unsigned port, void *data)
+{
+	struct mrpc_connection *conn;
+	struct addrinfo *ai;
+	struct addrinfo *cur;
+	int fd;
+	int ret;
+
+	*new_conn=NULL;
+	if (set->config.protocol->is_server)
+		return -EINVAL;
+	ret=lookup_addr(&ai, host, port, 0);
+	if (ret)
+		return ret;
+	for (cur=ai; cur != NULL; cur=cur->ai_next) {
+		fd=socket(cur->ai_family, cur->ai_socktype, cur->ai_protocol);
+		if (fd == -1) {
+			ret=-errno;
+			continue;
+		}
+		ret=connect(fd, cur->ai_addr, cur->ai_addrlen);
+		if (!ret)
+			break;
+		close(fd);
+	}
+	freeaddrinfo(ai);
+	ret=mrpc_conn_add(&conn, set, fd);
+	if (ret) {
+		close(fd);
+		return ret;
+	}
+	conn->private = (data != NULL) ? data : conn;
+	*new_conn=conn;
+	return 0;
+}
+
+exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
+			unsigned port, int *bound)
+{
+	struct addrinfo *ai;
+	struct addrinfo *cur;
+	int fd;
+	int count=0;
+	int ret;
+
+	if (bound)
+		*bound=0;
+	if (!set->config.protocol->is_server)
+		return -EINVAL;
+	ret=lookup_addr(&ai, listenaddr, port, 1);
+	if (ret)
+		return ret;
+	for (cur=ai; cur != NULL; cur=cur->ai_next) {
+		fd=socket(cur->ai_family, cur->ai_socktype, cur->ai_protocol);
+		if (fd == -1) {
+			ret=-errno;
+			continue;
+		}
+		ret=setsockoptval(fd, SOL_SOCKET, SO_REUSEADDR, 1);
+		if (ret) {
+			close(fd);
+			continue;
+		}
+		ret=set_nonblock(fd);
+		if (ret) {
+			close(fd);
+			continue;
+		}
+		if (bind(fd, cur->ai_addr, cur->ai_addrlen)) {
+			ret=-errno;
+			close(fd);
+			continue;
+		}
+		if (listen(fd, set->config.listen_backlog)) {
+			ret=-errno;
+			close(fd);
+			continue;
+		}
+		ret=pollset_add(set->pollset, fd, POLLSET_READABLE,
+					set, try_accept, NULL, NULL, NULL);
+		if (ret) {
+			close(fd);
+			continue;
+		}
+		count++;
+	}
+	freeaddrinfo(ai);
+	if (bound)
+		*bound=count;
+	if (count == 0)
+		return ret;
+	return 0;
+}
+
+/* The provided @fd must be a connected socket (i.e., not a listener).
+   Ownership of @fd transfers to miniRPC. */
+exported int mrpc_bind_fd(struct mrpc_connection **new_conn,
+			struct mrpc_conn_set *set, int fd, void *data)
+{
+	struct mrpc_connection *conn;
+	int ret;
+
+	*new_conn=NULL;
+	ret=mrpc_conn_add(&conn, set, fd);
+	if (ret)
+		return ret;
+	conn->private = (data != NULL) ? data : conn;
+	*new_conn=conn;
+	return 0;
+}
+
+exported void mrpc_conn_close(struct mrpc_connection *conn)
+{
+	_conn_close(conn);
+	mrpc_conn_free(conn);
+}
+
+exported mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
+			struct mrpc_protocol *protocol, const void *ops)
+{
+	if (conn->set->config.protocol != protocol)
+		return MINIRPC_INVALID_ARGUMENT;
+	pthread_mutex_lock(&conn->operations_lock);
+	conn->operations=ops;
+	pthread_mutex_unlock(&conn->operations_lock);
+	return MINIRPC_OK;
 }
 
 mrpc_status_t send_message(struct mrpc_message *msg)
@@ -540,6 +517,18 @@ mrpc_status_t send_message(struct mrpc_message *msg)
 	return MINIRPC_OK;
 }
 
+/* XXX signal handling */
+static void *listener(void *data)
+{
+	struct mrpc_conn_set *set=data;
+
+	while (!selfpipe_is_set(set->shutdown_pipe)) {
+		if (pollset_poll(set->pollset))
+			/* XXX */;
+	}
+	return NULL;
+}
+
 #define copy_default(from, to, field, default) do { \
 		to->field=from->field ? from->field : default; \
 	} while (0)
@@ -551,6 +540,11 @@ static void validate_copy_config(const struct mrpc_config *from,
 	copy_default(from, to, listen_backlog, 16);
 }
 #undef copy_default
+
+static void pipe_error(void *data, int fd)
+{
+	assert(0);
+}
 
 exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 			const struct mrpc_config *config,
