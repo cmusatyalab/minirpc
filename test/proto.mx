@@ -1,0 +1,34 @@
+/*
+ * miniRPC - TCP RPC library with asynchronous operations and TLS support
+ *
+ * Copyright (C) 2007-2008 Carnegie Mellon University
+ *
+ * This software is distributed under the terms of the Eclipse Public License,
+ * Version 1.0 which can be found in the file named LICENSE.  ANY USE,
+ * REPRODUCTION OR DISTRIBUTION OF THIS SOFTWARE CONSTITUTES RECIPIENT'S
+ * ACCEPTANCE OF THIS AGREEMENT
+ */
+
+struct IntParam {
+	int val;
+};
+
+serverprocs {
+	ping() = 1;
+	query_int(IntParam, IntParam) = 2;
+	call_int(IntParam) = 3;
+	error(void, IntParam) = 4;
+	invalidate_ops() = 5;
+}
+
+servermsgs {
+	notify_int(IntParam) = 1;
+}
+
+clientprocs {
+	client_query_int(IntParam) = 1;
+}
+
+clientmsgs {
+	client_notify_int(IntParam) = 1;
+}
