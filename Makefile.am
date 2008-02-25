@@ -27,7 +27,7 @@ CLEANFILES = minirpcgen
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = minirpc.pc
 
-SUBDIRS = . test
+SUBDIRS = . example
 EXTRA_DIST = LICENSE CHANGES minirpcgen.in
 
 %_xdr.c: %.x
