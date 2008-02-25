@@ -205,21 +205,13 @@ static void dispatch_request(struct mrpc_event *event)
 			fail_request(request, MINIRPC_ENCODING_ERR);
 			return;
 		}
-
-		if (reply_size) {
-			reply_data=malloc(reply_size);
-			if (reply_data == NULL) {
-				fail_request(request, MINIRPC_NOMEM);
-				return;
-			}
-			memset(reply_data, 0, reply_size);
-		}
+		reply_data=mrpc_alloc_argument(reply_size);
 	}
 	ret=unformat_request(request, &request_data);
 	if (ret) {
 		/* Invalid datalen, etc. */
 		fail_request(request, ret);
-		cond_free(reply_data);
+		mrpc_free_argument(NULL, reply_data);
 		return;
 	}
 	/* We don't need the serialized request data anymore.  The request
@@ -238,13 +230,11 @@ static void dispatch_request(struct mrpc_event *event)
 	   access @request anymore. */
 	pthread_mutex_unlock(&conn->operations_lock);
 	mrpc_unplug_event(event);
-	xdr_free(request_type, request_data);
-	cond_free(request_data);
+	mrpc_free_argument(request_type, request_data);
 
 	if (doreply) {
 		if (result == MINIRPC_PENDING) {
-			xdr_free(reply_type, reply_data);
-			cond_free(reply_data);
+			mrpc_free_argument(reply_type, reply_data);
 			return;
 		}
 		if (result)
@@ -253,8 +243,7 @@ static void dispatch_request(struct mrpc_event *event)
 		else
 			ret=mrpc_send_reply(conn->set->config.protocol, request,
 						reply_data);
-		xdr_free(reply_type, reply_data);
-		cond_free(reply_data);
+		mrpc_free_argument(reply_type, reply_data);
 		if (ret) {
 			/* XXX reply failed! */
 			mrpc_free_message(request);

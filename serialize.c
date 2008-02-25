@@ -43,10 +43,26 @@ void mrpc_free_message_data(struct mrpc_message *msg)
 	}
 }
 
-void cond_free(void *ptr)
+void *mrpc_alloc_argument(unsigned len)
 {
-	if (ptr)
-		free(ptr);
+	void *buf;
+
+	if (len == 0)
+		return NULL;
+	buf=malloc(len);
+	if (buf == NULL)
+		abort();
+	memset(buf, 0, len);
+	return buf;
+}
+
+void mrpc_free_argument(xdrproc_t xdr_proc, void *buf)
+{
+	if (buf == NULL)
+		return;
+	if (xdr_proc)
+		xdr_free(xdr_proc, buf);
+	free(buf);
 }
 
 static mrpc_status_t serialize_common(enum xdr_op direction, xdrproc_t xdr_proc,
@@ -115,19 +131,15 @@ static mrpc_status_t format_message(struct mrpc_connection *conn,
 static mrpc_status_t unformat_message(xdrproc_t type, unsigned size,
 			struct mrpc_message *msg, void **result)
 {
-	void *buf=NULL;
+	void *buf;
 	mrpc_status_t ret;
 
-	if (size) {
-		if (result == NULL)
-			return MINIRPC_ENCODING_ERR;
-		buf=malloc(size);
-		if (buf == NULL)
-			return MINIRPC_NOMEM;
-	}
+	if (size && result == NULL)
+		return MINIRPC_ENCODING_ERR;
+	buf=mrpc_alloc_argument(size);
 	ret=unserialize(type, msg->data, msg->hdr.datalen, buf, size);
 	if (ret) {
-		cond_free(buf);
+		mrpc_free_argument(NULL, buf);
 		return ret;
 	}
 	if (result != NULL)
