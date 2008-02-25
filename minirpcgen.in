@@ -3,7 +3,7 @@
 #
 # miniRPC - TCP RPC library with asynchronous operations and TLS support
 #
-# Copyright (C) 2007 Carnegie Mellon University
+# Copyright (C) 2007-2008 Carnegie Mellon University
 #
 # This software is distributed under the terms of the Eclipse Public License,
 # Version 1.0 which can be found in the file named LICENSE.  ANY USE,
@@ -14,7 +14,6 @@
 use strict;
 use warnings;
 use Getopt::Std;
-use File::Compare;
 use Text::Wrap;
 
 my $rpcgen = "!!RPCGEN!!";
@@ -63,11 +62,7 @@ sub closeFiles {
 
 	while (($handle, $file) = each %outfiles) {
 		close($handle);
-		if (!compare("$file.$$", $file)) {
-			unlink("$file.$$");
-		} else {
-			rename("$file.$$", $file) || die "Couldn't write $file";
-		}
+		rename("$file.$$", $file) || die "Couldn't write $file";
 		delete $outfiles{$handle};
 	}
 }
