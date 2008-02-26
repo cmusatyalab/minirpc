@@ -4,6 +4,7 @@ proto_client.h
 proto_server.h
 proto_xdr.c
 proto_xdr.h
+libcommon.a
 test_basic
 test_async_server
 test_async_client
