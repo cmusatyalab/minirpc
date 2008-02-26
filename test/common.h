@@ -28,6 +28,9 @@ void _message(const char *file, int line, const char *func, const char *fmt,
 struct mrpc_conn_set *spawn_server(int *listen_port,
 			const struct mrpc_config *config, void *set_data,
 			int threads);
+void disconnect_fatal(void *conn_data, enum mrpc_disc_reason reason);
+void disconnect_normal(void *conn_data, enum mrpc_disc_reason reason);
+void disconnect_ioerr(void *conn_data, enum mrpc_disc_reason reason);
 
 /* client_sync.c */
 void loop_int_sync(struct mrpc_connection *conn);

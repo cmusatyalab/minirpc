@@ -56,3 +56,20 @@ struct mrpc_conn_set *spawn_server(int *listen_port,
 		*listen_port=port;
 	return set;
 }
+
+void disconnect_fatal(void *conn_data, enum mrpc_disc_reason reason)
+{
+	die("Unexpected disconnect: reason %d", reason);
+}
+
+void disconnect_normal(void *conn_data, enum mrpc_disc_reason reason)
+{
+	if (reason != MRPC_DISC_CLOSED)
+		die("Unexpected disconnect: reason %d", reason);
+}
+
+void disconnect_ioerr(void *conn_data, enum mrpc_disc_reason reason)
+{
+	if (reason != MRPC_DISC_IOERR)
+		die("Unexpected disconnect: reason %d", reason);
+}

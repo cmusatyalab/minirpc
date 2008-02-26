@@ -11,20 +11,15 @@
 
 #include "common.h"
 
-static void disconnect(void *conn_data, enum mrpc_disc_reason reason)
-{
-	message("Disconnect: %d", reason);
-}
-
 static const struct mrpc_config client_config = {
 	.protocol = &proto_client,
-	.disconnect = disconnect
+	.disconnect = disconnect_fatal
 };
 
 static const struct mrpc_config server_config = {
 	.protocol = &proto_server,
 	.accept = sync_server_accept,
-	.disconnect = disconnect
+	.disconnect = disconnect_fatal
 };
 
 int main(int argc, char **argv)
