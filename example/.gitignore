@@ -1,8 +1,0 @@
-test_minirpc.c
-test_minirpc.h
-test_client.h
-test_server.h
-test_xdr.c
-test_xdr.h
-client
-server
