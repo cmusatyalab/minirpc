@@ -58,7 +58,7 @@ void mrpc_conn_set_free(struct mrpc_conn_set *set);
 int mrpc_connect(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 			const char *host, unsigned port, void *data);
 int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
-			unsigned port, int *bound);
+			unsigned *port, int *bound);
 int mrpc_bind_fd(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 			int fd, void *data);
 void mrpc_conn_close(struct mrpc_connection *conn);

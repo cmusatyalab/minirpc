@@ -156,6 +156,7 @@ int main(int argc, char **argv)
 {
 	struct mrpc_conn_set *set;
 	int ret;
+	unsigned port=58000;
 
 	if (mrpc_conn_set_alloc(&set, &config, &set_ops, NULL))
 		die("Couldn't allocate connection set");
@@ -164,7 +165,7 @@ int main(int argc, char **argv)
 	pthread_cond_init(&cond, NULL);
 	if (pthread_create(&callback_thread, NULL, run_callbacks, NULL))
 		die("Couldn't start callback thread");
-	ret=mrpc_listen(set, NULL, 58000, NULL);
+	ret=mrpc_listen(set, NULL, &port, NULL);
 	if (ret)
 		die("%s", strerror(-ret));
 	mrpc_dispatch_loop(set);

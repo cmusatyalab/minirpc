@@ -14,8 +14,6 @@
 #include <pthread.h>
 #include "common.h"
 
-#define LISTEN_PORT 58000
-
 void _message(const char *file, int line, const char *func, const char *fmt,
 			...)
 {
@@ -41,13 +39,14 @@ struct mrpc_conn_set *spawn_server(int *listen_port,
 {
 	struct mrpc_conn_set *set;
 	pthread_t thr;
+	unsigned port=0;
 	int ret;
 	int i;
 	int bound;
 
 	if (mrpc_conn_set_alloc(&set, config, ops, set_data))
 		die("Couldn't allocate connection set");
-	ret=mrpc_listen(set, "localhost", LISTEN_PORT, &bound);
+	ret=mrpc_listen(set, "localhost", &port, &bound);
 	if (ret)
 		die("%s", strerror(-ret));
 	for (i=0; i<threads; i++) {
@@ -55,6 +54,6 @@ struct mrpc_conn_set *spawn_server(int *listen_port,
 			die("Couldn't spawn server thread");
 	}
 	if (listen_port)
-		*listen_port=LISTEN_PORT;
+		*listen_port=port;
 	return set;
 }

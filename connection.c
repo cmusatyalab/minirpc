@@ -409,7 +409,7 @@ exported int mrpc_connect(struct mrpc_connection **new_conn,
 }
 
 exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
-			unsigned port, int *bound)
+			unsigned *port, int *bound)
 {
 	struct addrinfo *ai;
 	struct addrinfo *cur;
@@ -419,12 +419,16 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 
 	if (bound)
 		*bound=0;
-	if (!set->config.protocol->is_server)
+	if (port == NULL || !set->config.protocol->is_server)
 		return -EINVAL;
-	ret=lookup_addr(&ai, listenaddr, port, 1);
+	ret=lookup_addr(&ai, listenaddr, *port, 1);
 	if (ret)
 		return ret;
 	for (cur=ai; cur != NULL; cur=cur->ai_next) {
+		if (cur->ai_family != AF_INET && cur->ai_family != AF_INET6) {
+			ret=-EPROTONOSUPPORT;
+			continue;
+		}
 		fd=socket(cur->ai_family, cur->ai_socktype, cur->ai_protocol);
 		if (fd == -1) {
 			ret=-errno;
@@ -457,6 +461,22 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 			continue;
 		}
 		count++;
+		if (!*port) {
+			if (getsockname(fd, cur->ai_addr, &cur->ai_addrlen)) {
+				ret=-errno;
+				pollset_del(set->pollset, fd);
+				close(fd);
+				continue;
+			}
+			if (cur->ai_family == AF_INET)
+				*port=ntohs(((struct sockaddr_in *)
+						cur->ai_addr)->sin_port);
+			else
+				*port=ntohs(((struct sockaddr_in6 *)
+						cur->ai_addr)->sin6_port);
+			/* Stop after binding to the first random port */
+			break;
+		}
 	}
 	freeaddrinfo(ai);
 	if (bound)
