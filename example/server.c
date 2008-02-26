@@ -125,10 +125,7 @@ void *ops_accept(void *set_data, struct mrpc_connection *conn,
 }
 
 static const struct mrpc_config config = {
-	.protocol = &test_server
-};
-
-static const struct mrpc_set_operations set_ops = {
+	.protocol = &test_server,
 	.accept = ops_accept,
 	.disconnect = ops_disconnect
 };
@@ -158,7 +155,7 @@ int main(int argc, char **argv)
 	int ret;
 	unsigned port=58000;
 
-	if (mrpc_conn_set_alloc(&set, &config, &set_ops, NULL))
+	if (mrpc_conn_set_alloc(&set, &config, NULL))
 		die("Couldn't allocate connection set");
 	pending=g_queue_new();
 	pthread_mutex_init(&lock, NULL);

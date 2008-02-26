@@ -57,7 +57,7 @@ static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
 				sizeof(conn->recv_msg->hdr));
 	if (ret)
 		return ret;
-	if (conn->recv_msg->hdr.datalen > conn->set->config.msg_max_buf_len) {
+	if (conn->recv_msg->hdr.datalen > conn->set->conf.msg_max_buf_len) {
 		/* XXX doesn't get returned to client if request */
   		return MINIRPC_ENCODING_ERR;
 	}
@@ -381,7 +381,7 @@ exported int mrpc_connect(struct mrpc_connection **new_conn,
 	int ret;
 
 	*new_conn=NULL;
-	if (set->config.protocol->is_server)
+	if (set->conf.protocol->is_server)
 		return -EINVAL;
 	ret=lookup_addr(&ai, host, port, 0);
 	if (ret)
@@ -419,7 +419,7 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 
 	if (bound)
 		*bound=0;
-	if (port == NULL || !set->config.protocol->is_server)
+	if (port == NULL || !set->conf.protocol->is_server)
 		return -EINVAL;
 	ret=lookup_addr(&ai, listenaddr, *port, 1);
 	if (ret)
@@ -449,7 +449,7 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 			close(fd);
 			continue;
 		}
-		if (listen(fd, set->config.listen_backlog)) {
+		if (listen(fd, set->conf.listen_backlog)) {
 			ret=-errno;
 			close(fd);
 			continue;
@@ -512,7 +512,7 @@ exported void mrpc_conn_close(struct mrpc_connection *conn)
 exported mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
 			struct mrpc_protocol *protocol, const void *ops)
 {
-	if (conn->set->config.protocol != protocol)
+	if (conn->set->conf.protocol != protocol)
 		return MINIRPC_INVALID_ARGUMENT;
 	pthread_mutex_lock(&conn->operations_lock);
 	conn->operations=ops;
@@ -551,12 +551,33 @@ static void *listener(void *data)
 #define copy_default(from, to, field, default) do { \
 		to->field=from->field ? from->field : default; \
 	} while (0)
-static void validate_copy_config(const struct mrpc_config *from,
+static int validate_copy_config(const struct mrpc_config *from,
 			struct mrpc_config *to)
 {
+	if (from == NULL || from->protocol == NULL)
+		return -EINVAL;
 	to->protocol=from->protocol;
+
+	if (from->protocol->is_server) {
+		/* We require the accept method to exist.  Without it, the
+		   connection will never have a non-NULL operations pointer and
+		   the application will never be aware that the connection
+		   exists, so the connecting client will be forever stuck in
+		   PROCEDURE_UNAVAIL limbo. */
+		if (from->accept == NULL)
+			return -EINVAL;
+	} else {
+		/* The accept method is irrelevant for clients.  Tell the
+		   application if its assumptions are wrong. */
+		if (from->accept != NULL)
+			return -EINVAL;
+	}
+	to->accept=from->accept;
+	to->disconnect=from->disconnect;
+	to->ioerr=from->ioerr;
 	copy_default(from, to, msg_max_buf_len, 16000);
 	copy_default(from, to, listen_backlog, 16);
+	return 0;
 }
 #undef copy_default
 
@@ -566,37 +587,21 @@ static void pipe_error(void *data, int fd)
 }
 
 exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
-			const struct mrpc_config *config,
-			const struct mrpc_set_operations *ops, void *set_data)
+			const struct mrpc_config *config, void *set_data)
 {
 	struct mrpc_conn_set *set;
 	int ret;
 
-	*new_set=NULL;
-	if (config == NULL || config->protocol == NULL || ops == NULL ||
-				new_set == NULL)
+	if (new_set == NULL)
 		return -EINVAL;
-	if (config->protocol->is_server) {
-		/* We require the accept method to exist.  Without it, the
-		   connection will never have a non-NULL operations pointer and
-		   the application will never be aware that the connection
-		   exists, so the connecting client will be forever stuck in
-		   PROCEDURE_UNAVAIL limbo. */
-		if (ops->accept == NULL)
-			return -EINVAL;
-	} else {
-		/* The accept method is irrelevant for clients.  Tell the
-		   application if its assumptions are wrong. */
-		if (ops->accept != NULL)
-			return -EINVAL;
-	}
-
+	*new_set=NULL;
 	set=g_slice_new0(struct mrpc_conn_set);
-	validate_copy_config(config, &set->config);
+	ret=validate_copy_config(config, &set->conf);
+	if (ret)
+		goto bad;
 	pthread_mutex_init(&set->events_lock, NULL);
 	pthread_cond_init(&set->events_threads_cond, NULL);
 	set->event_conns=g_queue_new();
-	set->ops=ops;
 	set->private = (set_data != NULL) ? set_data : set;
 	ret=selfpipe_create(&set->shutdown_pipe);
 	if (ret)

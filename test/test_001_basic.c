@@ -17,18 +17,12 @@ static void disconnect(void *conn_data, enum mrpc_disc_reason reason)
 }
 
 static const struct mrpc_config client_config = {
-	.protocol = &proto_client
-};
-
-static const struct mrpc_set_operations client_ops = {
+	.protocol = &proto_client,
 	.disconnect = disconnect
 };
 
 static const struct mrpc_config server_config = {
-	.protocol = &proto_server
-};
-
-static const struct mrpc_set_operations server_ops = {
+	.protocol = &proto_server,
 	.accept = sync_server_accept,
 	.disconnect = disconnect
 };
@@ -41,9 +35,9 @@ int main(int argc, char **argv)
 	int port;
 	int ret;
 
-	sset=spawn_server(&port, &server_config, &server_ops, NULL, 1);
+	sset=spawn_server(&port, &server_config, NULL, 1);
 
-	if (mrpc_conn_set_alloc(&cset, &client_config, &client_ops, NULL))
+	if (mrpc_conn_set_alloc(&cset, &client_config, NULL))
 		die("Couldn't allocate conn set");
 
 	ret=mrpc_connect(&conn, cset, "localhost", port, NULL);

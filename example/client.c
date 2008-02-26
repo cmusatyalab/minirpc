@@ -161,10 +161,7 @@ void ops_disconnect(void *conn_data, enum mrpc_disc_reason reason)
 }
 
 static const struct mrpc_config config = {
-	.protocol = &test_client
-};
-
-static const struct mrpc_set_operations set_ops = {
+	.protocol = &test_client,
 	.disconnect = ops_disconnect
 };
 
@@ -177,7 +174,7 @@ int main(int argc, char **argv)
 	if (argc != 2)
 		die("Usage: %s hostname", argv[0]);
 
-	if (mrpc_conn_set_alloc(&set, &config, &set_ops, NULL))
+	if (mrpc_conn_set_alloc(&set, &config, NULL))
 		die("Couldn't allocate conn set");
 
 	ret=mrpc_connect(&conn, set, argv[1], 58000, NULL);

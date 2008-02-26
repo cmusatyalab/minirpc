@@ -31,29 +31,25 @@ enum mrpc_status_codes {
 };
 typedef int mrpc_status_t;
 
-struct mrpc_config {
-	const struct mrpc_protocol *protocol;
-	unsigned msg_max_buf_len;
-	unsigned listen_backlog;
-};
-
 enum mrpc_disc_reason {
 	MRPC_DISC_CLOSED,
 	MRPC_DISC_IOERR,
 	MRPC_DISC_DESYNC
 };
 
-struct mrpc_set_operations {
+struct mrpc_config {
+	const struct mrpc_protocol *protocol;
 	void *(*accept)(void *set_data, struct mrpc_connection *conn,
 				struct sockaddr *from, socklen_t from_len);
 	void (*disconnect)(void *conn_data, enum mrpc_disc_reason reason);
 	void (*ioerr)(void *conn_data, char *message);
+	unsigned msg_max_buf_len;
+	unsigned listen_backlog;
 };
 
 /* connection.c */
 int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
-			const struct mrpc_config *config,
-			const struct mrpc_set_operations *ops, void *set_data);
+			const struct mrpc_config *config, void *set_data);
 void mrpc_conn_set_free(struct mrpc_conn_set *set);
 int mrpc_connect(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 			const char *host, unsigned port, void *data);

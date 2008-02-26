@@ -33,9 +33,8 @@ static void *run_dispatch_loop(void *arg)
 }
 
 struct mrpc_conn_set *spawn_server(int *listen_port,
-			const struct mrpc_config *config,
-			const struct mrpc_set_operations *ops,
-			void *set_data, int threads)
+			const struct mrpc_config *config, void *set_data,
+			int threads)
 {
 	struct mrpc_conn_set *set;
 	pthread_t thr;
@@ -44,7 +43,7 @@ struct mrpc_conn_set *spawn_server(int *listen_port,
 	int i;
 	int bound;
 
-	if (mrpc_conn_set_alloc(&set, config, ops, set_data))
+	if (mrpc_conn_set_alloc(&set, config, set_data))
 		die("Couldn't allocate connection set");
 	ret=mrpc_listen(set, "localhost", &port, &bound);
 	if (ret)

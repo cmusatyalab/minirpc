@@ -26,9 +26,8 @@ void _message(const char *file, int line, const char *func, const char *fmt,
 #define test_fail(args...) message(args)
 #define die(args...) do {message(args); exit(1);} while (0)
 struct mrpc_conn_set *spawn_server(int *listen_port,
-			const struct mrpc_config *config,
-			const struct mrpc_set_operations *ops,
-			void *set_data, int threads);
+			const struct mrpc_config *config, void *set_data,
+			int threads);
 
 /* client_sync.c */
 void loop_int_sync(struct mrpc_connection *conn);

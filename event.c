@@ -165,7 +165,7 @@ static void fail_request(struct mrpc_message *request, mrpc_status_t err)
 {
 	mrpc_unplug_message(request);
 	if (request->hdr.cmd >= 0) {
-		if (mrpc_send_reply_error(request->conn->set->config.protocol,
+		if (mrpc_send_reply_error(request->conn->set->conf.protocol,
 					request, err))
 			mrpc_free_message(request);
 	} else {
@@ -189,7 +189,7 @@ static void dispatch_request(struct mrpc_event *event)
 
 	assert(request->hdr.status == MINIRPC_PENDING);
 
-	if (conn->set->config.protocol->receiver_request_info(request->hdr.cmd,
+	if (conn->set->conf.protocol->receiver_request_info(request->hdr.cmd,
 				&request_type, NULL)) {
 		/* Unknown opcode */
 		fail_request(request, MINIRPC_PROCEDURE_UNAVAIL);
@@ -198,7 +198,7 @@ static void dispatch_request(struct mrpc_event *event)
 
 	doreply=(request->hdr.cmd >= 0);
 	if (doreply) {
-		if (conn->set->config.protocol->
+		if (conn->set->conf.protocol->
 					receiver_reply_info(request->hdr.cmd,
 					&reply_type, &reply_size)) {
 			/* Can't happen if the info tables are well-formed */
@@ -219,8 +219,8 @@ static void dispatch_request(struct mrpc_event *event)
 	mrpc_free_message_data(request);
 
 	pthread_mutex_lock(&conn->operations_lock);
-	if (conn->set->config.protocol->request != NULL)
-		result=conn->set->config.protocol->request(conn->operations,
+	if (conn->set->conf.protocol->request != NULL)
+		result=conn->set->conf.protocol->request(conn->operations,
 					conn->private, request,
 					request->hdr.cmd, request_data,
 					reply_data);
@@ -238,10 +238,10 @@ static void dispatch_request(struct mrpc_event *event)
 			return;
 		}
 		if (result)
-			ret=mrpc_send_reply_error(conn->set->config.protocol,
+			ret=mrpc_send_reply_error(conn->set->conf.protocol,
 						request, result);
 		else
-			ret=mrpc_send_reply(conn->set->config.protocol, request,
+			ret=mrpc_send_reply(conn->set->conf.protocol, request,
 						reply_data);
 		mrpc_free_argument(reply_type, reply_data);
 		if (ret) {
@@ -262,7 +262,7 @@ static void run_reply_callback(struct mrpc_event *event)
 	unsigned size;
 	mrpc_status_t ret;
 
-	ret=reply->conn->set->config.protocol->sender_reply_info(reply->hdr.cmd,
+	ret=reply->conn->set->conf.protocol->sender_reply_info(reply->hdr.cmd,
 				NULL, &size);
 	if (ret) {
 		/* XXX */
@@ -287,12 +287,12 @@ static void run_reply_callback(struct mrpc_event *event)
 static void dispatch_event(struct mrpc_event *event)
 {
 	struct mrpc_connection *conn=event->conn;
-	const struct mrpc_set_operations *ops=conn->set->ops;
+	struct mrpc_config *conf=&conn->set->conf;
 
 	switch (event->type) {
 	case EVENT_ACCEPT:
-		assert(ops->accept != NULL);
-		conn->private=ops->accept(conn->set->private, conn,
+		assert(conf->accept != NULL);
+		conn->private=conf->accept(conn->set->private, conn,
 					event->addr, event->addrlen);
 		g_free(event->addr);
 		break;
@@ -303,13 +303,13 @@ static void dispatch_event(struct mrpc_event *event)
 		run_reply_callback(event);
 		break;
 	case EVENT_DISCONNECT:
-		if (ops->disconnect)
-			ops->disconnect(conn->private, event->disc_reason);
+		if (conf->disconnect)
+			conf->disconnect(conn->private, event->disc_reason);
 		mrpc_conn_free(conn);
 		break;
 	case EVENT_IOERR:
-		if (ops->ioerr)
-			ops->ioerr(conn->private, event->errstring);
+		if (conf->ioerr)
+			conf->ioerr(conn->private, event->errstring);
 		break;
 	default:
 		assert(0);

@@ -32,8 +32,7 @@
 #endif
 
 struct mrpc_conn_set {
-	struct mrpc_config config;
-	const struct mrpc_set_operations *ops;
+	struct mrpc_config conf;
 	void *private;
 
 	GQueue *event_conns;
