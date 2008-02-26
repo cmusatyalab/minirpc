@@ -4,4 +4,4 @@ proto_client.h
 proto_server.h
 proto_xdr.c
 proto_xdr.h
-test_001
+test_001_basic

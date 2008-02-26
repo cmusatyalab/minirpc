@@ -8,12 +8,12 @@ GEN = $(GEN_C) $(GEN_H)
 MAINTAINERCLEANFILES = $(GEN)
 BUILT_SOURCES = $(GEN_H)
 
-check_PROGRAMS = test_001
+check_PROGRAMS = test_001_basic
 TESTS = $(check_PROGRAMS)
 
 COMMON = common.c common.h client_sync.c server_sync.c $(GEN)
 
-test_001_SOURCES = test_001_basic.c $(COMMON)
+test_001_basic_SOURCES = test_001_basic.c $(COMMON)
 
 %_minirpc.c %_minirpc.h %_client.h %_server.h %_xdr.c %_xdr.h: %.mx ../minirpcgen.in
 	../minirpcgen -o $(<:%.mx=%) $(filter-out %.in,$^)
