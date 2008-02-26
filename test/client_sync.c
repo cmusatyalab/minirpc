@@ -9,33 +9,40 @@
  * ACCEPTANCE OF THIS AGREEMENT
  */
 
+#include <time.h>
 #include "common.h"
 
-void query_int_sync(struct mrpc_connection *conn)
+void loop_int_sync(struct mrpc_connection *conn)
 {
 	struct IntParam request;
 	struct IntParam *reply;
 	mrpc_status_t ret;
 
-	request.val=12;
-	ret=proto_query_int(conn, &request, &reply);
+	request.val=INT_VALUE;
+	ret=proto_loop_int(conn, &request, &reply);
 	if (ret)
-		die("query returned %d", ret);
-	if (reply->val != 12)
-		die("reply body contained %d", reply->val);
+		die("Loop returned %d", ret);
+	if (reply->val != INT_VALUE)
+		die("Reply body contained %d", reply->val);
 	free_IntParam(&request, 0);
 	free_IntParam(reply, 1);
 }
 
-void call_int_sync(struct mrpc_connection *conn)
+void check_int_sync(struct mrpc_connection *conn)
 {
 	struct IntParam request;
 	mrpc_status_t ret;
 
-	request.val=12;
-	ret=proto_call_int(conn, &request);
+	request.val=INT_VALUE;
+	ret=proto_check_int(conn, &request);
 	if (ret)
-		die("query returned %d", ret);
+		die("Check returned %d", ret);
+	free_IntParam(&request, 0);
+
+	request.val=12;
+	ret=proto_check_int(conn, &request);
+	if (ret != 1)
+		die("Failed check returned %d", ret);
 	free_IntParam(&request, 0);
 }
 
@@ -46,19 +53,34 @@ void error_sync(struct mrpc_connection *conn)
 
 	ret=proto_error(conn, &reply);
 	if (ret != 1)
-		die("query returned %d", ret);
+		die("Error returned %d", ret);
 }
 
-void notify_int_sync(struct mrpc_connection *conn)
+void notify_sync(struct mrpc_connection *conn)
 {
-	struct IntParam notify;
+	struct CondVarPtr notify;
+	struct timespec ts = {0};
+	pthread_mutex_t lock;
+	pthread_cond_t cond;
 	mrpc_status_t ret;
+	int rval;
 
-	notify.val=12;
-	ret=proto_notify_int(conn, &notify);
+	pthread_mutex_init(&lock, NULL);
+	pthread_cond_init(&cond, NULL);
+	notify.mutex=(unsigned long)&lock;
+	notify.cond=(unsigned long)&cond;
+	pthread_mutex_lock(&lock);
+	ret=proto_notify(conn, &notify);
 	if (ret)
-		die("notify returned %d", ret);
-	free_IntParam(&notify, 0);
+		die("Notify returned %d", ret);
+	free_CondVarPtr(&notify, 0);
+	ts.tv_sec=time(NULL) + 5;
+	rval=pthread_cond_timedwait(&cond, &lock, &ts);
+	if (rval == ETIMEDOUT)
+		die("Timed out waiting for notify completion");
+	else if (rval)
+		die("Condition variable wait failed");
+	pthread_mutex_unlock(&lock);
 }
 
 void invalidate(struct mrpc_connection *conn)

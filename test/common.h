@@ -13,6 +13,8 @@
 #define TEST_COMMON_H
 
 #include <stdlib.h>
+#include <errno.h>
+#include <pthread.h>
 #include <minirpc/minirpc.h>
 #include "proto_client.h"
 #include "proto_server.h"
@@ -31,10 +33,10 @@ struct mrpc_conn_set *spawn_server(int *listen_port,
 			void *set_data, int threads);
 
 /* client_sync.c */
-void query_int_sync(struct mrpc_connection *conn);
-void call_int_sync(struct mrpc_connection *conn);
+void loop_int_sync(struct mrpc_connection *conn);
+void check_int_sync(struct mrpc_connection *conn);
 void error_sync(struct mrpc_connection *conn);
-void notify_int_sync(struct mrpc_connection *conn);
+void notify_sync(struct mrpc_connection *conn);
 void invalidate(struct mrpc_connection *conn);
 
 /* server_sync.c */

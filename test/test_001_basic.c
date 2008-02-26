@@ -51,10 +51,10 @@ int main(int argc, char **argv)
 		die("%s", strerror(-ret));
 
 	message("Sending messages");
-	query_int_sync(conn);
-	call_int_sync(conn);
+	loop_int_sync(conn);
 	error_sync(conn);
-	notify_int_sync(conn);
+	check_int_sync(conn);
+	notify_sync(conn);
 	invalidate(conn);
 	return 0;
 }
