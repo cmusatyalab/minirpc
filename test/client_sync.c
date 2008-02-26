@@ -83,6 +83,15 @@ void notify_sync(struct mrpc_connection *conn)
 	pthread_mutex_unlock(&lock);
 }
 
+void trigger_callback_sync(struct mrpc_connection *conn)
+{
+	mrpc_status_t ret;
+
+	ret=proto_trigger_callback(conn);
+	if (ret)
+		die("Trigger-callback returned %d", ret);
+}
+
 void invalidate_sync(struct mrpc_connection *conn)
 {
 	int ret;
@@ -96,6 +105,39 @@ void invalidate_sync(struct mrpc_connection *conn)
 	ret=proto_ping(conn);
 	if (ret != MINIRPC_PROCEDURE_UNAVAIL)
 		die("Ping returned %d", ret);
+}
+
+static mrpc_status_t client_check_int(void *conn_data,
+			struct mrpc_message *msg, IntParam *req)
+{
+	if (req->val == INT_VALUE)
+		return MINIRPC_OK;
+	else
+		return 1;
+}
+
+static void client_notify(void *conn_data, struct mrpc_message *msg,
+			CondVarPtr *req)
+{
+	pthread_cond_t *cond = (void*)(unsigned long)req->cond;
+	pthread_mutex_t *lock = (void*)(unsigned long)req->mutex;
+
+	pthread_mutex_lock(lock);
+	pthread_cond_broadcast(cond);
+	pthread_mutex_unlock(lock);
+}
+
+static const struct proto_client_operations ops = {
+	.client_check_int = client_check_int,
+	.client_notify = client_notify
+};
+
+void sync_client_set_ops(struct mrpc_connection *conn)
+{
+	mrpc_status_t ret;
+
+	if (proto_client_set_operations(conn, &ops))
+		die("Couldn't set client operations: %d", ret);
 }
 
 void sync_client_run(struct mrpc_connection *conn)

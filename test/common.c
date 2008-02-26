@@ -32,12 +32,19 @@ static void *run_dispatch_loop(void *arg)
 	return NULL;
 }
 
+void launch_dispatch_thread(struct mrpc_conn_set *set)
+{
+	pthread_t thr;
+
+	if (pthread_create(&thr, NULL, run_dispatch_loop, set))
+		die("Couldn't spawn server thread");
+}
+
 struct mrpc_conn_set *spawn_server(int *listen_port,
 			const struct mrpc_config *config, void *set_data,
 			int threads)
 {
 	struct mrpc_conn_set *set;
-	pthread_t thr;
 	unsigned port=0;
 	int ret;
 	int i;
@@ -48,10 +55,8 @@ struct mrpc_conn_set *spawn_server(int *listen_port,
 	ret=mrpc_listen(set, "localhost", &port, &bound);
 	if (ret)
 		die("%s", strerror(-ret));
-	for (i=0; i<threads; i++) {
-		if (pthread_create(&thr, NULL, run_dispatch_loop, set))
-			die("Couldn't spawn server thread");
-	}
+	for (i=0; i<threads; i++)
+		launch_dispatch_thread(set);
 	if (listen_port)
 		*listen_port=port;
 	return set;

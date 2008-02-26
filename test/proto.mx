@@ -25,6 +25,7 @@ serverprocs {
 	check_int(IntParam) = 3;
 	error(void, IntParam) = 4;
 	invalidate_ops() = 5;
+	trigger_callback() = 6;
 }
 
 servermsgs {
@@ -36,5 +37,5 @@ clientprocs {
 }
 
 clientmsgs {
-	client_notify(IntParam) = 1;
+	client_notify(CondVarPtr) = 1;
 }
