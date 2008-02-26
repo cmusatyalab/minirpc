@@ -4,6 +4,6 @@ proto_client.h
 proto_server.h
 proto_xdr.c
 proto_xdr.h
-test_001_basic
-test_002_server_async
-test_003_client_async
+test_basic
+test_async_server
+test_async_client
