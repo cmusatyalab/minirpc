@@ -160,7 +160,6 @@ void selfpipe_set(struct selfpipe *sp);
 void selfpipe_clear(struct selfpipe *sp);
 int selfpipe_is_set(struct selfpipe *sp);
 int selfpipe_fd(struct selfpipe *sp);
-int set_nonblock(int fd);
 
 /* serialize.c */
 struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn);
@@ -181,6 +180,9 @@ mrpc_status_t format_reply_error(struct mrpc_message *request,
 			mrpc_status_t status, struct mrpc_message **result);
 mrpc_status_t unformat_request(struct mrpc_message *msg, void **result);
 mrpc_status_t unformat_reply(struct mrpc_message *msg, void **result);
+
+/* util.c */
+int set_nonblock(int fd);
 
 /* xdr_len.c */
 void xdrlen_create(XDR *xdrs);

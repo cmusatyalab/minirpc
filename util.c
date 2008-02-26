@@ -9,6 +9,8 @@
  * ACCEPTANCE OF THIS AGREEMENT
  */
 
+#include <fcntl.h>
+#include <errno.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
@@ -16,5 +18,17 @@ exported int mrpc_init(void)
 {
 	if (!g_thread_supported())
 		g_thread_init(NULL);
+	return 0;
+}
+
+int set_nonblock(int fd)
+{
+	int flags;
+
+	flags=fcntl(fd, F_GETFL);
+	if (flags == -1)
+		return -errno;
+	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK))
+		return -errno;
 	return 0;
 }
