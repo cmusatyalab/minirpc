@@ -16,6 +16,7 @@ LDADD = libcommon.a
 check_PROGRAMS  = test_basic
 check_PROGRAMS += test_async_server
 check_PROGRAMS += test_async_client
+check_PROGRAMS += test_async_both
 
 TESTS = $(check_PROGRAMS)
 

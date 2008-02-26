@@ -8,3 +8,4 @@ libcommon.a
 test_basic
 test_async_server
 test_async_client
+test_async_both
