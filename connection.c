@@ -104,7 +104,6 @@ static void try_read_conn(void *data, int fd)
 					conn_kill(conn, MRPC_DISC_IOERR);
 				return;
 			}
-			printf("Read %d bytes\n", rcount);
 			conn->recv_offset += rcount;
 		}
 
