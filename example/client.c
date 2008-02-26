@@ -174,6 +174,8 @@ int main(int argc, char **argv)
 	if (argc != 2)
 		die("Usage: %s hostname", argv[0]);
 
+	if (mrpc_init())
+		die("Couldn't initialize minirpc");
 	if (mrpc_conn_set_alloc(&set, &config, NULL))
 		die("Couldn't allocate conn set");
 

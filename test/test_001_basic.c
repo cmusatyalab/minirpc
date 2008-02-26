@@ -30,6 +30,8 @@ int main(int argc, char **argv)
 	int port;
 	int ret;
 
+	if (mrpc_init())
+		die("Couldn't initialize minirpc");
 	sset=spawn_server(&port, &server_config, NULL, 1);
 
 	if (mrpc_conn_set_alloc(&cset, &client_config, NULL))

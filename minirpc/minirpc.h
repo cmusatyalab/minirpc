@@ -47,6 +47,9 @@ struct mrpc_config {
 	unsigned listen_backlog;
 };
 
+/* util.c */
+int mrpc_init(void);
+
 /* connection.c */
 int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 			const struct mrpc_config *config, void *set_data);

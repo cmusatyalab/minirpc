@@ -35,8 +35,9 @@ fi
 
 # Checks for libraries.
 PKG_CHECK_MODULES([GLIB], [glib-2.0])
-CFLAGS="$CFLAGS $GLIB_CFLAGS"
-LIBS="$LIBS $GLIB_LIBS"
+PKG_CHECK_MODULES([GTHREAD], [gthread-2.0])
+CFLAGS="$CFLAGS $GLIB_CFLAGS $GTHREAD_CFLAGS"
+LIBS="$LIBS $GLIB_LIBS $GTHREAD_LIBS"
 
 # Checks for supported compiler options.
 CHECK_COMPILER_OPTION([-fvisibility=hidden], [HAVE_VISIBILITY])

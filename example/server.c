@@ -155,6 +155,8 @@ int main(int argc, char **argv)
 	int ret;
 	unsigned port=58000;
 
+	if (mrpc_init())
+		die("Couldn't initialize minirpc");
 	if (mrpc_conn_set_alloc(&set, &config, NULL))
 		die("Couldn't allocate connection set");
 	pending=g_queue_new();
