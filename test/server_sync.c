@@ -69,8 +69,7 @@ static const struct proto_server_operations ops = {
 void *sync_server_accept(void *set_data, struct mrpc_connection *conn,
 			struct sockaddr *from, socklen_t from_len)
 {
-	message("New connection");
 	if (proto_server_set_operations(conn, &ops))
-		message("Error setting operations struct");
+		die("Error setting operations struct");
 	return conn;
 }

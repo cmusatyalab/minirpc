@@ -50,7 +50,6 @@ int main(int argc, char **argv)
 	if (ret)
 		die("%s", strerror(-ret));
 
-	message("Sending messages");
 	loop_int_sync(conn);
 	error_sync(conn);
 	check_int_sync(conn);

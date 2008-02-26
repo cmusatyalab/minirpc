@@ -16,17 +16,6 @@
 
 #define LISTEN_PORT 58000
 
-static const char *running_test;
-
-void test_start(const char *desc)
-{
-	running_test=desc;
-}
-
-void test_pass(void)
-{
-}
-
 void _message(const char *file, int line, const char *func, const char *fmt,
 			...)
 {
@@ -61,7 +50,6 @@ struct mrpc_conn_set *spawn_server(int *listen_port,
 	ret=mrpc_listen(set, "localhost", LISTEN_PORT, &bound);
 	if (ret)
 		die("%s", strerror(-ret));
-	message("Bound %d listeners", bound);
 	for (i=0; i<threads; i++) {
 		if (pthread_create(&thr, NULL, run_dispatch_loop, set))
 			die("Couldn't spawn server thread");

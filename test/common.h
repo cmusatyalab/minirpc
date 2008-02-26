@@ -20,8 +20,6 @@
 #include "proto_server.h"
 
 /* common.c */
-void test_start(const char *desc);
-void test_pass(void);
 void _message(const char *file, int line, const char *func, const char *fmt,
 			...);
 #define message(args...) _message(__FILE__, __LINE__, __func__, args)
