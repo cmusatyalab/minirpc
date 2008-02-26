@@ -50,10 +50,7 @@ int main(int argc, char **argv)
 	if (ret)
 		die("%s", strerror(-ret));
 
-	loop_int_sync(conn);
-	error_sync(conn);
-	check_int_sync(conn);
-	notify_sync(conn);
-	invalidate(conn);
+	sync_client_run(conn);
+	invalidate_sync(conn);
 	return 0;
 }

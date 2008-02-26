@@ -35,7 +35,8 @@ void loop_int_sync(struct mrpc_connection *conn);
 void check_int_sync(struct mrpc_connection *conn);
 void error_sync(struct mrpc_connection *conn);
 void notify_sync(struct mrpc_connection *conn);
-void invalidate(struct mrpc_connection *conn);
+void invalidate_sync(struct mrpc_connection *conn);
+void sync_client_run(struct mrpc_connection *conn);
 
 /* server_sync.c */
 void *sync_server_accept(void *set_data, struct mrpc_connection *conn,

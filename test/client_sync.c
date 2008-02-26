@@ -83,7 +83,7 @@ void notify_sync(struct mrpc_connection *conn)
 	pthread_mutex_unlock(&lock);
 }
 
-void invalidate(struct mrpc_connection *conn)
+void invalidate_sync(struct mrpc_connection *conn)
 {
 	int ret;
 
@@ -96,4 +96,12 @@ void invalidate(struct mrpc_connection *conn)
 	ret=proto_ping(conn);
 	if (ret != MINIRPC_PROCEDURE_UNAVAIL)
 		die("Ping returned %d", ret);
+}
+
+void sync_client_run(struct mrpc_connection *conn)
+{
+	loop_int_sync(conn);
+	error_sync(conn);
+	check_int_sync(conn);
+	notify_sync(conn);
 }
