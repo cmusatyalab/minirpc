@@ -5,3 +5,4 @@ proto_server.h
 proto_xdr.c
 proto_xdr.h
 test_001_basic
+test_002_server_async
