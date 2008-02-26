@@ -119,8 +119,7 @@ struct mrpc_connection {
 	struct mrpc_event *plugged_event;
 	unsigned plugged_user;
 
-	unsigned next_sequence;
-	pthread_mutex_t next_sequence_lock;
+	gint next_sequence;  /* atomic operations only */
 };
 
 /* connection.c */

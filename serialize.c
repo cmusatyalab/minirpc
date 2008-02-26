@@ -159,9 +159,8 @@ mrpc_status_t format_request(struct mrpc_connection *conn, unsigned cmd,
 	ret=format_message(conn, type, data, &msg);
 	if (ret)
 		return ret;
-	pthread_mutex_lock(&conn->next_sequence_lock);
-	msg->hdr.sequence=conn->next_sequence++;
-	pthread_mutex_unlock(&conn->next_sequence_lock);
+	msg->hdr.sequence=g_atomic_int_exchange_and_add(&conn->next_sequence,
+				1);
 	msg->hdr.status=MINIRPC_PENDING;
 	msg->hdr.cmd=cmd;
 	*result=msg;
