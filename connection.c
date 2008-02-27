@@ -385,6 +385,8 @@ exported int mrpc_connect(struct mrpc_connection **new_conn,
 	ret=lookup_addr(&ai, host, port, 0);
 	if (ret)
 		return ret;
+	if (ai == NULL)
+		return -EIO;
 	for (cur=ai; cur != NULL; cur=cur->ai_next) {
 		fd=socket(cur->ai_family, cur->ai_socktype, cur->ai_protocol);
 		if (fd == -1) {

@@ -136,7 +136,8 @@ void sync_client_set_ops(struct mrpc_connection *conn)
 {
 	mrpc_status_t ret;
 
-	if (proto_client_set_operations(conn, &ops))
+	ret=proto_client_set_operations(conn, &ops);
+	if (ret)
 		die("Couldn't set client operations: %d", ret);
 }
 
