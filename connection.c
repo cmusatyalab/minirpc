@@ -42,10 +42,8 @@ static void conn_kill(struct mrpc_connection *conn,
 
 	_conn_close(conn);
 	event=mrpc_alloc_event(conn, EVENT_DISCONNECT);
-	if (event != NULL) {
-		event->disc_reason=reason;
-		queue_event(event);
-	}
+	event->disc_reason=reason;
+	queue_event(event);
 }
 
 static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
