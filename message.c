@@ -15,6 +15,7 @@
 #include "internal.h"
 
 struct pending_reply {
+	struct mrpc_connection *conn;
 	unsigned sequence;
 	unsigned cmd;
 	int async;
@@ -64,9 +65,31 @@ static struct pending_reply *pending_alloc(struct mrpc_message *request)
 	struct pending_reply *pending;
 
 	pending=g_slice_new(struct pending_reply);
+	pending->conn=request->conn;
 	pending->sequence=request->hdr.sequence;
 	pending->cmd=request->hdr.cmd;
 	return pending;
+}
+
+/* @msg must have already been validated */
+static void pending_dispatch(struct pending_reply *pending,
+			struct mrpc_message *msg)
+{
+	struct mrpc_connection *conn=msg->conn;
+	struct mrpc_event *event;
+
+	if (pending->async) {
+		event=mrpc_alloc_message_event(msg, EVENT_REPLY);
+		event->callback=pending->data.async.callback;
+		event->private=pending->data.async.private;
+		queue_event(event);
+	} else {
+		pthread_mutex_lock(&conn->sync_wakeup_lock);
+		*pending->data.sync.reply=msg;
+		pthread_mutex_unlock(&conn->sync_wakeup_lock);
+		pthread_cond_signal(pending->data.sync.cond);
+	}
+	g_slice_free(struct pending_reply, pending);
 }
 
 static mrpc_status_t send_request_pending(struct mrpc_message *request,
@@ -82,11 +105,25 @@ static mrpc_status_t send_request_pending(struct mrpc_message *request,
 	ret=send_message(request);
 	if (ret) {
 		pthread_mutex_lock(&conn->pending_replies_lock);
-		g_hash_table_remove(conn->pending_replies, &pending->sequence);
+		g_hash_table_steal(conn->pending_replies, &pending->sequence);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
 		g_slice_free(struct pending_reply, pending);
 	}
 	return ret;
+}
+
+void pending_kill(void *data)
+{
+	struct pending_reply *pending=data;
+	struct mrpc_message *msg;
+
+	if (pending->async) {
+		g_slice_free(struct pending_reply, pending);
+	} else {
+		msg=mrpc_alloc_message(pending->conn);
+		msg->hdr.status=MINIRPC_NETWORK_FAILURE;
+		pending_dispatch(pending, msg);
+	}
 }
 
 exported mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
@@ -216,7 +253,7 @@ void process_incoming_message(struct mrpc_message *msg)
 		pthread_mutex_lock(&conn->pending_replies_lock);
 		pending=g_hash_table_lookup(conn->pending_replies,
 					&msg->hdr.sequence);
-		g_hash_table_remove(conn->pending_replies, &msg->hdr.sequence);
+		g_hash_table_steal(conn->pending_replies, &msg->hdr.sequence);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
 		if (pending == NULL || pending->cmd != msg->hdr.cmd ||
 					(msg->hdr.status != 0 &&
@@ -232,19 +269,8 @@ void process_incoming_message(struct mrpc_message *msg)
 			mrpc_free_message(msg);
 			if (pending != NULL)
 				g_slice_free(struct pending_reply, pending);
-			return;
-		}
-		if (pending->async) {
-			event=mrpc_alloc_message_event(msg, EVENT_REPLY);
-			event->callback=pending->data.async.callback;
-			event->private=pending->data.async.private;
-			queue_event(event);
 		} else {
-			pthread_mutex_lock(&conn->sync_wakeup_lock);
-			*pending->data.sync.reply=msg;
-			pthread_mutex_unlock(&conn->sync_wakeup_lock);
-			pthread_cond_signal(pending->data.sync.cond);
+			pending_dispatch(pending, msg);
 		}
-		g_slice_free(struct pending_reply, pending);
 	}
 }

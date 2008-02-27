@@ -132,6 +132,7 @@ void mrpc_free_message(struct mrpc_message *msg);
 void mrpc_alloc_message_data(struct mrpc_message *msg, unsigned len);
 void mrpc_free_message_data(struct mrpc_message *msg);
 void process_incoming_message(struct mrpc_message *msg);
+void pending_kill(void *data);
 
 /* event.c */
 struct mrpc_event *mrpc_alloc_event(struct mrpc_connection *conn,

@@ -271,7 +271,8 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 	conn->recv_state=STATE_HEADER;
 	conn->set=set;
 	conn->fd=fd;
-	conn->pending_replies=g_hash_table_new(g_int_hash, g_int_equal);
+	conn->pending_replies=g_hash_table_new_full(g_int_hash, g_int_equal,
+				NULL, pending_kill);
 	ret=pollset_add(set->pollset, fd, POLLSET_READABLE, conn,
 				try_read_conn, try_write_conn, conn_hangup,
 				conn_error);
