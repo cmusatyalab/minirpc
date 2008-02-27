@@ -263,7 +263,8 @@ void process_incoming_message(struct mrpc_message *msg)
 					"Unmatched reply, seq %u cmd "
 					"%d status %d len %u",
 					msg->hdr.sequence, msg->hdr.cmd,
-					msg->hdr.status, msg->hdr.datalen))
+					msg->hdr.status, msg->hdr.datalen)
+					== -1)
 				event->errstring=NULL;
 			queue_event(event);
 			mrpc_free_message(msg);
