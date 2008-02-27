@@ -18,6 +18,8 @@ check_PROGRAMS += test_async_server
 check_PROGRAMS += test_async_client
 check_PROGRAMS += test_async_both
 
+dist_check_SCRIPTS = runtest.sh
+TESTS_ENVIRONMENT = $(srcdir)/runtest.sh
 TESTS = $(check_PROGRAMS)
 
 %_minirpc.c %_minirpc.h %_client.h %_server.h %_xdr.c %_xdr.h: %.mx ../minirpcgen.in
