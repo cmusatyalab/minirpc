@@ -127,6 +127,10 @@ mrpc_status_t send_message(struct mrpc_message *msg);
 void mrpc_conn_free(struct mrpc_connection *conn);
 
 /* message.c */
+struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn);
+void mrpc_free_message(struct mrpc_message *msg);
+void mrpc_alloc_message_data(struct mrpc_message *msg, unsigned len);
+void mrpc_free_message_data(struct mrpc_message *msg);
 void process_incoming_message(struct mrpc_message *msg);
 
 /* event.c */
@@ -161,10 +165,6 @@ int selfpipe_is_set(struct selfpipe *sp);
 int selfpipe_fd(struct selfpipe *sp);
 
 /* serialize.c */
-struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn);
-void mrpc_free_message(struct mrpc_message *msg);
-void mrpc_alloc_message_data(struct mrpc_message *msg, unsigned len);
-void mrpc_free_message_data(struct mrpc_message *msg);
 void *mrpc_alloc_argument(unsigned len);
 void mrpc_free_argument(xdrproc_t xdr_proc, void *buf);
 mrpc_status_t serialize(xdrproc_t xdr_proc, void *in, char *out,

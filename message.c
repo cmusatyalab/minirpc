@@ -30,6 +30,35 @@ struct pending_reply {
 	} data;
 };
 
+struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn)
+{
+	struct mrpc_message *msg;
+
+	msg=g_slice_new0(struct mrpc_message);
+	msg->conn=conn;
+	return msg;
+}
+
+void mrpc_free_message(struct mrpc_message *msg)
+{
+	mrpc_free_message_data(msg);
+	g_slice_free(struct mrpc_message, msg);
+}
+
+void mrpc_alloc_message_data(struct mrpc_message *msg, unsigned len)
+{
+	assert(msg->data == NULL);
+	msg->data=g_malloc(len);
+}
+
+void mrpc_free_message_data(struct mrpc_message *msg)
+{
+	if (msg->data) {
+		g_free(msg->data);
+		msg->data=NULL;
+	}
+}
+
 static struct pending_reply *pending_alloc(struct mrpc_message *request)
 {
 	struct pending_reply *pending;
