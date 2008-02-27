@@ -290,9 +290,17 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 
 void mrpc_conn_free(struct mrpc_connection *conn)
 {
-	/* XXX data already in buffer? */
+	struct mrpc_message *msg;
+
 	destroy_events(conn);
 	g_queue_free(conn->events);
+	if (conn->send_msg)
+		mrpc_free_message(conn->send_msg);
+	if (conn->recv_msg)
+		mrpc_free_message(conn->recv_msg);
+	while ((msg=g_queue_pop_head(conn->send_msgs)) != NULL)
+		mrpc_free_message(msg);
+	g_queue_free(conn->send_msgs);
 	g_slice_free(struct mrpc_connection, conn);
 }
 
