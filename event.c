@@ -59,6 +59,17 @@ static void try_queue_conn(struct mrpc_connection *conn)
 	g_queue_push_tail_link(set->event_conns, conn->lh_event_conns);
 }
 
+/* set->events_lock must be held */
+static void try_unqueue_conn(struct mrpc_connection *conn)
+{
+	if (conn->lh_event_conns == NULL)
+		return;
+	g_queue_delete_link(conn->set->event_conns, conn->lh_event_conns);
+	conn->lh_event_conns=NULL;
+	if (g_queue_is_empty(conn->set->event_conns))
+		selfpipe_clear(conn->set->events_notify_pipe);
+}
+
 void queue_event(struct mrpc_event *event)
 {
 	struct mrpc_connection *conn=event->conn;
@@ -120,11 +131,7 @@ exported mrpc_status_t mrpc_plug_conn(struct mrpc_connection *conn)
 {
 	pthread_mutex_lock(&conn->set->events_lock);
 	conn->plugged_user++;
-	if (conn->lh_event_conns != NULL) {
-		g_queue_delete_link(conn->set->event_conns,
-					conn->lh_event_conns);
-		conn->lh_event_conns=NULL;
-	}
+	try_unqueue_conn(conn);
 	pthread_mutex_unlock(&conn->set->events_lock);
 	return MINIRPC_OK;
 }
@@ -310,6 +317,7 @@ static void dispatch_event(struct mrpc_event *event)
 	case EVENT_IOERR:
 		if (conf->ioerr)
 			conf->ioerr(conn->private, event->errstring);
+		free(event->errstring);
 		break;
 	default:
 		assert(0);
@@ -317,6 +325,24 @@ static void dispatch_event(struct mrpc_event *event)
 	if (event->type != EVENT_DISCONNECT)
 		mrpc_unplug_event(event);
 	g_slice_free(struct mrpc_event, event);
+}
+
+void destroy_events(struct mrpc_connection *conn)
+{
+	struct mrpc_event *event;
+
+	pthread_mutex_lock(&conn->set->events_lock);
+	try_unqueue_conn(conn);
+	while ((event=g_queue_pop_head(conn->events)) != NULL) {
+		if (event->addr)
+			g_free(event->addr);
+		if (event->msg)
+			mrpc_free_message(event->msg);
+		if (event->errstring)
+			free(event->errstring);
+		g_slice_free(struct mrpc_event, event);
+	}
+	pthread_mutex_unlock(&conn->set->events_lock);
 }
 
 exported int mrpc_dispatch_one(struct mrpc_conn_set *set)

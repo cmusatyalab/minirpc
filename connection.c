@@ -291,6 +291,8 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 void mrpc_conn_free(struct mrpc_connection *conn)
 {
 	/* XXX data already in buffer? */
+	destroy_events(conn);
+	g_queue_free(conn->events);
 	g_slice_free(struct mrpc_connection, conn);
 }
 
