@@ -17,6 +17,7 @@ check_PROGRAMS  = test_basic
 check_PROGRAMS += test_async_server
 check_PROGRAMS += test_async_client
 check_PROGRAMS += test_async_both
+check_PROGRAMS += test_sequential_clients
 
 dist_check_SCRIPTS = runtest.sh
 TESTS_ENVIRONMENT = $(srcdir)/runtest.sh
