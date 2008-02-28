@@ -93,6 +93,7 @@ struct mrpc_connection {
 	struct mrpc_conn_set *set;
 	int fd;
 	void *private;
+	int shutdown;  /* protected by send_msgs_lock */
 
 	const void *operations;
 	pthread_mutex_t operations_lock;

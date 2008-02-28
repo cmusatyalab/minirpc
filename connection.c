@@ -28,19 +28,23 @@ static int setsockoptval(int fd, int level, int optname, int value)
 	return setsockopt(fd, level, optname, &value, sizeof(value));
 }
 
-static void _conn_close(struct mrpc_connection *conn)
-{
-	/* XXX */
-	pollset_del(conn->set->pollset, conn->fd);
-	close(conn->fd);
-}
-
 static void conn_kill(struct mrpc_connection *conn,
 			enum mrpc_disc_reason reason)
 {
 	struct mrpc_event *event;
+	int done;
 
-	_conn_close(conn);
+	pthread_mutex_lock(&conn->send_msgs_lock);
+	done=conn->shutdown;
+	conn->shutdown=1;
+	pthread_mutex_unlock(&conn->send_msgs_lock);
+	if (done)
+		return;
+	pollset_del(conn->set->pollset, conn->fd);
+	/* We are now guaranteed that the listener thread will not process
+	   this connection further */
+	close(conn->fd);
+	conn->fd=-1;
 	event=mrpc_alloc_event(conn, EVENT_DISCONNECT);
 	event->disc_reason=reason;
 	queue_event(event);
@@ -94,6 +98,7 @@ static void try_read_conn(void *data, int fd)
 
 		if (conn->recv_offset < len) {
 			count = len - conn->recv_offset;
+			assert(conn->fd != -1);
 			rcount=read(conn->fd, buf + conn->recv_offset, count);
 			if (rcount <= 0) {
 				if (rcount == 0)
@@ -134,6 +139,7 @@ static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 	mrpc_status_t ret;
 
 	pthread_mutex_lock(&conn->send_msgs_lock);
+	assert(conn->fd != -1);
 	if (g_queue_is_empty(conn->send_msgs)) {
 		pollset_modify(conn->set->pollset, conn->fd, POLLSET_READABLE);
 		pthread_mutex_unlock(&conn->send_msgs_lock);
@@ -198,6 +204,7 @@ static void try_write_conn(void *data, int fd)
 
 		if (conn->send_offset < len) {
 			count = len - conn->send_offset;
+			assert(conn->fd != -1);
 			rcount=write(conn->fd, buf + conn->send_offset, count);
 			if (rcount == -1 && errno != EAGAIN
 						&& errno != EINTR) {
@@ -518,8 +525,7 @@ exported int mrpc_bind_fd(struct mrpc_connection **new_conn,
 
 exported void mrpc_conn_close(struct mrpc_connection *conn)
 {
-	_conn_close(conn);
-	mrpc_conn_free(conn);
+	conn_kill(conn, MRPC_DISC_USER);
 }
 
 exported mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
@@ -538,7 +544,7 @@ mrpc_status_t send_message(struct mrpc_message *msg)
 	struct mrpc_connection *conn=msg->conn;
 
 	pthread_mutex_lock(&conn->send_msgs_lock);
-	if (pollset_modify(conn->set->pollset, conn->fd,
+	if (conn->shutdown || pollset_modify(conn->set->pollset, conn->fd,
 				POLLSET_READABLE|POLLSET_WRITABLE)) {
 		pthread_mutex_unlock(&conn->send_msgs_lock);
 		mrpc_free_message(msg);
