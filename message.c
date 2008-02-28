@@ -101,15 +101,16 @@ static mrpc_status_t send_request_pending(struct mrpc_message *request,
 	pthread_mutex_lock(&conn->pending_replies_lock);
 	g_hash_table_replace(conn->pending_replies, &pending->sequence,
 				pending);
-	pthread_mutex_unlock(&conn->pending_replies_lock);
 	ret=send_message(request);
 	if (ret) {
-		pthread_mutex_lock(&conn->pending_replies_lock);
 		g_hash_table_steal(conn->pending_replies, &pending->sequence);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
 		g_slice_free(struct pending_reply, pending);
+		return ret;
+	} else {
+		pthread_mutex_unlock(&conn->pending_replies_lock);
+		return MINIRPC_OK;
 	}
-	return ret;
 }
 
 void pending_kill(void *data)
