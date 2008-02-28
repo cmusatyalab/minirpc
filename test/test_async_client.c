@@ -14,13 +14,13 @@
 
 static const struct mrpc_config client_config = {
 	.protocol = &proto_client,
-	.disconnect = disconnect_fatal
+	.disconnect = disconnect_user
 };
 
 static const struct mrpc_config server_config = {
 	.protocol = &proto_server,
 	.accept = sync_server_accept,
-	.disconnect = disconnect_fatal
+	.disconnect = disconnect_normal
 };
 
 int main(int argc, char **argv)
@@ -51,5 +51,6 @@ int main(int argc, char **argv)
 	/* Give the async client some additional time to notice if it receives
 	   more callbacks than it should */
 	sleep(1);
+	mrpc_conn_close(conn);
 	return 0;
 }

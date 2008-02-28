@@ -78,3 +78,9 @@ void disconnect_ioerr(void *conn_data, enum mrpc_disc_reason reason)
 	if (reason != MRPC_DISC_IOERR)
 		die("Unexpected disconnect: reason %d", reason);
 }
+
+void disconnect_user(void *conn_data, enum mrpc_disc_reason reason)
+{
+	if (reason != MRPC_DISC_USER)
+		die("Unexpected disconnect: reason %d", reason);
+}

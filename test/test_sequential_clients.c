@@ -13,7 +13,7 @@
 
 static const struct mrpc_config client_config = {
 	.protocol = &proto_client,
-	.disconnect = disconnect_fatal
+	.disconnect = disconnect_user
 };
 
 static const struct mrpc_config server_config = {
@@ -39,12 +39,13 @@ int main(int argc, char **argv)
 		die("Couldn't allocate conn set");
 	launch_dispatch_thread(cset);
 
-	for (i=0; i<200; i++) {
+	for (i=0; i<1000; i++) {
 		ret=mrpc_connect(&conn, cset, "localhost", port, NULL);
 		if (ret)
 			die("%s", strerror(-ret));
 		sync_client_set_ops(conn);
 		sync_client_run(conn);
+		mrpc_conn_close(conn);
 	}
 	return 0;
 }

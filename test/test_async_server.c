@@ -13,13 +13,13 @@
 
 static const struct mrpc_config client_config = {
 	.protocol = &proto_client,
-	.disconnect = disconnect_fatal
+	.disconnect = disconnect_user
 };
 
 static const struct mrpc_config server_config = {
 	.protocol = &proto_server,
 	.accept = async_server_accept,
-	.disconnect = disconnect_fatal
+	.disconnect = disconnect_normal
 };
 
 int main(int argc, char **argv)
@@ -47,5 +47,6 @@ int main(int argc, char **argv)
 	sync_client_run(conn);
 	trigger_callback_sync(conn);
 	invalidate_sync(conn);
+	mrpc_conn_close(conn);
 	return 0;
 }
