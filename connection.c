@@ -29,26 +29,7 @@ static int setsockoptval(int fd, int level, int optname, int value)
 }
 
 static void conn_kill(struct mrpc_connection *conn,
-			enum mrpc_disc_reason reason)
-{
-	struct mrpc_event *event;
-	int done;
-
-	pthread_mutex_lock(&conn->send_msgs_lock);
-	done=conn->shutdown;
-	conn->shutdown=1;
-	pthread_mutex_unlock(&conn->send_msgs_lock);
-	if (done)
-		return;
-	pollset_del(conn->set->pollset, conn->fd);
-	/* We are now guaranteed that the listener thread will not process
-	   this connection further */
-	close(conn->fd);
-	conn->fd=-1;
-	event=mrpc_alloc_event(conn, EVENT_DISCONNECT);
-	event->disc_reason=reason;
-	queue_event(event);
-}
+			enum mrpc_disc_reason reason);
 
 static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
 {
@@ -248,6 +229,22 @@ static void conn_error(void *data, int fd)
 	conn_kill(conn, MRPC_DISC_IOERR);
 }
 
+mrpc_status_t send_message(struct mrpc_message *msg)
+{
+	struct mrpc_connection *conn=msg->conn;
+
+	pthread_mutex_lock(&conn->send_msgs_lock);
+	if (conn->shutdown || pollset_modify(conn->set->pollset, conn->fd,
+				POLLSET_READABLE|POLLSET_WRITABLE)) {
+		pthread_mutex_unlock(&conn->send_msgs_lock);
+		mrpc_free_message(msg);
+		return MINIRPC_NETWORK_FAILURE;
+	}
+	g_queue_push_tail(conn->send_msgs, msg);
+	pthread_mutex_unlock(&conn->send_msgs_lock);
+	return MINIRPC_OK;
+}
+
 static int mrpc_conn_add(struct mrpc_connection **new_conn,
 			struct mrpc_conn_set *set, int fd)
 {
@@ -292,6 +289,28 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 	return 0;
 }
 /* XXX unregister sock from pollset at pool release */
+
+static void conn_kill(struct mrpc_connection *conn,
+			enum mrpc_disc_reason reason)
+{
+	struct mrpc_event *event;
+	int done;
+
+	pthread_mutex_lock(&conn->send_msgs_lock);
+	done=conn->shutdown;
+	conn->shutdown=1;
+	pthread_mutex_unlock(&conn->send_msgs_lock);
+	if (done)
+		return;
+	pollset_del(conn->set->pollset, conn->fd);
+	/* We are now guaranteed that the listener thread will not process
+	   this connection further */
+	close(conn->fd);
+	conn->fd=-1;
+	event=mrpc_alloc_event(conn, EVENT_DISCONNECT);
+	event->disc_reason=reason;
+	queue_event(event);
+}
 
 void mrpc_conn_free(struct mrpc_connection *conn)
 {
@@ -536,22 +555,6 @@ exported mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
 	pthread_mutex_lock(&conn->operations_lock);
 	conn->operations=ops;
 	pthread_mutex_unlock(&conn->operations_lock);
-	return MINIRPC_OK;
-}
-
-mrpc_status_t send_message(struct mrpc_message *msg)
-{
-	struct mrpc_connection *conn=msg->conn;
-
-	pthread_mutex_lock(&conn->send_msgs_lock);
-	if (conn->shutdown || pollset_modify(conn->set->pollset, conn->fd,
-				POLLSET_READABLE|POLLSET_WRITABLE)) {
-		pthread_mutex_unlock(&conn->send_msgs_lock);
-		mrpc_free_message(msg);
-		return MINIRPC_NETWORK_FAILURE;
-	}
-	g_queue_push_tail(conn->send_msgs, msg);
-	pthread_mutex_unlock(&conn->send_msgs_lock);
 	return MINIRPC_OK;
 }
 
