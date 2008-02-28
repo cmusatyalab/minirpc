@@ -402,12 +402,15 @@ exported int mrpc_connect(struct mrpc_connection **new_conn,
 			ret=-errno;
 			continue;
 		}
-		ret=connect(fd, cur->ai_addr, cur->ai_addrlen);
-		if (!ret)
+		if (!connect(fd, cur->ai_addr, cur->ai_addrlen))
 			break;
+		ret=-errno;
 		close(fd);
+		fd=-1;
 	}
 	freeaddrinfo(ai);
+	if (fd == -1)
+		return ret;
 	ret=mrpc_conn_add(&conn, set, fd);
 	if (ret) {
 		close(fd);

@@ -191,7 +191,7 @@ int pollset_poll(struct pollset *pset)
 	pset->running_serial=pset->serial;
 	pset->running_thread=pthread_self();
 	pthread_mutex_unlock(&pset->lock);
-	ret=pset->ops->poll(pset);
+	while ((ret=pset->ops->poll(pset)) == -EINTR);
 	pthread_mutex_lock(&pset->lock);
 	pollset_free_dead(pset);
 	pset->running_serial=NOT_RUNNING;
