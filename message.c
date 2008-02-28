@@ -117,13 +117,9 @@ void pending_kill(void *data)
 	struct pending_reply *pending=data;
 	struct mrpc_message *msg;
 
-	if (pending->async) {
-		g_slice_free(struct pending_reply, pending);
-	} else {
-		msg=mrpc_alloc_message(pending->conn);
-		msg->hdr.status=MINIRPC_NETWORK_FAILURE;
-		pending_dispatch(pending, msg);
-	}
+	msg=mrpc_alloc_message(pending->conn);
+	msg->hdr.status=MINIRPC_NETWORK_FAILURE;
+	pending_dispatch(pending, msg);
 }
 
 exported mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
