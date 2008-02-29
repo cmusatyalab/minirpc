@@ -42,7 +42,8 @@ int main(int argc, char **argv)
 	for (i=0; i<1000; i++) {
 		ret=mrpc_connect(&conn, cset, "localhost", port, NULL);
 		if (ret)
-			die("%s", strerror(-ret));
+			die("%s in mrpc_connect() on iteration %d",
+						strerror(-ret), i);
 		sync_client_set_ops(conn);
 		sync_client_run(conn);
 		mrpc_conn_close(conn);
