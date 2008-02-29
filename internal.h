@@ -90,9 +90,7 @@ enum conn_state {
 enum shutdown_flags {
 	SHUT_STARTED		= 0x0001,
 	SHUT_SQUASH_EVENTS	= 0x0002,
-	SHUT_DRAIN_QUEUE	= 0x0004,
-	SHUT_Q_DRAINED		= 0x0008,
-	SHUT_FD_CLOSED		= 0x0010,
+	SHUT_FD_CLOSED		= 0x0004,
 };
 
 struct mrpc_connection {
