@@ -100,14 +100,10 @@ static mrpc_status_t send_request_pending(struct mrpc_message *request,
 	g_hash_table_replace(conn->pending_replies, &pending->sequence,
 				pending);
 	ret=send_message(request);
-	if (ret) {
+	if (ret)
 		g_hash_table_remove(conn->pending_replies, &pending->sequence);
-		pthread_mutex_unlock(&conn->pending_replies_lock);
-		return ret;
-	} else {
-		pthread_mutex_unlock(&conn->pending_replies_lock);
-		return MINIRPC_OK;
-	}
+	pthread_mutex_unlock(&conn->pending_replies_lock);
+	return ret;
 }
 
 static gboolean _pending_kill(void *key, void *value, void *data)
