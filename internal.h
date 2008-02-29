@@ -51,7 +51,8 @@ enum event_type {
 	EVENT_REQUEST,
 	EVENT_REPLY,
 	EVENT_DISCONNECT,
-	EVENT_IOERR
+	EVENT_IOERR,
+	EVENT_Q_SHUTDOWN
 };
 
 struct mrpc_event {
@@ -68,9 +69,6 @@ struct mrpc_event {
 	/* reply */
 	reply_callback_fn *callback;
 	void *private;
-
-	/* disconnect */
-	enum mrpc_disc_reason disc_reason;
 
 	/* message errors */
 	char *errstring;
@@ -89,11 +87,22 @@ enum conn_state {
 	STATE_DATA
 };
 
+enum shutdown_flags {
+	SHUT_STARTED		= 0x0001,
+	SHUT_SQUASH_EVENTS	= 0x0002,
+	SHUT_DRAIN_QUEUE	= 0x0004,
+	SHUT_Q_DRAINED		= 0x0008,
+	SHUT_FD_CLOSED		= 0x0010,
+};
+
 struct mrpc_connection {
 	struct mrpc_conn_set *set;
 	int fd;
 	void *private;
-	int shutdown;  /* protected by send_msgs_lock */
+
+	pthread_mutex_t shutdown_lock;
+	unsigned shutdown_flags;
+	enum mrpc_disc_reason disc_reason;
 
 	const void *operations;
 	pthread_mutex_t operations_lock;
@@ -128,12 +137,14 @@ mrpc_status_t send_message(struct mrpc_message *msg);
 void mrpc_conn_free(struct mrpc_connection *conn);
 
 /* message.c */
+struct pending_reply;
 struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn);
 void mrpc_free_message(struct mrpc_message *msg);
 void mrpc_alloc_message_data(struct mrpc_message *msg, unsigned len);
 void mrpc_free_message_data(struct mrpc_message *msg);
 void process_incoming_message(struct mrpc_message *msg);
-void pending_kill(void *data);
+void pending_kill(struct mrpc_connection *conn);
+void pending_free(struct pending_reply *pending);
 
 /* event.c */
 struct mrpc_event *mrpc_alloc_event(struct mrpc_connection *conn,

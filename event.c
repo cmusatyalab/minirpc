@@ -40,6 +40,17 @@ struct mrpc_event *mrpc_alloc_message_event(struct mrpc_message *msg,
 	return event;
 }
 
+static void destroy_event(struct mrpc_event *event)
+{
+	if (event->addr)
+		g_free(event->addr);
+	if (event->msg)
+		mrpc_free_message(event->msg);
+	if (event->errstring)
+		free(event->errstring);
+	g_slice_free(struct mrpc_event, event);
+}
+
 static int conn_is_plugged(struct mrpc_connection *conn)
 {
 	return (conn->plugged_event != NULL || conn->plugged_user != 0);
@@ -295,6 +306,28 @@ static void dispatch_event(struct mrpc_event *event)
 {
 	struct mrpc_connection *conn=event->conn;
 	struct mrpc_config *conf=&conn->set->conf;
+	struct mrpc_event *nevent;
+	int squash;
+	enum mrpc_disc_reason reason;
+
+	pthread_mutex_lock(&conn->shutdown_lock);
+	squash=conn->shutdown_flags & SHUT_SQUASH_EVENTS;
+	reason=conn->disc_reason;
+	pthread_mutex_unlock(&conn->shutdown_lock);
+
+	if (squash) {
+		switch (event->type) {
+		case EVENT_REQUEST:
+		case EVENT_IOERR:
+			destroy_event(event);
+			return;
+		case EVENT_REPLY:
+			event->msg->hdr.status=MINIRPC_NETWORK_FAILURE;
+			break;
+		default:
+			break;
+		}
+	}
 
 	switch (event->type) {
 	case EVENT_ACCEPT:
@@ -311,13 +344,21 @@ static void dispatch_event(struct mrpc_event *event)
 		break;
 	case EVENT_DISCONNECT:
 		if (conf->disconnect)
-			conf->disconnect(conn->private, event->disc_reason);
+			conf->disconnect(conn->private, reason);
 		mrpc_conn_free(conn);
 		break;
 	case EVENT_IOERR:
 		if (conf->ioerr)
 			conf->ioerr(conn->private, event->errstring);
 		free(event->errstring);
+		break;
+	case EVENT_Q_SHUTDOWN:
+		/* The send queue is empty and the event queue has been
+		   drained.  Queue events to wake all pending waiters, then
+		   a DISCONNECT event to close out the conn. */
+		pending_kill(conn);
+		nevent=mrpc_alloc_event(conn, EVENT_DISCONNECT);
+		queue_event(nevent);
 		break;
 	default:
 		assert(0);
@@ -333,15 +374,8 @@ void destroy_events(struct mrpc_connection *conn)
 
 	pthread_mutex_lock(&conn->set->events_lock);
 	try_unqueue_conn(conn);
-	while ((event=g_queue_pop_head(conn->events)) != NULL) {
-		if (event->addr)
-			g_free(event->addr);
-		if (event->msg)
-			mrpc_free_message(event->msg);
-		if (event->errstring)
-			free(event->errstring);
-		g_slice_free(struct mrpc_event, event);
-	}
+	while ((event=g_queue_pop_head(conn->events)) != NULL)
+		destroy_event(event);
 	pthread_mutex_unlock(&conn->set->events_lock);
 }
 

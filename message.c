@@ -15,7 +15,6 @@
 #include "internal.h"
 
 struct pending_reply {
-	struct mrpc_connection *conn;
 	unsigned sequence;
 	unsigned cmd;
 	int async;
@@ -65,7 +64,6 @@ static struct pending_reply *pending_alloc(struct mrpc_message *request)
 	struct pending_reply *pending;
 
 	pending=g_slice_new(struct pending_reply);
-	pending->conn=request->conn;
 	pending->sequence=request->hdr.sequence;
 	pending->cmd=request->hdr.cmd;
 	return pending;
@@ -89,7 +87,7 @@ static void pending_dispatch(struct pending_reply *pending,
 		pthread_mutex_unlock(&conn->sync_wakeup_lock);
 		pthread_cond_signal(pending->data.sync.cond);
 	}
-	g_slice_free(struct pending_reply, pending);
+	pending_free(pending);
 }
 
 static mrpc_status_t send_request_pending(struct mrpc_message *request,
@@ -103,9 +101,8 @@ static mrpc_status_t send_request_pending(struct mrpc_message *request,
 				pending);
 	ret=send_message(request);
 	if (ret) {
-		g_hash_table_steal(conn->pending_replies, &pending->sequence);
+		g_hash_table_remove(conn->pending_replies, &pending->sequence);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
-		g_slice_free(struct pending_reply, pending);
 		return ret;
 	} else {
 		pthread_mutex_unlock(&conn->pending_replies_lock);
@@ -113,14 +110,28 @@ static mrpc_status_t send_request_pending(struct mrpc_message *request,
 	}
 }
 
-void pending_kill(void *data)
+static gboolean _pending_kill(void *key, void *value, void *data)
 {
-	struct pending_reply *pending=data;
+	struct mrpc_connection *conn=data;
+	struct pending_reply *pending=value;
 	struct mrpc_message *msg;
 
-	msg=mrpc_alloc_message(pending->conn);
+	msg=mrpc_alloc_message(conn);
 	msg->hdr.status=MINIRPC_NETWORK_FAILURE;
 	pending_dispatch(pending, msg);
+	return TRUE;
+}
+
+void pending_kill(struct mrpc_connection *conn)
+{
+	pthread_mutex_lock(&conn->pending_replies_lock);
+	g_hash_table_foreach_steal(conn->pending_replies, _pending_kill, conn);
+	pthread_mutex_unlock(&conn->pending_replies_lock);
+}
+
+void pending_free(struct pending_reply *pending)
+{
+	g_slice_free(struct pending_reply, pending);
 }
 
 exported mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
@@ -266,7 +277,7 @@ void process_incoming_message(struct mrpc_message *msg)
 			queue_event(event);
 			mrpc_free_message(msg);
 			if (pending != NULL)
-				g_slice_free(struct pending_reply, pending);
+				pending_free(pending);
 		} else {
 			pending_dispatch(pending, msg);
 		}

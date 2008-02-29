@@ -30,6 +30,7 @@ static int setsockoptval(int fd, int level, int optname, int value)
 
 static void conn_kill(struct mrpc_connection *conn,
 			enum mrpc_disc_reason reason);
+static void try_notify_queue_shutdown(struct mrpc_connection *conn);
 
 static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
 {
@@ -79,7 +80,7 @@ static void try_read_conn(void *data, int fd)
 
 		if (conn->recv_offset < len) {
 			count = len - conn->recv_offset;
-			assert(conn->fd != -1);
+			assert(!(conn->shutdown_flags & SHUT_FD_CLOSED));
 			rcount=read(conn->fd, buf + conn->recv_offset, count);
 			if (rcount <= 0) {
 				if (rcount == 0)
@@ -120,10 +121,11 @@ static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 	mrpc_status_t ret;
 
 	pthread_mutex_lock(&conn->send_msgs_lock);
-	assert(conn->fd != -1);
+	assert(!(conn->shutdown_flags & SHUT_FD_CLOSED));
 	if (g_queue_is_empty(conn->send_msgs)) {
 		pollset_modify(conn->set->pollset, conn->fd, POLLSET_READABLE);
 		pthread_mutex_unlock(&conn->send_msgs_lock);
+		try_notify_queue_shutdown(conn);
 		return MINIRPC_OK;
 	}
 	conn->send_msg=g_queue_pop_head(conn->send_msgs);
@@ -185,7 +187,7 @@ static void try_write_conn(void *data, int fd)
 
 		if (conn->send_offset < len) {
 			count = len - conn->send_offset;
-			assert(conn->fd != -1);
+			assert(!(conn->shutdown_flags & SHUT_FD_CLOSED));
 			rcount=write(conn->fd, buf + conn->send_offset, count);
 			if (rcount == -1 && errno != EAGAIN
 						&& errno != EINTR) {
@@ -232,17 +234,23 @@ static void conn_error(void *data, int fd)
 mrpc_status_t send_message(struct mrpc_message *msg)
 {
 	struct mrpc_connection *conn=msg->conn;
+	mrpc_status_t ret=MINIRPC_OK;
 
 	pthread_mutex_lock(&conn->send_msgs_lock);
-	if (conn->shutdown || pollset_modify(conn->set->pollset, conn->fd,
+	pthread_mutex_lock(&conn->shutdown_lock);
+	if ((conn->shutdown_flags & SHUT_STARTED) ||
+				pollset_modify(conn->set->pollset, conn->fd,
 				POLLSET_READABLE|POLLSET_WRITABLE)) {
-		pthread_mutex_unlock(&conn->send_msgs_lock);
-		mrpc_free_message(msg);
-		return MINIRPC_NETWORK_FAILURE;
+		ret=MINIRPC_NETWORK_FAILURE;
+		goto out;
 	}
 	g_queue_push_tail(conn->send_msgs, msg);
+out:
+	pthread_mutex_unlock(&conn->shutdown_lock);
 	pthread_mutex_unlock(&conn->send_msgs_lock);
-	return MINIRPC_OK;
+	if (ret)
+		mrpc_free_message(msg);
+	return ret;
 }
 
 static int mrpc_conn_add(struct mrpc_connection **new_conn,
@@ -269,12 +277,13 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 	pthread_mutex_init(&conn->send_msgs_lock, NULL);
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
 	pthread_mutex_init(&conn->sync_wakeup_lock, NULL);
+	pthread_mutex_init(&conn->shutdown_lock, NULL);
 	conn->send_state=STATE_IDLE;
 	conn->recv_state=STATE_HEADER;
 	conn->set=set;
 	conn->fd=fd;
 	conn->pending_replies=g_hash_table_new_full(g_int_hash, g_int_equal,
-				NULL, pending_kill);
+				NULL, (GDestroyNotify)pending_free);
 	ret=pollset_add(set->pollset, fd, POLLSET_READABLE, conn,
 				try_read_conn, try_write_conn, conn_hangup,
 				conn_error);
@@ -290,32 +299,87 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 }
 /* XXX unregister sock from pollset at pool release */
 
+/* shutdown lock must be held */
+static int conn_start_shutdown(struct mrpc_connection *conn,
+			enum mrpc_disc_reason reason, int squash_events)
+{
+	int done;
+
+	done=conn->shutdown_flags & SHUT_STARTED;
+	conn->shutdown_flags |= SHUT_STARTED;
+	if (!done)
+		conn->disc_reason=reason;
+	if (squash_events)
+		conn->shutdown_flags |= SHUT_SQUASH_EVENTS;
+	return !done;
+}
+
+static void try_notify_queue_shutdown(struct mrpc_connection *conn)
+{
+	struct mrpc_event *event;
+	int need;
+	int done;
+
+	pthread_mutex_lock(&conn->shutdown_lock);
+	need=conn->shutdown_flags & SHUT_DRAIN_QUEUE;
+	done=conn->shutdown_flags & SHUT_Q_DRAINED;
+	if (need)
+		conn->shutdown_flags |= SHUT_Q_DRAINED;
+	pthread_mutex_unlock(&conn->shutdown_lock);
+	if (need && !done) {
+		event=mrpc_alloc_event(conn, EVENT_Q_SHUTDOWN);
+		queue_event(event);
+	}
+}
+
+/* shutdown lock must be held */
+static void conn_close_fd(struct mrpc_connection *conn)
+{
+	if (!(conn->shutdown_flags & SHUT_FD_CLOSED)) {
+		pollset_del(conn->set->pollset, conn->fd);
+		/* We are now guaranteed that the listener thread will not
+		   process this connection further */
+		close(conn->fd);
+		conn->shutdown_flags |= SHUT_FD_CLOSED;
+	}
+}
+
+/* Must be called from listener-thread context */
 static void conn_kill(struct mrpc_connection *conn,
 			enum mrpc_disc_reason reason)
 {
-	struct mrpc_event *event;
-	int done;
+	pthread_mutex_lock(&conn->shutdown_lock);
+	conn_start_shutdown(conn, reason, 0);
+	/* Squash send queue */
+	conn_close_fd(conn);
+	conn->shutdown_flags |= SHUT_DRAIN_QUEUE;
+	pthread_mutex_unlock(&conn->shutdown_lock);
+	try_notify_queue_shutdown(conn);
+}
 
-	pthread_mutex_lock(&conn->send_msgs_lock);
-	done=conn->shutdown;
-	conn->shutdown=1;
-	pthread_mutex_unlock(&conn->send_msgs_lock);
-	if (done)
+exported void mrpc_conn_close(struct mrpc_connection *conn)
+{
+	pthread_mutex_lock(&conn->shutdown_lock);
+	/* Squash event queue */
+	if (!conn_start_shutdown(conn, MRPC_DISC_USER, 1)) {
+		pthread_mutex_unlock(&conn->shutdown_lock);
 		return;
-	pollset_del(conn->set->pollset, conn->fd);
-	/* We are now guaranteed that the listener thread will not process
-	   this connection further */
-	close(conn->fd);
-	conn->fd=-1;
-	event=mrpc_alloc_event(conn, EVENT_DISCONNECT);
-	event->disc_reason=reason;
-	queue_event(event);
+	}
+	/* XXX synchronize */
+	conn->shutdown_flags |= SHUT_DRAIN_QUEUE;
+	assert(!(conn->shutdown_flags & SHUT_FD_CLOSED));
+	pollset_modify(conn->set->pollset, conn->fd,
+				POLLSET_READABLE | POLLSET_WRITABLE);
+	pthread_mutex_unlock(&conn->shutdown_lock);
 }
 
 void mrpc_conn_free(struct mrpc_connection *conn)
 {
 	struct mrpc_message *msg;
 
+	pthread_mutex_lock(&conn->shutdown_lock);
+	conn_close_fd(conn);
+	pthread_mutex_unlock(&conn->shutdown_lock);
 	destroy_events(conn);
 	g_queue_free(conn->events);
 	if (conn->send_msg)
@@ -540,11 +604,6 @@ exported int mrpc_bind_fd(struct mrpc_connection **new_conn,
 	conn->private = (data != NULL) ? data : conn;
 	*new_conn=conn;
 	return 0;
-}
-
-exported void mrpc_conn_close(struct mrpc_connection *conn)
-{
-	conn_kill(conn, MRPC_DISC_USER);
 }
 
 exported mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
