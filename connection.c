@@ -607,11 +607,11 @@ exported mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
 	return MINIRPC_OK;
 }
 
-/* XXX signal handling */
 static void *listener(void *data)
 {
 	struct mrpc_conn_set *set=data;
 
+	block_signals();
 	while (!selfpipe_is_set(set->shutdown_pipe)) {
 		if (pollset_poll(set->pollset))
 			/* XXX */;

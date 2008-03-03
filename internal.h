@@ -197,6 +197,7 @@ mrpc_status_t unformat_reply(struct mrpc_message *msg, void **result);
 
 /* util.c */
 int set_nonblock(int fd);
+int block_signals(void);
 
 /* xdr_len.c */
 void xdrlen_create(XDR *xdrs);

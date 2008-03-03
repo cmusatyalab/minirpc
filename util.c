@@ -10,6 +10,7 @@
  */
 
 #include <fcntl.h>
+#include <signal.h>
 #include <errno.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
@@ -31,4 +32,13 @@ int set_nonblock(int fd)
 	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK))
 		return -errno;
 	return 0;
+}
+
+int block_signals(void)
+{
+	sigset_t sigs;
+
+	if (sigfillset(&sigs))
+		return -errno;
+	return pthread_sigmask(SIG_SETMASK, &sigs, NULL);
 }
