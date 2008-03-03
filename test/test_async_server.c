@@ -50,5 +50,6 @@ int main(int argc, char **argv)
 	mrpc_conn_close(conn);
 	mrpc_conn_set_free(cset);
 	mrpc_conn_set_free(sset);
+	expect_disconnects(1, 1, 0);
 	return 0;
 }

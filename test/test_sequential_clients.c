@@ -50,6 +50,7 @@ int main(int argc, char **argv)
 		mrpc_conn_close(conn);
 	}
 	mrpc_conn_set_free(cset);
+	expect_disconnects(500, -1, 0);
 
 	/* Try repeated connections from different conn sets */
 	for (i=0; i<500; i++) {
@@ -67,5 +68,6 @@ int main(int argc, char **argv)
 	}
 
 	mrpc_conn_set_free(sset);
+	expect_disconnects(1000, 1000, 0);
 	return 0;
 }

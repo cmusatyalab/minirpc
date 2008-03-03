@@ -12,7 +12,12 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <pthread.h>
+#include <glib.h>
 #include "common.h"
+
+static gint disc_normal;
+static gint disc_ioerr;
+static gint disc_user;
 
 void _message(const char *file, int line, const char *func, const char *fmt,
 			...)
@@ -57,16 +62,34 @@ void disconnect_normal(void *conn_data, enum mrpc_disc_reason reason)
 {
 	if (reason != MRPC_DISC_CLOSED)
 		die("Unexpected disconnect: reason %d", reason);
+	g_atomic_int_inc(&disc_normal);
 }
 
 void disconnect_ioerr(void *conn_data, enum mrpc_disc_reason reason)
 {
 	if (reason != MRPC_DISC_IOERR)
 		die("Unexpected disconnect: reason %d", reason);
+	g_atomic_int_inc(&disc_ioerr);
 }
 
 void disconnect_user(void *conn_data, enum mrpc_disc_reason reason)
 {
 	if (reason != MRPC_DISC_USER)
 		die("Unexpected disconnect: reason %d", reason);
+	g_atomic_int_inc(&disc_user);
+}
+
+void expect_disconnects(int user, int normal, int ioerr)
+{
+	int count;
+
+	count=g_atomic_int_get(&disc_user);
+	if (user != -1 && count != user)
+		die("Expected %d user disconnects, got %d", user, count);
+	count=g_atomic_int_get(&disc_normal);
+	if (normal != -1 && count != normal)
+		die("Expected %d normal disconnects, got %d", normal, count);
+	count=g_atomic_int_get(&disc_ioerr);
+	if (ioerr != -1 && count != ioerr)
+		die("Expected %d ioerr disconnects, got %d", ioerr, count);
 }
