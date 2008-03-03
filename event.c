@@ -318,6 +318,8 @@ static void dispatch_event(struct mrpc_event *event)
 	pthread_mutex_lock(&conn->shutdown_lock);
 	squash=conn->shutdown_flags & SHUT_SQUASH_EVENTS;
 	reason=conn->disc_reason;
+	if (!squash)
+		conn->running_events++;
 	pthread_mutex_unlock(&conn->shutdown_lock);
 
 	if (squash) {
@@ -372,6 +374,12 @@ static void dispatch_event(struct mrpc_event *event)
 		mrpc_unplug_event(event);
 	g_slice_free(struct mrpc_event, event);
 out:
+	if (!squash) {
+		pthread_mutex_lock(&conn->shutdown_lock);
+		conn->running_events--;
+		pthread_mutex_unlock(&conn->shutdown_lock);
+		pthread_cond_broadcast(&conn->event_completion_cond);
+	}
 	assert(conn != NULL);
 	assert(active_conn == conn);
 	active_conn=NULL;

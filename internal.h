@@ -101,6 +101,8 @@ struct mrpc_connection {
 	pthread_mutex_t shutdown_lock;
 	unsigned shutdown_flags;
 	enum mrpc_disc_reason disc_reason;
+	int running_events;
+	pthread_cond_t event_completion_cond;
 
 	const void *operations;
 	pthread_mutex_t operations_lock;

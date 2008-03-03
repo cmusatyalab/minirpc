@@ -278,6 +278,7 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
 	pthread_mutex_init(&conn->sync_wakeup_lock, NULL);
 	pthread_mutex_init(&conn->shutdown_lock, NULL);
+	pthread_cond_init(&conn->event_completion_cond, NULL);
 	conn->send_state=STATE_IDLE;
 	conn->recv_state=STATE_HEADER;
 	conn->set=set;
@@ -358,6 +359,10 @@ exported void mrpc_conn_close(struct mrpc_connection *conn)
 	assert(!(conn->shutdown_flags & SHUT_FD_CLOSED));
 	pollset_modify(conn->set->pollset, conn->fd,
 				POLLSET_READABLE | POLLSET_WRITABLE);
+	while (conn->running_events != 0 && !(conn->running_events == 1 &&
+				thread_on_conn(conn)))
+		pthread_cond_wait(&conn->event_completion_cond,
+					&conn->shutdown_lock);
 	pthread_mutex_unlock(&conn->shutdown_lock);
 }
 
