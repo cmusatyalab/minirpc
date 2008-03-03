@@ -42,7 +42,7 @@ int main(int argc, char **argv)
 	if (ret)
 		die("%s", strerror(-ret));
 
-	launch_dispatch_thread(cset);
+	mrpc_start_dispatch_thread(cset);
 	sync_client_set_ops(conn);
 	sync_client_run(conn);
 	trigger_callback_sync(conn);

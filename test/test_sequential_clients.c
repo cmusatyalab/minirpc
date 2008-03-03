@@ -37,7 +37,7 @@ int main(int argc, char **argv)
 
 	if (mrpc_conn_set_alloc(&cset, &client_config, NULL))
 		die("Couldn't allocate conn set");
-	launch_dispatch_thread(cset);
+	mrpc_start_dispatch_thread(cset);
 
 	for (i=0; i<1000; i++) {
 		ret=mrpc_connect(&conn, cset, "localhost", port, NULL);

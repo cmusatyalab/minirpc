@@ -464,3 +464,28 @@ out:
 	pthread_mutex_unlock(&set->events_lock);
 	return ret;
 }
+
+static void *dispatch_thread(void *data)
+{
+	block_signals();
+	mrpc_dispatch_loop(data);
+	return NULL;
+}
+
+exported int mrpc_start_dispatch_thread(struct mrpc_conn_set *set)
+{
+	pthread_t thr;
+	pthread_attr_t attr;
+	int ret;
+
+	ret=pthread_attr_init(&attr);
+	if (ret)
+		return ret;
+	ret=pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	if (ret)
+		goto out;
+	ret=pthread_create(&thr, &attr, dispatch_thread, set);
+out:
+	pthread_attr_destroy(&attr);
+	return ret;
+}
