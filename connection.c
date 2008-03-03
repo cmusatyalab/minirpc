@@ -301,8 +301,8 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 /* XXX unregister sock from pollset at pool release */
 
 /* shutdown lock must be held */
-static int conn_start_shutdown(struct mrpc_connection *conn,
-			enum mrpc_disc_reason reason, int squash_events)
+static void conn_start_shutdown(struct mrpc_connection *conn,
+			enum mrpc_disc_reason reason)
 {
 	int done;
 
@@ -310,9 +310,6 @@ static int conn_start_shutdown(struct mrpc_connection *conn,
 	conn->shutdown_flags |= SHUT_STARTED;
 	if (!done)
 		conn->disc_reason=reason;
-	if (squash_events)
-		conn->shutdown_flags |= SHUT_SQUASH_EVENTS;
-	return !done;
 }
 
 static void try_close_fd(struct mrpc_connection *conn)
@@ -342,28 +339,31 @@ static void conn_kill(struct mrpc_connection *conn,
 			enum mrpc_disc_reason reason)
 {
 	pthread_mutex_lock(&conn->shutdown_lock);
-	conn_start_shutdown(conn, reason, 0);
+	conn_start_shutdown(conn, reason);
 	pthread_mutex_unlock(&conn->shutdown_lock);
 	/* Squash send queue */
 	try_close_fd(conn);
 }
 
-exported void mrpc_conn_close(struct mrpc_connection *conn)
+exported int mrpc_conn_close(struct mrpc_connection *conn)
 {
 	pthread_mutex_lock(&conn->shutdown_lock);
+	conn_start_shutdown(conn, MRPC_DISC_USER);
 	/* Squash event queue */
-	if (!conn_start_shutdown(conn, MRPC_DISC_USER, 1)) {
+	if (conn->shutdown_flags & SHUT_SQUASH_EVENTS) {
 		pthread_mutex_unlock(&conn->shutdown_lock);
-		return;
+		return -EALREADY;
 	}
-	assert(!(conn->shutdown_flags & SHUT_FD_CLOSED));
-	pollset_modify(conn->set->pollset, conn->fd,
-				POLLSET_READABLE | POLLSET_WRITABLE);
+	conn->shutdown_flags |= SHUT_SQUASH_EVENTS;
+	if (!(conn->shutdown_flags & SHUT_FD_CLOSED))
+		pollset_modify(conn->set->pollset, conn->fd,
+					POLLSET_READABLE | POLLSET_WRITABLE);
 	while (conn->running_events != 0 && !(conn->running_events == 1 &&
 				thread_on_conn(conn)))
 		pthread_cond_wait(&conn->event_completion_cond,
 					&conn->shutdown_lock);
 	pthread_mutex_unlock(&conn->shutdown_lock);
+	return 0;
 }
 
 void mrpc_conn_free(struct mrpc_connection *conn)
