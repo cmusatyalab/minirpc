@@ -270,6 +270,7 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 	conn=g_slice_new0(struct mrpc_connection);
 	conn->send_msgs=g_queue_new();
 	conn->events=g_queue_new();
+	conn->lh_conns=g_list_append(NULL, conn);
 	pthread_mutexattr_init(&attr);
 	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
 	pthread_mutex_init(&conn->operations_lock, &attr);
@@ -292,9 +293,13 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 		g_hash_table_destroy(conn->pending_replies);
 		g_queue_free(conn->events);
 		g_queue_free(conn->send_msgs);
+		g_list_free(conn->lh_conns);
 		g_slice_free(struct mrpc_connection, conn);
 		return ret;
 	}
+	pthread_mutex_lock(&set->conns_lock);
+	g_queue_push_tail_link(set->conns, conn->lh_conns);
+	pthread_mutex_unlock(&set->conns_lock);
 	*new_conn=conn;
 	return 0;
 }
@@ -370,6 +375,9 @@ void mrpc_conn_free(struct mrpc_connection *conn)
 {
 	struct mrpc_message *msg;
 
+	pthread_mutex_lock(&conn->set->conns_lock);
+	g_queue_delete_link(conn->set->conns, conn->lh_conns);
+	pthread_mutex_unlock(&conn->set->conns_lock);
 	destroy_events(conn);
 	g_queue_free(conn->events);
 	if (conn->send_msg)
@@ -670,8 +678,10 @@ exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 	ret=validate_copy_config(config, &set->conf);
 	if (ret)
 		goto bad;
+	pthread_mutex_init(&set->conns_lock, NULL);
 	pthread_mutex_init(&set->events_lock, NULL);
 	pthread_cond_init(&set->events_threads_cond, NULL);
+	set->conns=g_queue_new();
 	set->event_conns=g_queue_new();
 	set->private = (set_data != NULL) ? set_data : set;
 	ret=selfpipe_create(&set->shutdown_pipe);

@@ -39,6 +39,9 @@ struct mrpc_conn_set {
 	struct selfpipe *events_notify_pipe;
 	pthread_mutex_t events_lock;
 
+	GQueue *conns;
+	pthread_mutex_t conns_lock;
+
 	struct pollset *pollset;
 	struct selfpipe *shutdown_pipe;
 	pthread_t thread;
@@ -95,6 +98,7 @@ enum shutdown_flags {
 
 struct mrpc_connection {
 	struct mrpc_conn_set *set;
+	GList *lh_conns;
 	int fd;
 	void *private;
 
