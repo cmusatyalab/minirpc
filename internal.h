@@ -40,6 +40,7 @@ struct mrpc_conn_set {
 	pthread_mutex_t events_lock;
 
 	GQueue *conns;
+	GQueue *listeners;
 	pthread_mutex_t conns_lock;
 
 	struct pollset *pollset;
@@ -134,6 +135,10 @@ struct mrpc_connection {
 	unsigned plugged_user;
 
 	gint next_sequence;  /* atomic operations only */
+};
+
+struct mrpc_listener {
+	int fd;
 };
 
 /* connection.c */

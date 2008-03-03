@@ -514,6 +514,7 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 {
 	struct addrinfo *ai;
 	struct addrinfo *cur;
+	struct mrpc_listener *lnr;
 	int fd;
 	int count=0;
 	int ret;
@@ -555,20 +556,24 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 			close(fd);
 			continue;
 		}
+		if (getsockname(fd, cur->ai_addr, &cur->ai_addrlen)) {
+			ret=-errno;
+			close(fd);
+			continue;
+		}
 		ret=pollset_add(set->pollset, fd, POLLSET_READABLE,
 					set, try_accept, NULL, NULL, NULL);
 		if (ret) {
 			close(fd);
 			continue;
 		}
+		lnr=g_slice_new0(struct mrpc_listener);
+		lnr->fd=fd;
+		pthread_mutex_lock(&set->conns_lock);
+		g_queue_push_tail(set->listeners, lnr);
+		pthread_mutex_unlock(&set->conns_lock);
 		count++;
 		if (!*port) {
-			if (getsockname(fd, cur->ai_addr, &cur->ai_addrlen)) {
-				ret=-errno;
-				pollset_del(set->pollset, fd);
-				close(fd);
-				continue;
-			}
 			if (cur->ai_family == AF_INET)
 				*port=ntohs(((struct sockaddr_in *)
 						cur->ai_addr)->sin_port);
@@ -585,6 +590,19 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 	if (count == 0)
 		return ret;
 	return 0;
+}
+
+exported void mrpc_listen_close(struct mrpc_conn_set *set)
+{
+	struct mrpc_listener *lnr;
+
+	pthread_mutex_lock(&set->conns_lock);
+	while ((lnr=g_queue_pop_head(set->listeners)) != NULL) {
+		pollset_del(set->pollset, lnr->fd);
+		close(lnr->fd);
+		g_slice_free(struct mrpc_listener, lnr);
+	}
+	pthread_mutex_unlock(&set->conns_lock);
 }
 
 /* The provided @fd must be a connected socket (i.e., not a listener).
@@ -682,6 +700,7 @@ exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 	pthread_mutex_init(&set->events_lock, NULL);
 	pthread_cond_init(&set->events_threads_cond, NULL);
 	set->conns=g_queue_new();
+	set->listeners=g_queue_new();
 	set->event_conns=g_queue_new();
 	set->private = (set_data != NULL) ? set_data : set;
 	ret=selfpipe_create(&set->shutdown_pipe);
@@ -718,6 +737,7 @@ bad:
 /* XXX drops lots of stuff on the floor */
 exported void mrpc_conn_set_free(struct mrpc_conn_set *set)
 {
+	mrpc_listen_close(set);
 	selfpipe_set(set->shutdown_pipe);
 	pthread_mutex_lock(&set->events_lock);
 	while (set->events_threads)

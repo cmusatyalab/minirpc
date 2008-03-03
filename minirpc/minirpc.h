@@ -62,6 +62,7 @@ int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 int mrpc_bind_fd(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 			int fd, void *data);
 int mrpc_conn_close(struct mrpc_connection *conn);
+void mrpc_listen_close(struct mrpc_conn_set *set);
 
 /* event.c */
 int mrpc_get_event_fd(struct mrpc_conn_set *set);
