@@ -17,6 +17,8 @@
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
+static __thread struct mrpc_connection *active_conn;
+
 struct mrpc_event *mrpc_alloc_event(struct mrpc_connection *conn,
 			enum event_type type)
 {
@@ -310,6 +312,9 @@ static void dispatch_event(struct mrpc_event *event)
 	int squash;
 	enum mrpc_disc_reason reason;
 
+	assert(conn != NULL);
+	assert(active_conn == NULL);
+	active_conn=conn;
 	pthread_mutex_lock(&conn->shutdown_lock);
 	squash=conn->shutdown_flags & SHUT_SQUASH_EVENTS;
 	reason=conn->disc_reason;
@@ -320,7 +325,7 @@ static void dispatch_event(struct mrpc_event *event)
 		case EVENT_REQUEST:
 		case EVENT_IOERR:
 			destroy_event(event);
-			return;
+			goto out;
 		case EVENT_REPLY:
 			event->msg->hdr.status=MINIRPC_NETWORK_FAILURE;
 			break;
@@ -366,6 +371,15 @@ static void dispatch_event(struct mrpc_event *event)
 	if (event->type != EVENT_DISCONNECT)
 		mrpc_unplug_event(event);
 	g_slice_free(struct mrpc_event, event);
+out:
+	assert(conn != NULL);
+	assert(active_conn == conn);
+	active_conn=NULL;
+}
+
+int thread_on_conn(struct mrpc_connection *conn)
+{
+	return (active_conn == conn);
 }
 
 void destroy_events(struct mrpc_connection *conn)

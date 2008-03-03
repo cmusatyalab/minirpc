@@ -151,6 +151,7 @@ struct mrpc_event *mrpc_alloc_message_event(struct mrpc_message *msg,
 			enum event_type type);
 void queue_event(struct mrpc_event *event);
 void destroy_events(struct mrpc_connection *conn);
+int thread_on_conn(struct mrpc_connection *conn);
 
 /* pollset.c */
 typedef unsigned poll_flags_t;
