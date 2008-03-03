@@ -48,5 +48,7 @@ int main(int argc, char **argv)
 	trigger_callback_sync(conn);
 	invalidate_sync(conn);
 	mrpc_conn_close(conn);
+	mrpc_conn_set_free(cset);
+	mrpc_conn_set_free(sset);
 	return 0;
 }

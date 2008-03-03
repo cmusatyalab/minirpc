@@ -28,6 +28,23 @@ static int setsockoptval(int fd, int level, int optname, int value)
 	return setsockopt(fd, level, optname, &value, sizeof(value));
 }
 
+static void conn_set_get(struct mrpc_conn_set *set)
+{
+	pthread_mutex_lock(&set->conns_lock);
+	assert(set->refs > 0);
+	set->refs++;
+	pthread_mutex_unlock(&set->conns_lock);
+}
+
+static void conn_set_put(struct mrpc_conn_set *set)
+{
+	pthread_mutex_lock(&set->conns_lock);
+	set->refs--;
+	if (!set->refs)
+		pthread_cond_broadcast(&set->refs_cond);
+	pthread_mutex_unlock(&set->conns_lock);
+}
+
 static void conn_kill(struct mrpc_connection *conn,
 			enum mrpc_disc_reason reason);
 static void try_close_fd(struct mrpc_connection *conn);
@@ -267,6 +284,7 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 	ret=set_nonblock(fd);
 	if (ret)
 		return ret;
+	conn_set_get(set);
 	conn=g_slice_new0(struct mrpc_connection);
 	conn->send_msgs=g_queue_new();
 	conn->events=g_queue_new();
@@ -290,6 +308,7 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 				try_read_conn, try_write_conn, conn_hangup,
 				conn_error);
 	if (ret) {
+		conn_set_put(set);
 		g_hash_table_destroy(conn->pending_replies);
 		g_queue_free(conn->events);
 		g_queue_free(conn->send_msgs);
@@ -350,7 +369,7 @@ static void conn_kill(struct mrpc_connection *conn,
 	try_close_fd(conn);
 }
 
-exported int mrpc_conn_close(struct mrpc_connection *conn)
+static int _mrpc_conn_close(struct mrpc_connection *conn, int wait)
 {
 	pthread_mutex_lock(&conn->shutdown_lock);
 	conn_start_shutdown(conn, MRPC_DISC_USER);
@@ -363,12 +382,18 @@ exported int mrpc_conn_close(struct mrpc_connection *conn)
 	if (!(conn->shutdown_flags & SHUT_FD_CLOSED))
 		pollset_modify(conn->set->pollset, conn->fd,
 					POLLSET_READABLE | POLLSET_WRITABLE);
-	while (conn->running_events != 0 && !(conn->running_events == 1 &&
+	while (wait && conn->running_events != 0 &&
+				!(conn->running_events == 1 &&
 				thread_on_conn(conn)))
 		pthread_cond_wait(&conn->event_completion_cond,
 					&conn->shutdown_lock);
 	pthread_mutex_unlock(&conn->shutdown_lock);
 	return 0;
+}
+
+exported int mrpc_conn_close(struct mrpc_connection *conn)
+{
+	return _mrpc_conn_close(conn, 1);
 }
 
 void mrpc_conn_free(struct mrpc_connection *conn)
@@ -387,6 +412,7 @@ void mrpc_conn_free(struct mrpc_connection *conn)
 	while ((msg=g_queue_pop_head(conn->send_msgs)) != NULL)
 		mrpc_free_message(msg);
 	g_queue_free(conn->send_msgs);
+	conn_set_put(conn->set);
 	g_slice_free(struct mrpc_connection, conn);
 }
 
@@ -698,7 +724,9 @@ exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
 		goto bad;
 	pthread_mutex_init(&set->conns_lock, NULL);
 	pthread_mutex_init(&set->events_lock, NULL);
+	pthread_cond_init(&set->refs_cond, NULL);
 	pthread_cond_init(&set->events_threads_cond, NULL);
+	set->refs=1;
 	set->conns=g_queue_new();
 	set->listeners=g_queue_new();
 	set->event_conns=g_queue_new();
@@ -734,10 +762,20 @@ bad:
 	return ret;
 }
 
-/* XXX drops lots of stuff on the floor */
+static void close_elem(void *elem, void *data)
+{
+	_mrpc_conn_close(elem, 0);
+}
+
 exported void mrpc_conn_set_free(struct mrpc_conn_set *set)
 {
 	mrpc_listen_close(set);
+	pthread_mutex_lock(&set->conns_lock);
+	g_queue_foreach(set->conns, close_elem, NULL);
+	set->refs--;
+	while (set->refs)
+		pthread_cond_wait(&set->refs_cond, &set->conns_lock);
+	pthread_mutex_unlock(&set->conns_lock);
 	selfpipe_set(set->shutdown_pipe);
 	pthread_mutex_lock(&set->events_lock);
 	while (set->events_threads)
@@ -747,5 +785,8 @@ exported void mrpc_conn_set_free(struct mrpc_conn_set *set)
 	pollset_free(set->pollset);
 	selfpipe_destroy(set->events_notify_pipe);
 	selfpipe_destroy(set->shutdown_pipe);
+	g_queue_free(set->conns);
+	g_queue_free(set->listeners);
+	g_queue_free(set->event_conns);
 	g_slice_free(struct mrpc_conn_set, set);
 }

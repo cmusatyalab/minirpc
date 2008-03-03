@@ -39,7 +39,8 @@ int main(int argc, char **argv)
 		die("Couldn't allocate conn set");
 	mrpc_start_dispatch_thread(cset);
 
-	for (i=0; i<1000; i++) {
+	/* Try repeated connections from the same conn set */
+	for (i=0; i<500; i++) {
 		ret=mrpc_connect(&conn, cset, "localhost", port, NULL);
 		if (ret)
 			die("%s in mrpc_connect() on iteration %d",
@@ -48,5 +49,23 @@ int main(int argc, char **argv)
 		sync_client_run(conn);
 		mrpc_conn_close(conn);
 	}
+	mrpc_conn_set_free(cset);
+
+	/* Try repeated connections from different conn sets */
+	for (i=0; i<500; i++) {
+		if (mrpc_conn_set_alloc(&cset, &client_config, NULL))
+			die("Couldn't allocate conn set");
+		mrpc_start_dispatch_thread(cset);
+
+		ret=mrpc_connect(&conn, cset, "localhost", port, NULL);
+		if (ret)
+			die("%s in mrpc_connect() on iteration %d",
+						strerror(-ret), i);
+		sync_client_set_ops(conn);
+		sync_client_run(conn);
+		mrpc_conn_set_free(cset);
+	}
+
+	mrpc_conn_set_free(sset);
 	return 0;
 }

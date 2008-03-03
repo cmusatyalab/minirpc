@@ -39,6 +39,8 @@ struct mrpc_conn_set {
 	struct selfpipe *events_notify_pipe;
 	pthread_mutex_t events_lock;
 
+	int refs;
+	pthread_cond_t refs_cond;
 	GQueue *conns;
 	GQueue *listeners;
 	pthread_mutex_t conns_lock;
