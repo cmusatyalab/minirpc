@@ -649,15 +649,15 @@ exported int mrpc_bind_fd(struct mrpc_connection **new_conn,
 	return 0;
 }
 
-exported mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
+exported int mrpc_conn_set_operations(struct mrpc_connection *conn,
 			struct mrpc_protocol *protocol, const void *ops)
 {
 	if (conn->set->conf.protocol != protocol)
-		return MINIRPC_INVALID_ARGUMENT;
+		return -EINVAL;
 	pthread_mutex_lock(&conn->operations_lock);
 	conn->operations=ops;
 	pthread_mutex_unlock(&conn->operations_lock);
-	return MINIRPC_OK;
+	return 0;
 }
 
 static void *listener(void *data)

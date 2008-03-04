@@ -47,7 +47,7 @@ typedef void (short_reply_callback_fn)(void *conn_private, void *msg_private,
 			struct mrpc_message *reply, mrpc_status_t status);
 
 /* connection.c */
-mrpc_status_t mrpc_conn_set_operations(struct mrpc_connection *conn,
+int mrpc_conn_set_operations(struct mrpc_connection *conn,
 			struct mrpc_protocol *protocol, const void *ops);
 
 /* message.c */

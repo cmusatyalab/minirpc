@@ -134,7 +134,7 @@ static const struct proto_client_operations ops = {
 
 void sync_client_set_ops(struct mrpc_connection *conn)
 {
-	mrpc_status_t ret;
+	int ret;
 
 	ret=proto_client_set_operations(conn, &ops);
 	if (ret)

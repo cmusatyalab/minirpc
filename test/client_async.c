@@ -235,7 +235,7 @@ void async_client_finish(void)
 
 void async_client_set_ops(struct mrpc_connection *conn)
 {
-	mrpc_status_t ret;
+	int ret;
 
 	ret=proto_client_set_operations(conn, &ops);
 	if (ret)
