@@ -7,3 +7,4 @@ proto_xdr.h
 libcommon.a
 test_*
 !test_*.[ch]
+runtest.sh

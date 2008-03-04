@@ -33,6 +33,22 @@ if test z$RPCGEN = z ; then
 	AC_MSG_ERROR([could not locate rpcgen])
 fi
 
+AC_ARG_ENABLE([valgrind], [AS_HELP_STRING([--enable-valgrind],
+			[run test suite under Valgrind [default=no]])],,
+			[enable_valgrind=no])
+AC_ARG_VAR([VALGRIND], [path to Valgrind])
+AC_MSG_CHECKING([whether to use Valgrind])
+if test z$enable_valgrind = zyes ; then
+	AC_MSG_RESULT([yes])
+	AC_PATH_PROG([VALGRIND], [valgrind])
+	if test z$VALGRIND = z ; then
+		AC_MSG_ERROR([could not locate valgrind])
+	fi
+else
+	AC_MSG_RESULT([no])
+fi
+AC_SUBST([enable_valgrind])
+
 # Checks for libraries.
 PKG_CHECK_MODULES([GLIB], [glib-2.0])
 PKG_CHECK_MODULES([GTHREAD], [gthread-2.0])
