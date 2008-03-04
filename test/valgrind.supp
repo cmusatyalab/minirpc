@@ -1,0 +1,43 @@
+{
+   __pthread_manager cond jump
+   Memcheck:Cond
+   fun:__pthread_manager
+   fun:clone
+   obj:*
+   obj:*
+   obj:*
+   obj:*
+}
+
+{
+   clone() uninitialized bytes
+   Memcheck:Param
+   clone(child_tidptr)
+   fun:clone
+   fun:clone
+   obj:*
+   obj:*
+   obj:*
+   obj:*
+}
+
+{
+   allocate_dtv() possible leak
+   Memcheck:Leak
+   fun:*calloc
+   fun:allocate_dtv
+   fun:_dl_allocate_tls_storage
+   fun:_dl_allocate_tls
+   fun:__pthread_initialize_manager
+   fun:pthread_create@@GLIBC_2.1
+}
+
+{
+   _dl_allocate_tls_storage() possible leak
+   Memcheck:Leak
+   fun:*memalign
+   fun:_dl_allocate_tls_storage
+   fun:_dl_allocate_tls
+   fun:__pthread_initialize_manager
+   fun:pthread_create@@GLIBC_2.1
+}
