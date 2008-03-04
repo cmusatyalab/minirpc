@@ -311,6 +311,7 @@ static void dispatch_event(struct mrpc_event *event)
 	struct mrpc_event *nevent;
 	int squash;
 	enum mrpc_disc_reason reason;
+	enum event_type type=event->type;
 
 	assert(conn != NULL);
 	assert(active_conn == NULL);
@@ -318,12 +319,12 @@ static void dispatch_event(struct mrpc_event *event)
 	pthread_mutex_lock(&conn->shutdown_lock);
 	squash=conn->shutdown_flags & SHUT_SQUASH_EVENTS;
 	reason=conn->disc_reason;
-	if (!squash)
+	if (!squash && type != EVENT_DISCONNECT)
 		conn->running_events++;
 	pthread_mutex_unlock(&conn->shutdown_lock);
 
 	if (squash) {
-		switch (event->type) {
+		switch (type) {
 		case EVENT_REQUEST:
 		case EVENT_IOERR:
 			destroy_event(event);
@@ -336,7 +337,7 @@ static void dispatch_event(struct mrpc_event *event)
 		}
 	}
 
-	switch (event->type) {
+	switch (type) {
 	case EVENT_ACCEPT:
 		assert(conf->accept != NULL);
 		conn->private=conf->accept(conn->set->private, conn,
@@ -370,11 +371,11 @@ static void dispatch_event(struct mrpc_event *event)
 	default:
 		assert(0);
 	}
-	if (event->type != EVENT_DISCONNECT)
+	if (type != EVENT_DISCONNECT)
 		mrpc_unplug_event(event);
 	g_slice_free(struct mrpc_event, event);
 out:
-	if (!squash) {
+	if (!squash && type != EVENT_DISCONNECT) {
 		pthread_mutex_lock(&conn->shutdown_lock);
 		conn->running_events--;
 		pthread_mutex_unlock(&conn->shutdown_lock);
