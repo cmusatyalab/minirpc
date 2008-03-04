@@ -710,7 +710,7 @@ static void pipe_error(void *data, int fd)
 	assert(0);
 }
 
-exported int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
+exported int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
 			const struct mrpc_config *config, void *set_data)
 {
 	struct mrpc_conn_set *set;
@@ -768,7 +768,7 @@ static void close_elem(void *elem, void *data)
 	_mrpc_conn_close(elem, 0);
 }
 
-exported void mrpc_conn_set_free(struct mrpc_conn_set *set)
+exported void mrpc_conn_set_destroy(struct mrpc_conn_set *set)
 {
 	mrpc_listen_close(set);
 	pthread_mutex_lock(&set->conns_lock);

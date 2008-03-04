@@ -41,7 +41,7 @@ struct mrpc_conn_set *spawn_server(int *listen_port,
 	int i;
 	int bound;
 
-	if (mrpc_conn_set_alloc(&set, config, set_data))
+	if (mrpc_conn_set_create(&set, config, set_data))
 		die("Couldn't allocate connection set");
 	ret=mrpc_listen(set, "localhost", &port, &bound);
 	if (ret)

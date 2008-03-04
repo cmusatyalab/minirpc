@@ -35,8 +35,8 @@ int main(int argc, char **argv)
 		die("Couldn't initialize minirpc");
 	sset=spawn_server(&port, &server_config, NULL, 1);
 
-	if (mrpc_conn_set_alloc(&cset, &client_config, NULL))
-		die("Couldn't allocate conn set");
+	if (mrpc_conn_set_create(&cset, &client_config, NULL))
+		die("Couldn't create conn set");
 	mrpc_start_dispatch_thread(cset);
 
 	/* Try repeated connections from the same conn set */
@@ -49,13 +49,13 @@ int main(int argc, char **argv)
 		sync_client_run(conn);
 		mrpc_conn_close(conn);
 	}
-	mrpc_conn_set_free(cset);
+	mrpc_conn_set_destroy(cset);
 	expect_disconnects(500, -1, 0);
 
 	/* Try repeated connections from different conn sets */
 	for (i=0; i<500; i++) {
-		if (mrpc_conn_set_alloc(&cset, &client_config, NULL))
-			die("Couldn't allocate conn set");
+		if (mrpc_conn_set_create(&cset, &client_config, NULL))
+			die("Couldn't create conn set");
 		mrpc_start_dispatch_thread(cset);
 
 		ret=mrpc_connect(&conn, cset, "localhost", port, NULL);
@@ -64,10 +64,10 @@ int main(int argc, char **argv)
 						strerror(-ret), i);
 		sync_client_set_ops(conn);
 		sync_client_run(conn);
-		mrpc_conn_set_free(cset);
+		mrpc_conn_set_destroy(cset);
 	}
 
-	mrpc_conn_set_free(sset);
+	mrpc_conn_set_destroy(sset);
 	expect_disconnects(1000, 1000, 0);
 	return 0;
 }

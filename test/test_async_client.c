@@ -36,7 +36,7 @@ int main(int argc, char **argv)
 	async_client_init();
 	sset=spawn_server(&port, &server_config, NULL, 1);
 
-	if (mrpc_conn_set_alloc(&cset, &client_config, NULL))
+	if (mrpc_conn_set_create(&cset, &client_config, NULL))
 		die("Couldn't allocate conn set");
 
 	ret=mrpc_connect(&conn, cset, "localhost", port, NULL);
@@ -52,8 +52,8 @@ int main(int argc, char **argv)
 	   more callbacks than it should */
 	sleep(1);
 	mrpc_conn_close(conn);
-	mrpc_conn_set_free(cset);
-	mrpc_conn_set_free(sset);
+	mrpc_conn_set_destroy(cset);
+	mrpc_conn_set_destroy(sset);
 	expect_disconnects(1, 1, 0);
 	return 0;
 }

@@ -52,9 +52,9 @@ struct mrpc_config {
 int mrpc_init(void);
 
 /* connection.c */
-int mrpc_conn_set_alloc(struct mrpc_conn_set **new_set,
+int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
 			const struct mrpc_config *config, void *set_data);
-void mrpc_conn_set_free(struct mrpc_conn_set *set);
+void mrpc_conn_set_destroy(struct mrpc_conn_set *set);
 int mrpc_connect(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 			const char *host, unsigned port, void *data);
 int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
