@@ -114,51 +114,51 @@ static struct mrpc_event *unqueue_event(struct mrpc_conn_set *set)
 	return event;
 }
 
-static mrpc_status_t _mrpc_unplug_event(struct mrpc_connection *conn,
+static int _mrpc_unplug_event(struct mrpc_connection *conn,
 			struct mrpc_event *event)
 {
 	pthread_mutex_lock(&conn->set->events_lock);
 	if (conn->plugged_event == NULL || conn->plugged_event != event) {
 		pthread_mutex_unlock(&conn->set->events_lock);
-		return MINIRPC_INVALID_ARGUMENT;
+		return -EINVAL;
 	}
 	assert(conn->lh_event_conns == NULL);
 	conn->plugged_event=NULL;
 	try_queue_conn(conn);
 	pthread_mutex_unlock(&conn->set->events_lock);
-	return MINIRPC_OK;
+	return 0;
 }
 
-static mrpc_status_t mrpc_unplug_event(struct mrpc_event *event)
+static int mrpc_unplug_event(struct mrpc_event *event)
 {
 	return _mrpc_unplug_event(event->conn, event);
 }
 
-exported mrpc_status_t mrpc_unplug_message(struct mrpc_message *msg)
+exported int mrpc_unplug_message(struct mrpc_message *msg)
 {
 	return _mrpc_unplug_event(msg->conn, msg->event);
 }
 
 /* Will not affect events already in processing */
-exported mrpc_status_t mrpc_plug_conn(struct mrpc_connection *conn)
+exported int mrpc_plug_conn(struct mrpc_connection *conn)
 {
 	pthread_mutex_lock(&conn->set->events_lock);
 	conn->plugged_user++;
 	try_unqueue_conn(conn);
 	pthread_mutex_unlock(&conn->set->events_lock);
-	return MINIRPC_OK;
+	return 0;
 }
 
-exported mrpc_status_t mrpc_unplug_conn(struct mrpc_connection *conn)
+exported int mrpc_unplug_conn(struct mrpc_connection *conn)
 {
-	mrpc_status_t ret=MINIRPC_OK;
+	int ret=0;
 
 	pthread_mutex_lock(&conn->set->events_lock);
 	if (conn->plugged_user) {
 		conn->plugged_user--;
 		try_queue_conn(conn);
 	} else {
-		ret=MINIRPC_INVALID_ARGUMENT;
+		ret=-EINVAL;
 	}
 	pthread_mutex_unlock(&conn->set->events_lock);
 	return ret;
