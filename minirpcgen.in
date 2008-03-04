@@ -685,7 +685,6 @@ sub genstubs {
 			parseErr($file, $line, "Procedures in ${role}msgs " .
 						"section cannot return a value")
 				if $num < 0 && $ret ne "void";
-			print "$func($arg, $ret) = $num\n";
 		}
 	}
 
@@ -797,11 +796,9 @@ sub parseFile {
 				next;
 			}
 			if (/^\s*(struct|enum)\s+$sym_re\s+{/o) {
-				print "Found $1 $2\n";
 				$types{$2} = 1;
 			}
 			if (/^\s*typedef\s+$sym_re\s+$type_re[<\[]?/o) {
-				print "Found typedef $2\n";
 				$types{$2} = 1;
 			}
 		} else {
