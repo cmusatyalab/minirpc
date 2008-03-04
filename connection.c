@@ -405,6 +405,7 @@ void mrpc_conn_free(struct mrpc_connection *conn)
 	pthread_mutex_unlock(&conn->set->conns_lock);
 	destroy_events(conn);
 	g_queue_free(conn->events);
+	g_hash_table_destroy(conn->pending_replies);
 	if (conn->send_msg)
 		mrpc_free_message(conn->send_msg);
 	if (conn->recv_msg)
