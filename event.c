@@ -279,11 +279,12 @@ static void run_reply_callback(struct mrpc_event *event)
 	long_reply_callback_fn *longfn=event->callback;
 	short_reply_callback_fn *shortfn=event->callback;
 	void *out=NULL;
+	xdrproc_t type;
 	unsigned size;
 	mrpc_status_t ret;
 
 	ret=reply->conn->set->conf.protocol->sender_reply_info(reply->hdr.cmd,
-				NULL, &size);
+				&type, &size);
 	if (ret) {
 		/* XXX */
 		mrpc_free_message(reply);
@@ -301,6 +302,7 @@ static void run_reply_callback(struct mrpc_event *event)
 		longfn(reply->conn->private, event->private, reply, ret, out);
 	else
 		shortfn(reply->conn->private, event->private, reply, ret);
+	mrpc_free_argument(type, out);
 	mrpc_free_message(reply);
 }
 
