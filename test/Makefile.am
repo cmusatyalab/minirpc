@@ -1,6 +1,6 @@
-AM_CPPFLAGS = -I..
+AM_CPPFLAGS = -I$(top_srcdir)
 AM_CFLAGS = -Wall -Wstrict-prototypes
-AM_LDFLAGS = -L.. -lminirpc -lpthread
+AM_LDFLAGS = -L$(top_builddir) -lminirpc -lpthread
 
 GEN_C = proto_minirpc.c proto_xdr.c
 GEN_H = proto_minirpc.h proto_client.h proto_server.h proto_xdr.h
@@ -29,8 +29,8 @@ check_PROGRAMS += test_async_client
 check_PROGRAMS += test_async_both
 check_PROGRAMS += test_sequential_clients
 
-TESTS_ENVIRONMENT = $(srcdir)/runtest.sh
+TESTS_ENVIRONMENT = $(builddir)/runtest.sh
 TESTS = $(check_PROGRAMS)
 
-%_minirpc.c %_minirpc.h %_client.h %_server.h %_xdr.c %_xdr.h: %.mx ../minirpcgen.in
-	../minirpcgen -o $(<:%.mx=%) $(filter-out %.in,$^)
+%_minirpc.c %_minirpc.h %_client.h %_server.h %_xdr.c %_xdr.h: %.mx $(top_builddir)/minirpcgen
+	$(top_builddir)/minirpcgen -o $(<:%.mx=%) $(filter-out %minirpcgen,$^)
