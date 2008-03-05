@@ -404,6 +404,21 @@ void destroy_events(struct mrpc_connection *conn)
 	pthread_mutex_unlock(&conn->set->events_lock);
 }
 
+exported void mrpc_dispatcher_add(struct mrpc_conn_set *set)
+{
+	pthread_mutex_lock(&set->events_lock);
+	set->events_threads++;
+	pthread_mutex_unlock(&set->events_lock);
+}
+
+exported void mrpc_dispatcher_remove(struct mrpc_conn_set *set)
+{
+	pthread_mutex_lock(&set->events_lock);
+	set->events_threads--;
+	pthread_cond_broadcast(&set->events_threads_cond);
+	pthread_mutex_unlock(&set->events_lock);
+}
+
 exported int mrpc_dispatch_one(struct mrpc_conn_set *set)
 {
 	struct mrpc_event *event;
@@ -411,15 +426,20 @@ exported int mrpc_dispatch_one(struct mrpc_conn_set *set)
 	event=unqueue_event(set);
 	if (event != NULL)
 		dispatch_event(event);
-	return (event != NULL);
+	if (selfpipe_is_set(set->shutdown_pipe))
+		return -ESHUTDOWN;
+	else if (event)
+		return 0;
+	else
+		return -EAGAIN;
 }
 
 exported int mrpc_dispatch_all(struct mrpc_conn_set *set)
 {
-	int i;
+	int ret;
 
-	for (i=0; mrpc_dispatch_one(set); i++);
-	return i;
+	while (!(ret=mrpc_dispatch_one(set)));
+	return ret;
 }
 
 exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
@@ -428,14 +448,9 @@ exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 	struct mrpc_event *event;
 	int ret;
 
-	pthread_mutex_lock(&set->events_lock);
-	set->events_threads++;
-	pthread_cond_broadcast(&set->events_threads_cond);
-	pthread_mutex_unlock(&set->events_lock);
-
 	ret=pollset_alloc(&pset);
 	if (ret)
-		goto out;
+		return ret;
 	ret=pollset_add(pset, selfpipe_fd(set->events_notify_pipe),
 				POLLSET_READABLE, NULL, NULL, NULL, NULL,
 				NULL);
@@ -457,21 +472,20 @@ exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 			dispatch_event(event);
 		}
 	}
-	ret=0;
+	ret=-ESHUTDOWN;
 
 out:
 	pollset_free(pset);
-	pthread_mutex_lock(&set->events_lock);
-	set->events_threads--;
-	pthread_cond_broadcast(&set->events_threads_cond);
-	pthread_mutex_unlock(&set->events_lock);
 	return ret;
 }
 
 static void *dispatch_thread(void *data)
 {
+	struct mrpc_conn_set *set=data;
 	block_signals();
-	mrpc_dispatch_loop(data);
+	mrpc_dispatcher_add(set);
+	mrpc_dispatch_loop(set);
+	mrpc_dispatcher_remove(set);
 	return NULL;
 }
 

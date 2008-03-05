@@ -66,6 +66,8 @@ void mrpc_listen_close(struct mrpc_conn_set *set);
 
 /* event.c */
 int mrpc_get_event_fd(struct mrpc_conn_set *set);
+void mrpc_dispatcher_add(struct mrpc_conn_set *set);
+void mrpc_dispatcher_remove(struct mrpc_conn_set *set);
 int mrpc_dispatch_one(struct mrpc_conn_set *set);
 int mrpc_dispatch_all(struct mrpc_conn_set *set);
 int mrpc_dispatch_loop(struct mrpc_conn_set *set);
