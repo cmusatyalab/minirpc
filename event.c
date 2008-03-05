@@ -419,7 +419,7 @@ exported void mrpc_dispatcher_remove(struct mrpc_conn_set *set)
 	pthread_mutex_unlock(&set->events_lock);
 }
 
-exported int mrpc_dispatch_one(struct mrpc_conn_set *set)
+static int mrpc_dispatch_one(struct mrpc_conn_set *set)
 {
 	struct mrpc_event *event;
 
@@ -434,18 +434,22 @@ exported int mrpc_dispatch_one(struct mrpc_conn_set *set)
 		return -EAGAIN;
 }
 
-exported int mrpc_dispatch_all(struct mrpc_conn_set *set)
+exported int mrpc_dispatch(struct mrpc_conn_set *set, int max)
 {
+	int i;
 	int ret;
 
-	while (!(ret=mrpc_dispatch_one(set)));
-	return ret;
+	for (i=0; i < max || max == 0; i++) {
+		ret=mrpc_dispatch_one(set);
+		if (ret)
+			return ret;
+	}
+	return 0;
 }
 
 exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 {
 	struct pollset *pset;
-	struct mrpc_event *event;
 	int ret;
 
 	ret=pollset_alloc(&pset);
@@ -462,18 +466,16 @@ exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 	if (ret)
 		goto out;
 
-	while (!selfpipe_is_set(set->shutdown_pipe)) {
-		event=unqueue_event(set);
-		if (event == NULL) {
+	while (1) {
+		ret=mrpc_dispatch_one(set);
+		if (ret == -EAGAIN) {
 			ret=pollset_poll(pset);
 			if (ret)
-				goto out;
-		} else {
-			dispatch_event(event);
+				break;
+		} else if (ret) {
+			break;
 		}
 	}
-	ret=-ESHUTDOWN;
-
 out:
 	pollset_free(pset);
 	return ret;
