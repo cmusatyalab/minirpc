@@ -120,7 +120,7 @@ static int _mrpc_unplug_event(struct mrpc_connection *conn,
 	pthread_mutex_lock(&conn->set->events_lock);
 	if (conn->plugged_event == NULL || conn->plugged_event != event) {
 		pthread_mutex_unlock(&conn->set->events_lock);
-		return -EINVAL;
+		return EINVAL;
 	}
 	assert(conn->lh_event_conns == NULL);
 	conn->plugged_event=NULL;
@@ -158,7 +158,7 @@ exported int mrpc_unplug_conn(struct mrpc_connection *conn)
 		conn->plugged_user--;
 		try_queue_conn(conn);
 	} else {
-		ret=-EINVAL;
+		ret=EINVAL;
 	}
 	pthread_mutex_unlock(&conn->set->events_lock);
 	return ret;
@@ -170,15 +170,16 @@ exported int mrpc_unplug_conn(struct mrpc_connection *conn)
    application when the connection set is destroyed.  The application must
    close the fd when done with it.  The application must not read or write
    the fd, only poll on it.  When an event is ready to be processed, the
-   fd will be readable.  Returns -errno on error. */
-exported int mrpc_get_event_fd(struct mrpc_conn_set *set)
+   fd will be readable.  Returns errno on error. */
+exported int mrpc_get_event_fd(struct mrpc_conn_set *set, int *fd)
 {
-	int fd;
+	int res;
 
-	fd=dup(selfpipe_fd(set->events_notify_pipe));
-	if (fd == -1)
-		return -errno;
-	return fd;
+	res=dup(selfpipe_fd(set->events_notify_pipe));
+	if (res == -1)
+		return errno;
+	*fd=res;
+	return 0;
 }
 
 static void fail_request(struct mrpc_message *request, mrpc_status_t err)
@@ -427,11 +428,11 @@ static int mrpc_dispatch_one(struct mrpc_conn_set *set)
 	if (event != NULL)
 		dispatch_event(event);
 	if (selfpipe_is_set(set->shutdown_pipe))
-		return -ESHUTDOWN;
+		return ESHUTDOWN;
 	else if (event)
 		return 0;
 	else
-		return -EAGAIN;
+		return EAGAIN;
 }
 
 exported int mrpc_dispatch(struct mrpc_conn_set *set, int max)
@@ -468,7 +469,7 @@ exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 
 	while (1) {
 		ret=mrpc_dispatch_one(set);
-		if (ret == -EAGAIN) {
+		if (ret == EAGAIN) {
 			ret=pollset_poll(pset);
 			if (ret)
 				break;

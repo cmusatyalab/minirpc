@@ -65,7 +65,7 @@ int mrpc_conn_close(struct mrpc_connection *conn);
 void mrpc_listen_close(struct mrpc_conn_set *set);
 
 /* event.c */
-int mrpc_get_event_fd(struct mrpc_conn_set *set);
+int mrpc_get_event_fd(struct mrpc_conn_set *set, int *fd);
 void mrpc_dispatcher_add(struct mrpc_conn_set *set);
 void mrpc_dispatcher_remove(struct mrpc_conn_set *set);
 int mrpc_dispatch(struct mrpc_conn_set *set, int max);

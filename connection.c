@@ -25,7 +25,9 @@
 
 static int setsockoptval(int fd, int level, int optname, int value)
 {
-	return setsockopt(fd, level, optname, &value, sizeof(value));
+	if (setsockopt(fd, level, optname, &value, sizeof(value)))
+		return errno;
+	return 0;
 }
 
 static void conn_set_get(struct mrpc_conn_set *set)
@@ -322,7 +324,6 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 	*new_conn=conn;
 	return 0;
 }
-/* XXX unregister sock from pollset at pool release */
 
 /* shutdown lock must be held */
 static void conn_start_shutdown(struct mrpc_connection *conn,
@@ -376,7 +377,7 @@ static int _mrpc_conn_close(struct mrpc_connection *conn, int wait)
 	/* Squash event queue */
 	if (conn->shutdown_flags & SHUT_SQUASH_EVENTS) {
 		pthread_mutex_unlock(&conn->shutdown_lock);
-		return -EALREADY;
+		return EALREADY;
 	}
 	conn->shutdown_flags |= SHUT_SQUASH_EVENTS;
 	if (!(conn->shutdown_flags & SHUT_FD_CLOSED))
@@ -437,8 +438,6 @@ static void try_accept(void *data, int listenfd)
 			continue;
 		}
 		event=mrpc_alloc_event(conn, EVENT_ACCEPT);
-		if (event == NULL)
-			/* XXX */;
 		event->addr=g_memdup(&sa, len);
 		event->addrlen=len;
 		queue_event(event);
@@ -457,7 +456,7 @@ static int lookup_addr(struct addrinfo **res, const char *host, unsigned port,
 	};
 
 	if (asprintf(&portstr, "%u", port) == -1)
-		return -ENOMEM;
+		return ENOMEM;
 	if (passive)
 		hints.ai_flags |= AI_PASSIVE;
 	ret=getaddrinfo(host, portstr, &hints, res);
@@ -467,29 +466,29 @@ static int lookup_addr(struct addrinfo **res, const char *host, unsigned port,
 	case 0:
 		return 0;
 	case EAI_ADDRFAMILY:
-		return -EADDRNOTAVAIL;
+		return EADDRNOTAVAIL;
 	case EAI_AGAIN:
-		return -EAGAIN;
+		return EAGAIN;
 	case EAI_BADFLAGS:
-		return -EINVAL;
+		return EINVAL;
 	case EAI_FAIL:
-		return -EIO;
+		return EIO;
 	case EAI_FAMILY:
-		return -EAFNOSUPPORT;
+		return EAFNOSUPPORT;
 	case EAI_MEMORY:
-		return -ENOMEM;
+		return ENOMEM;
 	case EAI_NODATA:
-		return -EIO;
+		return EIO;
 	case EAI_NONAME:
-		return -EIO;
+		return EIO;
 	case EAI_SERVICE:
-		return -EOPNOTSUPP;
+		return EOPNOTSUPP;
 	case EAI_SOCKTYPE:
-		return -ESOCKTNOSUPPORT;
+		return ESOCKTNOSUPPORT;
 	case EAI_SYSTEM:
-		return -errno;
+		return errno;
 	default:
-		return -EIO;
+		return EIO;
 	}
 }
 
@@ -505,21 +504,21 @@ exported int mrpc_connect(struct mrpc_connection **new_conn,
 
 	*new_conn=NULL;
 	if (set->conf.protocol->is_server)
-		return -EINVAL;
+		return EINVAL;
 	ret=lookup_addr(&ai, host, port, 0);
 	if (ret)
 		return ret;
 	if (ai == NULL)
-		return -EIO;
+		return EIO;
 	for (cur=ai; cur != NULL; cur=cur->ai_next) {
 		fd=socket(cur->ai_family, cur->ai_socktype, cur->ai_protocol);
 		if (fd == -1) {
-			ret=-errno;
+			ret=errno;
 			continue;
 		}
 		if (!connect(fd, cur->ai_addr, cur->ai_addrlen))
 			break;
-		ret=-errno;
+		ret=errno;
 		close(fd);
 		fd=-1;
 	}
@@ -549,18 +548,18 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 	if (bound)
 		*bound=0;
 	if (port == NULL || !set->conf.protocol->is_server)
-		return -EINVAL;
+		return EINVAL;
 	ret=lookup_addr(&ai, listenaddr, *port, 1);
 	if (ret)
 		return ret;
 	for (cur=ai; cur != NULL; cur=cur->ai_next) {
 		if (cur->ai_family != AF_INET && cur->ai_family != AF_INET6) {
-			ret=-EPROTONOSUPPORT;
+			ret=EPROTONOSUPPORT;
 			continue;
 		}
 		fd=socket(cur->ai_family, cur->ai_socktype, cur->ai_protocol);
 		if (fd == -1) {
-			ret=-errno;
+			ret=errno;
 			continue;
 		}
 		ret=setsockoptval(fd, SOL_SOCKET, SO_REUSEADDR, 1);
@@ -574,17 +573,17 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 			continue;
 		}
 		if (bind(fd, cur->ai_addr, cur->ai_addrlen)) {
-			ret=-errno;
+			ret=errno;
 			close(fd);
 			continue;
 		}
 		if (listen(fd, set->conf.listen_backlog)) {
-			ret=-errno;
+			ret=errno;
 			close(fd);
 			continue;
 		}
 		if (getsockname(fd, cur->ai_addr, &cur->ai_addrlen)) {
-			ret=-errno;
+			ret=errno;
 			close(fd);
 			continue;
 		}
@@ -653,7 +652,7 @@ exported int mrpc_conn_set_operations(struct mrpc_connection *conn,
 			struct mrpc_protocol *protocol, const void *ops)
 {
 	if (conn->set->conf.protocol != protocol)
-		return -EINVAL;
+		return EINVAL;
 	pthread_mutex_lock(&conn->operations_lock);
 	conn->operations=ops;
 	pthread_mutex_unlock(&conn->operations_lock);
@@ -679,7 +678,7 @@ static int validate_copy_config(const struct mrpc_config *from,
 			struct mrpc_config *to)
 {
 	if (from == NULL || from->protocol == NULL)
-		return -EINVAL;
+		return EINVAL;
 	to->protocol=from->protocol;
 
 	if (from->protocol->is_server) {
@@ -689,12 +688,12 @@ static int validate_copy_config(const struct mrpc_config *from,
 		   exists, so the connecting client will be forever stuck in
 		   PROCEDURE_UNAVAIL limbo. */
 		if (from->accept == NULL)
-			return -EINVAL;
+			return EINVAL;
 	} else {
 		/* The accept method is irrelevant for clients.  Tell the
 		   application if its assumptions are wrong. */
 		if (from->accept != NULL)
-			return -EINVAL;
+			return EINVAL;
 	}
 	to->accept=from->accept;
 	to->disconnect=from->disconnect;
@@ -717,7 +716,7 @@ exported int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
 	int ret;
 
 	if (new_set == NULL)
-		return -EINVAL;
+		return EINVAL;
 	*new_set=NULL;
 	set=g_slice_new0(struct mrpc_conn_set);
 	ret=validate_copy_config(config, &set->conf);

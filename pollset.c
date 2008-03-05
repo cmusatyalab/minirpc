@@ -68,7 +68,7 @@ int pollset_alloc(struct pollset **new)
 	pset->ops = ops_epoll ?: ops_poll;
 again:
 	ret=pset->ops->create(pset);
-	if (ret == -ENOSYS && pset->ops == ops_epoll) {
+	if (ret == ENOSYS && pset->ops == ops_epoll) {
 		pset->ops=ops_poll;
 		goto again;
 	} else if (ret) {
@@ -124,7 +124,7 @@ int pollset_add(struct pollset *pset, int fd, poll_flags_t flags,
 	if (g_hash_table_lookup(pset->members, &pfd->fd) != NULL) {
 		pthread_mutex_unlock(&pset->lock);
 		poll_fd_free(pfd);
-		return -EEXIST;
+		return EEXIST;
 	}
 	g_hash_table_replace(pset->members, &pfd->fd, pfd);
 	ret=pset->ops->add(pset, pfd);
@@ -151,7 +151,7 @@ int pollset_modify(struct pollset *pset, int fd, poll_flags_t flags)
 	}
 	pthread_mutex_unlock(&pset->lock);
 	if (pfd == NULL)
-		return -EBADF;
+		return EBADF;
 	else
 		return ret;
 }
@@ -191,7 +191,7 @@ int pollset_poll(struct pollset *pset)
 	pset->running_serial=pset->serial;
 	pset->running_thread=pthread_self();
 	pthread_mutex_unlock(&pset->lock);
-	while ((ret=pset->ops->poll(pset)) == -EINTR);
+	while ((ret=pset->ops->poll(pset)) == EINTR);
 	pthread_mutex_lock(&pset->lock);
 	pollset_free_dead(pset);
 	pset->running_serial=NOT_RUNNING;

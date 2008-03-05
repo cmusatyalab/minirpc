@@ -31,7 +31,7 @@ int selfpipe_create(struct selfpipe **new)
 	sp=g_slice_new0(struct selfpipe);
 	pthread_mutex_init(&sp->lock, NULL);
 	if (pipe(sp->pipe)) {
-		ret=-errno;
+		ret=errno;
 		goto bad_free;
 	}
 	for (i=0; i < 2; i++) {

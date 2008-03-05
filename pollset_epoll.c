@@ -28,7 +28,7 @@ static int epoll_create_set(struct pollset *pset)
 	pset->impl=g_slice_new0(struct impl_data);
 	pset->impl->fd=epoll_create(8);
 	if (pset->impl->fd == -1) {
-		err=-errno;
+		err=errno;
 		g_slice_free(struct impl_data, pset->impl);
 		return err;
 	}
@@ -85,7 +85,7 @@ static int epoll_poll(struct pollset *pset)
 
 	count=epoll_wait(pset->impl->fd, ev, 16, -1);
 	if (count == -1)
-		return -errno;
+		return errno;
 
 	for (i=0; i<count; i++) {
 		pfd=ev[i].data.ptr;

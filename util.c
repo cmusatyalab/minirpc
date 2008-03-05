@@ -28,9 +28,9 @@ int set_nonblock(int fd)
 
 	flags=fcntl(fd, F_GETFL);
 	if (flags == -1)
-		return -errno;
+		return errno;
 	if (fcntl(fd, F_SETFL, flags | O_NONBLOCK))
-		return -errno;
+		return errno;
 	return 0;
 }
 
@@ -39,6 +39,6 @@ int block_signals(void)
 	sigset_t sigs;
 
 	if (sigfillset(&sigs))
-		return -errno;
+		return errno;
 	return pthread_sigmask(SIG_SETMASK, &sigs, NULL);
 }

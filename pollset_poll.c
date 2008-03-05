@@ -87,7 +87,7 @@ static int poll_poll(struct pollset *pset)
 	if (poll(pt.ev, pt.count, -1) == -1) {
 		g_free(pt.ev);
 		g_free(pt.pfd);
-		return -errno;
+		return errno;
 	}
 
 	for (i=0; i<pt.count; i++) {
