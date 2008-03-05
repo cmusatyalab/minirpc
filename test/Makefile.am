@@ -1,6 +1,6 @@
 AM_CPPFLAGS = -I$(top_srcdir)
 AM_CFLAGS = -Wall -Wstrict-prototypes
-AM_LDFLAGS = -L$(top_builddir) -lminirpc -lpthread
+AM_LDFLAGS = -L$(top_builddir)/lib -lminirpc -lpthread
 
 GEN_C = proto_minirpc.c proto_xdr.c
 GEN_H = proto_minirpc.h proto_client.h proto_server.h proto_xdr.h

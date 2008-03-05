@@ -26,9 +26,5 @@ Makefile.in
 .libs
 .deps
 
-# Generated XDR sources
-minirpc_xdr.c
-minirpc_xdr.h
-
 # Generated programs
 minirpcgen

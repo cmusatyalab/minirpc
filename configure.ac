@@ -15,7 +15,7 @@ AC_PREREQ(2.59)
 AC_INIT([miniRPC], [0.1])
 AM_INIT_AUTOMAKE([foreign])
 AC_COPYRIGHT([Copyright (C) 2007-2008 Carnegie Mellon University])
-AC_CONFIG_SRCDIR([connection.c])
+AC_CONFIG_SRCDIR([lib/connection.c])
 
 # Generating a config.h prevents the introduction of several lines' worth of
 # -D flags on every gcc command line
@@ -65,5 +65,7 @@ CHECK_LINK([for epoll], [AC_LANG_PROGRAM([#include <sys/epoll.h>],
 
 AC_CONFIG_FILES([minirpc.pc
 		Makefile
+		minirpc/Makefile
+		lib/Makefile
 		test/Makefile])
 AC_OUTPUT
