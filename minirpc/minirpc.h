@@ -9,6 +9,11 @@
  * ACCEPTANCE OF THIS AGREEMENT
  */
 
+/**
+ * @file
+ * @brief Common interface to the miniRPC library
+ */
+
 #ifndef MINIRPC_H
 #define MINIRPC_H
 
@@ -20,6 +25,27 @@ struct mrpc_conn_set;
 struct mrpc_connection;
 struct mrpc_message;
 
+/**
+ * @brief Error codes used by the miniRPC protocol
+ * @param	MINIRPC_OK
+ *	Success
+ * @param	MINIRPC_PENDING
+ *	Special return code used by request handlers to indicate that they
+ *	will complete the request asynchronously
+ * @param	MINIRPC_ENCODING_ERR
+ *	XXX
+ * @param	MINIRPC_PROCEDURE_UNAVAIL
+ *	XXX
+ * @param	MINIRPC_INVALID_ARGUMENT
+ *	XXX
+ * @param	MINIRPC_INVALID_PROTOCOL
+ *	XXX
+ * @param	MINIRPC_NETWORK_FAILURE
+ *	The network connection has failed
+ *
+ * - these are only used on the wire
+ * - negative for minirpc errors, positive for your own errors
+ */
 enum mrpc_status_codes {
 	MINIRPC_OK			=  0,
 	MINIRPC_PENDING			= -1,
@@ -29,8 +55,23 @@ enum mrpc_status_codes {
 	MINIRPC_INVALID_PROTOCOL	= -5,
 	MINIRPC_NETWORK_FAILURE		= -6,
 };
+
+/**
+ * @brief Error code return XXX
+ */
 typedef int mrpc_status_t;
 
+/**
+ * @brief Reasons that a connection could have been closed
+ * @param	MRPC_DISC_USER
+ *	The connection was closed with mrpc_conn_close()
+ * @param	MRPC_DISC_CLOSED
+ *	The connection was closed by the remote end
+ * @param	MRPC_DISC_IOERR
+ *	The connection was closed due to an I/O error
+ * @param	MRPC_DISC_DESYNC
+ *	XXX
+ */
 enum mrpc_disc_reason {
 	MRPC_DISC_USER,
 	MRPC_DISC_CLOSED,
@@ -38,7 +79,11 @@ enum mrpc_disc_reason {
 	MRPC_DISC_DESYNC
 };
 
-/** @brief Configuration parameters for a connection set
+/** @defgroup setup Setup
+ * @{ */
+
+/**
+ * @brief Configuration parameters for a connection set
  *
  * Foo.
  */
@@ -52,9 +97,6 @@ struct mrpc_config {
 	unsigned listen_backlog;
 };
 
-/** @defgroup setup Setup
- * @{ */
-
 /**
  * @brief Initialize the miniRPC library
  *
@@ -65,11 +107,14 @@ int mrpc_init(void);
 
 /**
  * @brief Create a connection set
- * @param[out] new_set	The resulting connection set, or NULL on error
- * @param config	The configuration to use.  A copy of the configuration
- *			struct is stored in the connection set, so the
- *			application need not keep it around.
- * @param set_data	An application-specific cookie for this connection set
+ * @param[out]	new_set
+ *	The resulting connection set, or NULL on error
+ * @param	config
+ *	The configuration to use.  A copy of the configuration struct is
+ *	stored in the connection set, so the application need not keep it
+ *	around.
+ * @param	set_data
+ *	An application-specific cookie for this connection set
  * @stdreturn
  *
  * - starts backgorund thread
@@ -80,7 +125,8 @@ int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
 
 /**
  * @brief Destroy a connection set
- * @param set	The set to destroy
+ * @param	set
+ *	The set to destroy
  *
  * - Describe shutdown semantics
  * - Do not call from event handler
@@ -95,11 +141,16 @@ void mrpc_conn_set_destroy(struct mrpc_conn_set *set);
 
 /**
  * @brief Make a new outgoing connection
- * @param[out] new_conn	The resulting connection handle, or NULL on error
- * @param set		The set to associate with this connection
- * @param host		The hostname or address of the remote listener
- * @param port		The TCP port number of the remote listener
- * @param data		An application-specific cookie for this connection
+ * @param[out]	new_conn
+ *	The resulting connection handle, or NULL on error
+ * @param	set
+ *	The set to associate with this connection
+ * @param	host
+ *	The hostname or address of the remote listener
+ * @param	port
+ *	The TCP port number of the remote listener
+ * @param	data
+ *	An application-specific cookie for this connection
  * @stdreturn
  *
  * - list error codes?
@@ -110,10 +161,14 @@ int mrpc_connect(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 			const char *host, unsigned port, void *data);
 /**
  * @brief Start listening for incoming connections
- * @param set		The set to associate with this listener
- * @param listenaddr	The hostname or address to listen on
- * @param[in,out] port	The port number to listen on
- * @param[out] bound	The number of listeners created
+ * @param	set
+ *	The set to associate with this listener
+ * @param	listenaddr
+ *	The hostname or address to listen on
+ * @param[in,out] port
+ *	The port number to listen on
+ * @param[out]	bound
+ *	The number of listeners created
  * @stdreturn
  *
  * - in/out semantics of port
@@ -129,10 +184,14 @@ int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 
 /**
  * @brief Bind an existing file descriptor to a connection set
- * @param[out] new_conn	The resulting connection handle, or NULL on error
- * @param set		The set to associate with this connection
- * @param fd		The file descriptor to bind
- * @param data		An application-specific cookie for this connection
+ * @param[out]	new_conn
+ *	The resulting connection handle, or NULL on error
+ * @param	set
+ *	The set to associate with this connection
+ * @param	fd
+ *	The file descriptor to bind
+ * @param	data
+ *	An application-specific cookie for this connection
  * @stdreturn
  *
  * - must be an active socket, not a listener.  can we test for this in
@@ -144,7 +203,8 @@ int mrpc_bind_fd(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 			int fd, void *data);
 /**
  * @brief Close an existing connection
- * @param conn		The connection to close
+ * @param	conn
+ *	The connection to close
  *
  * - blocking semantics
  * - what the app should not do after the call
@@ -156,7 +216,8 @@ int mrpc_conn_close(struct mrpc_connection *conn);
 
 /**
  * @brief Close all listeners against a connection set
- * @param set		The connection set
+ * @param	set
+ *	The connection set
  *
  * Close all listening sockets associated with the connection set.  The
  * application can use this e.g. while shutting down, to prevent additional
@@ -176,7 +237,8 @@ void mrpc_listen_close(struct mrpc_conn_set *set);
 
 /**
  * @brief Start a dispatcher thread for a connection set
- * @param set		The connection set
+ * @param	set
+ *	The connection set
  * @stdreturn
  *
  * - Thread will persist until conn set is destroyed
@@ -186,8 +248,9 @@ int mrpc_start_dispatch_thread(struct mrpc_conn_set *set);
 
 /**
  * @brief Notify miniRPC that the current thread will dispatch events for this
- *			connection set
- * @param set		The connection set
+ *	connection set
+ * @param	set
+ *	The connection set
  *
  * - When this is required
  */
@@ -195,15 +258,17 @@ void mrpc_dispatcher_add(struct mrpc_conn_set *set);
 
 /**
  * @brief Notify miniRPC that the current thread will no longer dispatch
- *			events for this connection set
- * @param set		The connection set
+ *	events for this connection set
+ * @param	set
+ *	The connection set
  */
 void mrpc_dispatcher_remove(struct mrpc_conn_set *set);
 
 /**
  * @brief Dispatch events from this thread until the connection set is
- *			destroyed
- * @param set		The connection set
+ *	destroyed
+ * @param	set
+ *	The connection set
  *
  * - Return values
  * - Must be within dispatcher_add
@@ -212,10 +277,12 @@ void mrpc_dispatcher_remove(struct mrpc_conn_set *set);
 int mrpc_dispatch_loop(struct mrpc_conn_set *set);
 
 /**
- * @brief Obtain a file descriptor which will be readable when there are events
- *			to process
- * @param set		The connection set
- * @param[out] fd	The file descriptor
+ * @brief Obtain a file descriptor which will be readable when there are
+ *	events to process
+ * @param	set
+ *	The connection set
+ * @param[out]	fd
+ *	The file descriptor
  * @stdreturn
  *
  * - do not read or write the fd
@@ -225,9 +292,10 @@ int mrpc_get_event_fd(struct mrpc_conn_set *set, int *fd);
 
 /**
  * @brief Dispatch events from this thread and then return
- * @param set		The connection set
- * @param max		The maximum number of events to dispatch, or 0 for
- *			no limit
+ * @param	set
+ *	The connection set
+ * @param	max
+ *	The maximum number of events to dispatch, or 0 for no limit
  * @sa mrpc_get_event_fd()
  *
  * Dispatch events until there are no more events to process or until
@@ -240,7 +308,8 @@ int mrpc_dispatch(struct mrpc_conn_set *set, int max);
 
 /**
  * @brief Disable event processing for a connection
- * @param conn		The connection
+ * @param	conn
+ *	The connection
  * @stdreturn
  *
  * - refcounted: recursive calls acceptable
@@ -251,7 +320,8 @@ int mrpc_plug_conn(struct mrpc_connection *conn);
 
 /**
  * @brief Re-enable event processing for a connection
- * @param conn		The connection
+ * @param	conn
+ *	The connection
  * @stdreturn
  *
  * - refcounted
@@ -260,7 +330,8 @@ int mrpc_unplug_conn(struct mrpc_connection *conn);
 
 /**
  * @brief Prevent an event handler from plugging the event queue
- * @param msg		The message handle - XXX
+ * @param	msg
+ *	The message handle - XXX
  *
  * - stdreturn?
  * - explain plugging semantics - one message at a time unless you call this
