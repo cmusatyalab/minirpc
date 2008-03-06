@@ -65,6 +65,7 @@ CHECK_LINK([for epoll], [AC_LANG_PROGRAM([#include <sys/epoll.h>],
 
 AC_CONFIG_FILES([minirpc.pc
 		Makefile
+		doc/Makefile
 		minirpc/Makefile
 		lib/Makefile
 		test/Makefile])

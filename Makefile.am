@@ -4,7 +4,7 @@ CLEANFILES = minirpcgen
 pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = minirpc.pc
 
-SUBDIRS = . minirpc lib test
+SUBDIRS = . minirpc lib doc test
 EXTRA_DIST = LICENSE CHANGES minirpcgen.in
 
 minirpcgen: minirpcgen.in Makefile
