@@ -14,6 +14,9 @@
 
 #include "example_minirpc.h"
 
+/**
+ * @brief The role definition for the example client
+ */
 extern struct mrpc_protocol example_client;
 
 mrpc_status_t example_ChooseColor(struct mrpc_connection *conn,

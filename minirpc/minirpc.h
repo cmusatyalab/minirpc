@@ -28,16 +28,19 @@ struct mrpc_protocol {};
 
 /**
  * @brief An opaque handle to a connection set
+ * @ingroup setup
  */
 struct mrpc_conn_set {};
 
 /**
  * @brief An opaque handle to an open connection
+ * @ingroup conn
  */
 struct mrpc_connection {};
 
 /**
  * @brief An opaque handle to a protocol message
+ * @ingroup event
  */
 struct mrpc_message {};
 #else  /* DOXYGEN */
@@ -106,23 +109,103 @@ enum mrpc_disc_reason {
 	MRPC_DISC_DESYNC
 };
 
-/** @defgroup setup Setup
- * @{ */
-
 /**
  * @brief Configuration parameters for a connection set
- *
- * Foo.
+ * @ingroup setup
  */
 struct mrpc_config {
+	/**
+	 * @brief Protocol role definition for connections in the associated
+	 *		connection set
+	 */
 	const struct mrpc_protocol *protocol;
+
+	/**
+	 * @brief Event callback fired on arrival of a new connection
+	 * @param	set_data
+	 *	The cookie associated with the connection set
+	 * @param	conn
+	 *	The handle to the newly-created connection
+	 * @param	from
+	 *	The address of the remote end of the connection
+	 * @param	from_len
+	 *	The length of the @c from structure
+	 * @return The application-specific cookie to be associated with this
+	 *		connection
+	 *
+	 * This method must be provided if #protocol specifies a server
+	 * role, and must be NULL if it specifies a client.  At minimum,
+	 * the method must set the connection's operations struct using
+	 * the protocol-specific set_operations function; otherwise, no
+	 * incoming messages for the connection will be processed.
+	 *
+	 * @c from is no longer valid after the callback returns.
+	 */
 	void *(*accept)(void *set_data, struct mrpc_connection *conn,
 				struct sockaddr *from, socklen_t from_len);
+
+	/**
+	 * @brief Event callback fired on connection close
+	 * @param	conn_data
+	 *	The cookie associated with the connection
+	 * @param	reason
+	 *	The reason the connection was closed
+	 *
+	 * If non-NULL, this callback is fired when a connection is closed
+	 * for any reason, including when explicitly requested by the
+	 * application (with mrpc_conn_close()).  Once the callback returns,
+	 * the application will not receive further events on this connection
+	 * and should make no further miniRPC calls against it.
+	 */
 	void (*disconnect)(void *conn_data, enum mrpc_disc_reason reason);
+
+	/**
+	 * @brief Event callback fired on I/O error
+	 * @param	conn_data
+	 *	The cookie associated with the connection
+	 * @param	message
+	 *	A string describing the error
+	 *
+	 * If non-NULL, this callback is fired whenever miniRPC encounters
+	 * an I/O error it wishes to report to the application.  @c message
+	 * is in a format suitable for logging.  @c message is no longer valid
+	 * once the callback returns.
+	 */
 	void (*ioerr)(void *conn_data, char *message);
+
+	/**
+	 * @brief Maximum length of a received message payload
+	 *
+	 * The maximum length, in bytes, of an XDR-encoded message received
+	 * from the remote system.  If zero, a default will be used.
+	 * Requests exceeding this threshold will be rejected and
+	 * ::MRPC_ENCODING_ERROR will be returned to the sender.
+	 * Other messages exceeding the threshold will be dropped.
+	 *
+	 * This is intended only as a DoS prevention measure, and should be
+	 * set to a value larger than any legitimate message possible in your
+	 * protocol.
+	 *
+	 * @bug We should wake up the waiter and give them a suitable error
+	 * code.
+	 * @bug We don't actually return an error to the sender
+	 */
 	unsigned msg_max_buf_len;
+
+	/**
+	 * @brief Number of accepted connections that can be waiting in the
+	 *		kernel
+	 *
+	 * The maximum number of connections that can be queued in the kernel
+	 * waiting for accept(); this corresponds to the @c backlog parameter
+	 * to the listen() system call.  If zero, a default will be used.
+	 */
 	unsigned listen_backlog;
 };
+
+
+/** @defgroup setup Setup
+ * @{ */
 
 /**
  * @brief Initialize the miniRPC library
@@ -183,6 +266,7 @@ void mrpc_conn_set_destroy(struct mrpc_conn_set *set);
  * - list error codes?
  * - meaning of host/port NULL
  * - meaning of data==NULL
+ * - can only be called with client role
  */
 int mrpc_connect(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 			const char *host, unsigned port, void *data);
@@ -205,6 +289,7 @@ int mrpc_connect(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
  * - explain return value if one listen operation failed, and put in
  * return field
  * - return semantics of outparams on error
+ * - can only be called with server role
  */
 int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 			unsigned *port, int *bound);
