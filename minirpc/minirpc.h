@@ -20,10 +20,32 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 
+#ifdef DOXYGEN
+/**
+ * @brief An opaque handle to a protocol role definition
+ */
+struct mrpc_protocol {};
+
+/**
+ * @brief An opaque handle to a connection set
+ */
+struct mrpc_conn_set {};
+
+/**
+ * @brief An opaque handle to an open connection
+ */
+struct mrpc_connection {};
+
+/**
+ * @brief An opaque handle to a protocol message
+ */
+struct mrpc_message {};
+#else  /* DOXYGEN */
 struct mrpc_protocol;
 struct mrpc_conn_set;
 struct mrpc_connection;
 struct mrpc_message;
+#endif /* DOXYGEN */
 
 /**
  * @brief Error codes used by the miniRPC protocol
@@ -57,7 +79,12 @@ enum mrpc_status_codes {
 };
 
 /**
- * @brief Error code return XXX
+ * @brief Error code returned by protocol operations
+ *
+ * Protocol-specific request and reply functions return error codes of this
+ * type.  Negative error codes are defined by miniRPC (see
+ * ::mrpc_status_codes), while positive error codes are defined by the
+ * protocol.
  */
 typedef int mrpc_status_t;
 
@@ -299,7 +326,7 @@ int mrpc_get_event_fd(struct mrpc_conn_set *set, int *fd);
  * @sa mrpc_get_event_fd()
  *
  * Dispatch events until there are no more events to process or until
- * \em max events have been processed.
+ * @c max events have been processed.
  *
  * - return semantics
  * - may not be called recursively
