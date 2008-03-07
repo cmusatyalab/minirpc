@@ -3,9 +3,7 @@
 /**
  * @file
  * @brief Client stubs for the example protocol
- * @addtogroup example
- * @{
- * @defgroup example_client Client Stubs
+ * @addtogroup example_client
  * @{
  */
 
@@ -165,7 +163,6 @@ mrpc_status_t example_GetNumColors_async(struct mrpc_connection *conn,
 mrpc_status_t example_CrayonSelected(struct mrpc_connection *conn, Color *in);
 
 /**
- * @}
  * @}
  */
 

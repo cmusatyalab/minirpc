@@ -205,9 +205,7 @@ struct mrpc_config {
 
 
 /**
- * @addtogroup common
- * @{
- * @defgroup setup Initialization and Teardown
+ * @addtogroup setup
  * @{
  */
 
@@ -250,7 +248,7 @@ void mrpc_conn_set_destroy(struct mrpc_conn_set *set);
 
 /**
  * @}
- * @defgroup conn Connection Setup and Teardown
+ * @addtogroup conn
  * @{
  */
 
@@ -349,7 +347,7 @@ void mrpc_listen_close(struct mrpc_conn_set *set);
 
 /**
  * @}
- * @defgroup event Event Processing
+ * @addtogroup event
  * @{
  */
 
@@ -457,7 +455,6 @@ int mrpc_unplug_conn(struct mrpc_connection *conn);
 int mrpc_unplug_message(struct mrpc_message *msg);
 
 /**
- * @}
  * @}
  */
 

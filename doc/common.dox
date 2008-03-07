@@ -1,6 +1,13 @@
 /**
 
-@addtogroup common Protocol-Independent API
+@defgroup common Protocol-Independent API
 @brief The protocol-independent parts of the miniRPC library
+@{
 
+
+@defgroup setup Initialization and Teardown
+@defgroup conn Connection Setup and Teardown
+@defgroup event Event Processing
+@addtogroup common
+@}
 */

@@ -3,9 +3,7 @@
 /**
  * @file
  * @brief Common declarations for the example protocol
- * @addtogroup example
- * @{
- * @defgroup example_common Common Definitions
+ * @addtogroup example_common
  * @{
  */
 
@@ -64,7 +62,6 @@ void free_ColorChoice(ColorChoice *in, int container);
 void free_Count(Count *in, int container);
 
 /**
- * @}
  * @}
  */
 

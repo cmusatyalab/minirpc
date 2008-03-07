@@ -3,9 +3,7 @@
 /**
  * @file
  * @brief Server stubs for the example protocol
- * @addtogroup example
- * @{
- * @defgroup example_server Server Stubs
+ * @addtogroup example_server
  * @{
  */
 
@@ -180,7 +178,6 @@ mrpc_status_t example_GetNumColors_send_async_reply_error(struct mrpc_message *r
 			mrpc_status_t status);
 
 /**
- * @}
  * @}
  */
 

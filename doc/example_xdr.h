@@ -43,10 +43,16 @@ typedef enum Color Color;
  * @brief Generated struct corresponding to ColorChoice XDR type
  */
 struct ColorChoice {
+	/**
+	 * @brief The @c acceptable variable-length array
+	 */
 	struct {
 		u_int acceptable_len;
 		enum Color *acceptable_val;
 	} acceptable;
+	/**
+	 * @brief The @c preferred enum
+	 */
 	enum Color preferred;
 };
 /**
