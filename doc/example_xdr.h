@@ -22,7 +22,9 @@
 extern "C" {
 #endif
 
-
+/**
+ * @brief Generated enum corresponding to Color XDR type
+ */
 enum Color {
 	RED = 0,
 	ORANGE = 1,
@@ -32,8 +34,14 @@ enum Color {
 	INDIGO = 5,
 	VIOLET = 6,
 };
+/**
+ * @brief Generated typedef for Color XDR type
+ */
 typedef enum Color Color;
 
+/**
+ * @brief Generated struct corresponding to ColorChoice XDR type
+ */
 struct ColorChoice {
 	struct {
 		u_int acceptable_len;
@@ -41,8 +49,14 @@ struct ColorChoice {
 	} acceptable;
 	enum Color preferred;
 };
+/**
+ * @brief Generated typedef for ColorChoice XDR type
+ */
 typedef struct ColorChoice ColorChoice;
 
+/**
+ * @brief Generated typedef corresponding to Count XDR typedef
+ */
 typedef int Count;
 
 
