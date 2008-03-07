@@ -205,7 +205,7 @@ struct mrpc_config {
 
 
 /**
- * @defgroup common Protocol-Independent API
+ * @addtogroup common
  * @{
  * @defgroup setup Initialization and Teardown
  * @{

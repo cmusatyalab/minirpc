@@ -3,12 +3,8 @@
 /**
  * @file
  * @brief Common declarations for the example protocol
- *
- * @defgroup example Example Protocol
+ * @addtogroup example
  * @{
- *
- * @include example.mx
- *
  * @defgroup example_common Common Definitions
  * @{
  */

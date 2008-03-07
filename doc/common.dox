@@ -1,0 +1,6 @@
+/**
+
+@addtogroup common Protocol-Independent API
+@brief The protocol-independent parts of the miniRPC library
+
+*/

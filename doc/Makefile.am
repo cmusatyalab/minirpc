@@ -1,11 +1,11 @@
-SRCFILES  = minirpc/minirpc.h doc/example_minirpc.h doc/example_client.h
-SRCFILES += doc/example_server.h doc/example_xdr.h
-SRCPATHS  = $(foreach file,$(SRCFILES),$(top_srcdir)/$(file))
+SRCFILES  = main.dox common.dox example.dox
+SRCFILES += $(top_srcdir)/minirpc/minirpc.h
+SRCFILES += example_minirpc.h example_client.h example_server.h example_xdr.h
 
 html-local: doxygen.stamp
 
-doxygen.stamp: Doxyfile $(SRCPATHS)
-	SRCFILES="$(SRCPATHS)" DOCPATH=$(srcdir) doxygen Doxyfile >/dev/null
+doxygen.stamp: Doxyfile $(SRCFILES)
+	SRCFILES="$(SRCFILES)" DOCPATH=$(srcdir) doxygen Doxyfile >/dev/null
 	touch doxygen.stamp
 
 maintainer-clean-local:
