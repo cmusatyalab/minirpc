@@ -5,7 +5,7 @@
  * @brief Server stubs for the example protocol
  * @addtogroup example
  * @{
- * @defgroup server Server Stubs
+ * @defgroup example_server Server Stubs
  * @{
  */
 
@@ -141,6 +141,7 @@ mrpc_status_t example_ChooseColor_send_async_reply(struct mrpc_message *request)
  *	The message handle originally passed to the GetNumColors method
  * @param	out
  *	The reply structure to return
+ * @sa free_Count()
  *
  * Return a ::MINIRPC_OK reply and the contents of @c out to the remote system
  * for the specified request.  This is used to complete a request whose

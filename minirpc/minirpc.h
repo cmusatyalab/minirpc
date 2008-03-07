@@ -204,8 +204,12 @@ struct mrpc_config {
 };
 
 
-/** @defgroup setup Setup
- * @{ */
+/**
+ * @defgroup common Protocol-Independent API
+ * @{
+ * @defgroup setup Initialization and Teardown
+ * @{
+ */
 
 /**
  * @brief Initialize the miniRPC library
@@ -244,8 +248,9 @@ int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
 void mrpc_conn_set_destroy(struct mrpc_conn_set *set);
 
 
-/** @}
- * @defgroup conn Connection Handling
+/**
+ * @}
+ * @defgroup conn Connection Setup and Teardown
  * @{
  */
 
@@ -342,7 +347,8 @@ int mrpc_conn_close(struct mrpc_connection *conn);
 void mrpc_listen_close(struct mrpc_conn_set *set);
 
 
-/** @}
+/**
+ * @}
  * @defgroup event Event Processing
  * @{
  */
@@ -450,6 +456,9 @@ int mrpc_unplug_conn(struct mrpc_connection *conn);
  */
 int mrpc_unplug_message(struct mrpc_message *msg);
 
-/** @} */
+/**
+ * @}
+ * @}
+ */
 
 #endif

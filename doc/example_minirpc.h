@@ -9,7 +9,7 @@
  *
  * @include example.mx
  *
- * @defgroup common Common Definitions
+ * @defgroup example_common Common Definitions
  * @{
  */
 

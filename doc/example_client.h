@@ -5,7 +5,7 @@
  * @brief Client stubs for the example protocol
  * @addtogroup example
  * @{
- * @defgroup client Client Stubs
+ * @defgroup example_client Client Stubs
  * @{
  */
 
@@ -19,24 +19,149 @@
  */
 extern struct mrpc_protocol example_client;
 
+/**
+ * @brief Call server's ChooseColor procedure and wait for a reply
+ * @param	conn
+ *	The connection to use
+ * @param	in
+ *	The argument to the ChooseColor procedure
+ * @return ::MINIRPC_OK or an error code
+ * @sa free_ColorChoice()
+ *
+ * @c in must be allocated by the application, and may be freed by the
+ * application after the call returns.
+ *
+ * A return code of MINIRPC_OK indicates that the server completed the
+ * procedure call and returned a success code.  A positive return code
+ * is a protocol-specific error returned by the server's procedure handler.
+ * A negative return code is a miniRPC error generated either by the local
+ * or remote system.
+ */
 mrpc_status_t example_ChooseColor(struct mrpc_connection *conn,
 			ColorChoice *in);
+
+/**
+ * @brief Call server's GetNumColors procedure and wait for a reply
+ * @param	conn
+ *	The connection to use
+ * @param[out]	out
+ *	The structure returned from the GetNumColors procedure
+ * @return ::MINIRPC_OK or an error code
+ * @sa free_Count()
+ *
+ * @c out is allocated by miniRPC but must be freed by the application.
+ *
+ * A return code of MINIRPC_OK indicates that the server completed the
+ * procedure call and returned a Count structure in @c out.  A positive
+ * return code is a protocol-specific error returned by the server's
+ * procedure handler.  A negative return code is a miniRPC error generated
+ * either by the local or remote system.  If the return code is not
+ * MINIRPC_OK, @c out is not valid on return.
+ *
+ * @bug We don't null out @c out if the return value is nonzero
+ */
 mrpc_status_t example_GetNumColors(struct mrpc_connection *conn, Count **out);
 
+/**
+ * @brief Callback function for asynchronous ChooseColor call
+ * @param	conn_private
+ *	The cookie for the originating connection
+ * @param	msg_private
+ *	The cookie passed to example_ChooseColor_async()
+ * @param	msg
+ *	An opaque handle to the reply message
+ * @param	status
+ *	The status code returned by the ChooseColor call
+ */
 typedef void (example_ChooseColor_callback_fn)(void *conn_private,
 			void *msg_private, struct mrpc_message *msg,
 			mrpc_status_t status);
+
+/**
+ * @brief Callback function for asynchronous GetNumColors call
+ * @param	conn_private
+ *	The cookie for the originating connection
+ * @param	msg_private
+ *	The cookie passed to example_GetNumColors_async()
+ * @param	msg
+ *	An opaque handle to the reply message
+ * @param	status
+ *	The status code returned by the GetNumColors call
+ * @param	reply
+ *	The Count structure returned by the GetNumColors call
+ *
+ * @c reply is valid if @c status is MINIRPC_OK, NULL otherwise.  @c reply
+ * is freed by miniRPC after the callback returns.
+ */
 typedef void (example_GetNumColors_callback_fn)(void *conn_private,
 			void *msg_private, struct mrpc_message *msg,
 			mrpc_status_t status, Count *reply);
 
+/**
+ * @brief Call server's ChooseColor procedure and fire a callback when it
+ *		completes
+ * @param	conn
+ *	The connection to use
+ * @param	callback
+ *	The function to call when the procedure completes
+ * @param	private
+ *	An application-specific cookie to be passed to the callback function
+ * @param	in
+ *	The structure parameter to be passed to the server
+ * @return MINIRPC_OK or an error code
+ *
+ * Initiates a ChooseColor remote procedure call and returns immediately.
+ * If the return code is not MINIRPC_OK, miniRPC was unable to transmit
+ * the procedure call to the remote system.
+ *
+ * The callback function is executed from an event dispatcher; see
+ * @ref event for details.
+ */
 mrpc_status_t example_ChooseColor_async(struct mrpc_connection *conn,
 			example_ChooseColor_callback_fn *callback,
 			void *private, ColorChoice *in);
+
+/**
+ * @brief Call server's GetNumColors procedure and fire a callback when it
+ *		completes
+ * @param	conn
+ *	The connection to use
+ * @param	callback
+ *	The function to call when the procedure completes
+ * @param	private
+ *	An application-specific cookie to be passed to the callback function
+ * @return MINIRPC_OK or an error code
+ *
+ * Initiates a GetNumColors remote procedure call and returns immediately.
+ * If the return code is not MINIRPC_OK, miniRPC was unable to transmit
+ * the procedure call to the remote system.
+ *
+ * The callback function is executed from an event dispatcher; see
+ * @ref event for details.
+ */
 mrpc_status_t example_GetNumColors_async(struct mrpc_connection *conn,
 			example_GetNumColors_callback_fn *callback,
 			void *private);
 
+/**
+ * @brief Send a CrayonSelected message to the server
+ * @param	conn
+ *	The connection to use
+ * @param	in
+ *	The data to be included in the CrayonSelected message
+ * @return ::MINIRPC_OK or an error code
+ * @sa free_Color()
+ *
+ * @c in must be allocated by the application, and may be freed by the
+ * application after the call returns.
+ *
+ * A return code of MINIRPC_OK indicates that the message was successfully
+ * queued for transmission.  It does not indicate that the message has left
+ * the local system or that the message was received by the server.
+ * Because CrayonSelected is not defined as a procedure call in the
+ * protocol definition, the server has no opportunity to respond to the
+ * message.
+ */
 mrpc_status_t example_CrayonSelected(struct mrpc_connection *conn, Color *in);
 
 /**

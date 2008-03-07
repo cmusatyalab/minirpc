@@ -9,4 +9,4 @@ doxygen.stamp: Doxyfile $(SRCPATHS)
 	touch doxygen.stamp
 
 maintainer-clean-local:
-	rm -rf doxygen.stamp html man
+	rm -rf doxygen.stamp html

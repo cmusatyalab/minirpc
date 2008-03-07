@@ -3,7 +3,7 @@
 /**
  * @file
  * @brief Data structures for the example protocol
- * @addtogroup common
+ * @addtogroup example_common
  * @{
  */
 
