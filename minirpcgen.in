@@ -13,6 +13,7 @@
 
 use strict;
 use warnings;
+use File::Spec;
 use Getopt::Std;
 use Text::Wrap;
 
@@ -21,6 +22,7 @@ my $version = "!!VERSION!!";
 
 our $infile;
 our $base;
+our $basepath;
 our %outfiles;
 our %types;
 our %procSets;
@@ -34,8 +36,8 @@ END {
 	}
 	# Special case: temporary file which is never promoted to a real
 	# output file
-	unlink("$base.x.$$")
-		if $base;
+	unlink("$basepath.x.$$")
+		if $basepath;
 	$? = $status;
 }
 
@@ -690,10 +692,10 @@ sub genstubs {
 	}
 
 	# Create output files
-	openFile(*MCF, "${base}_minirpc.c");
-	openFile(*MHF, "${base}_minirpc.h");
-	openFile(*CHF, "${base}_client.h");
-	openFile(*SHF, "${base}_server.h");
+	openFile(*MCF, "${basepath}_minirpc.c");
+	openFile(*MHF, "${basepath}_minirpc.h");
+	openFile(*CHF, "${basepath}_client.h");
+	openFile(*SHF, "${basepath}_server.h");
 
 	# Generate cpp directives
 	print MCF "#define MINIRPC_PROTOCOL\n";
@@ -835,7 +837,7 @@ sub parseFile {
 sub genRpclFile {
 	my $inDefs = 0;
 
-	open(XF, ">", "${base}.x.$$") || die "Can't open ${base}.x.$$";
+	open(XF, ">", "${basepath}.x.$$") || die "Can't open ${basepath}.x.$$";
 	open(FH, "<", $infile) || die "Can't open $infile";
 	while (<FH>) {
 		if (!$inDefs) {
@@ -855,15 +857,21 @@ sub genRpclFile {
 	close(FH);
 }
 
-
-our $opt_o;
-getopts("o:");
-if (!defined($opt_o) || @ARGV != 1) {
+sub usage {
 	print "minirpcgen $version\n";
 	print "Usage: $0 -o <output_file_base_name> <input_file>\n";
 	exit 1;
 }
-$base = $opt_o;
+
+
+our $opt_o;
+getopts("o:");
+usage()
+	if !defined($opt_o) || @ARGV != 1;
+$basepath = $opt_o;
+$base = (File::Spec->splitpath($basepath))[2];
+usage()
+	if !$base;
 $infile = $ARGV[0];
 
 # Initialize primitive types
@@ -887,11 +895,11 @@ genstubs;
 genRpclFile;
 
 # Generate xdr.c
-open(IF, "-|", "$rpcgen -c $base.x.$$") or
-	die "Couldn't generate ${base}_xdr.c";
-openFile(*XCF, "${base}_xdr.c");
+open(IF, "-|", "$rpcgen -c $basepath.x.$$") or
+	die "Couldn't generate ${basepath}_xdr.c";
+openFile(*XCF, "${basepath}_xdr.c");
 while (<IF>) {
-	s/${base}\.x\.h/${base}_xdr.h/
+	s/${basepath}\.x\.h/${base}_xdr.h/
 		if /#include/;
 	print XCF;
 }
@@ -900,9 +908,9 @@ close(IF);
 # Generate xdr.h
 my $olddefine = uc "_$base.x_H_RPCGEN";
 my $newdefine = uc "${base}_XDR_H";
-open(IF, "-|", "$rpcgen -h $base.x.$$") or
-	die "Couldn't generate ${base}_xdr.h";
-openFile(*XHF, "${base}_xdr.h");
+open(IF, "-|", "$rpcgen -h $basepath.x.$$") or
+	die "Couldn't generate ${basepath}_xdr.h";
+openFile(*XHF, "${basepath}_xdr.h");
 while (<IF>) {
 	s/$olddefine/$newdefine/;
 	print XHF;
