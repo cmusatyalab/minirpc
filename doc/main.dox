@@ -14,6 +14,7 @@ a service
 - Simple usage model for synchronous RPCs
 - Straightforward support for asynchronous RPCs, including out-of-order
 replies, at both client and server
+- Application-defined event loop
 - Support for bidirectional communication: both the client and the server can
 initiate RPCs
 - Support for event notifications, which do not require a reply
