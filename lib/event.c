@@ -428,7 +428,7 @@ static int mrpc_dispatch_one(struct mrpc_conn_set *set)
 	if (event != NULL)
 		dispatch_event(event);
 	if (selfpipe_is_set(set->shutdown_pipe))
-		return ESHUTDOWN;
+		return ENXIO;
 	else if (event)
 		return 0;
 	else

@@ -478,13 +478,13 @@ static int lookup_addr(struct addrinfo **res, const char *host, unsigned port,
 	case EAI_MEMORY:
 		return ENOMEM;
 	case EAI_NODATA:
-		return EIO;
+		return ENOENT;
 	case EAI_NONAME:
-		return EIO;
+		return ENOENT;
 	case EAI_SERVICE:
-		return EOPNOTSUPP;
+		return ENOENT;
 	case EAI_SOCKTYPE:
-		return ESOCKTNOSUPPORT;
+		return EOPNOTSUPP;
 	case EAI_SYSTEM:
 		return errno;
 	default:
