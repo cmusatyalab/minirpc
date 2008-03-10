@@ -164,22 +164,9 @@ exported int mrpc_unplug_conn(struct mrpc_connection *conn)
 	return ret;
 }
 
-/* Produce a copy of the notify fd.  This ensures that the application can
-   never inadvertently cause SIGPIPE by closing the read end of the notify
-   pipe, and also ensures that we don't close the fd out from under the
-   application when the connection set is destroyed.  The application must
-   close the fd when done with it.  The application must not read or write
-   the fd, only poll on it.  When an event is ready to be processed, the
-   fd will be readable.  Returns errno on error. */
-exported int mrpc_get_event_fd(struct mrpc_conn_set *set, int *fd)
+exported int mrpc_get_event_fd(struct mrpc_conn_set *set)
 {
-	int res;
-
-	res=dup(selfpipe_fd(set->events_notify_pipe));
-	if (res == -1)
-		return errno;
-	*fd=res;
-	return 0;
+	return selfpipe_fd(set->events_notify_pipe);
 }
 
 static void fail_request(struct mrpc_message *request, mrpc_status_t err)

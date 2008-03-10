@@ -397,14 +397,12 @@ int mrpc_dispatch_loop(struct mrpc_conn_set *set);
  *	events to process
  * @param	set
  *	The connection set
- * @param[out]	fd
- *	The file descriptor
- * @stdreturn
+ * @return The file descriptor
  *
- * - do not read or write the fd
- * - when to close the fd
+ * - do not read, write, or close the fd
+ * - must stop polling on it during shutdown
  */
-int mrpc_get_event_fd(struct mrpc_conn_set *set, int *fd);
+int mrpc_get_event_fd(struct mrpc_conn_set *set);
 
 /**
  * @brief Dispatch events from this thread and then return
