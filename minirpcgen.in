@@ -1,4 +1,4 @@
-#!/usr/bin/perl
+#!!!PERLPATH!!
 
 #
 # miniRPC - TCP RPC library with asynchronous operations and TLS support

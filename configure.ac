@@ -33,6 +33,12 @@ if test z$RPCGEN = z ; then
 	AC_MSG_ERROR([could not locate rpcgen])
 fi
 
+AC_PATH_PROG([PERL], [perl])
+AC_ARG_VAR([PERL], [path to Perl])
+if test z$PERL = z ; then
+	AC_MSG_ERROR([Perl not found])
+fi
+
 AC_PATH_PROG([DOXYGEN], [doxygen])
 AC_ARG_VAR([DOXYGEN], [path to Doxygen])
 AM_CONDITIONAL([HAVE_DOXYGEN], [test z$DOXYGEN != z])
