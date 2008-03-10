@@ -33,6 +33,10 @@ if test z$RPCGEN = z ; then
 	AC_MSG_ERROR([could not locate rpcgen])
 fi
 
+AC_PATH_PROG([DOXYGEN], [doxygen])
+AC_ARG_VAR([DOXYGEN], [path to Doxygen])
+AM_CONDITIONAL([HAVE_DOXYGEN], [test z$DOXYGEN != z])
+
 AC_ARG_ENABLE([valgrind], [AS_HELP_STRING([--enable-valgrind],
 			[run test suite under Valgrind [default=no]])],,
 			[enable_valgrind=no])
