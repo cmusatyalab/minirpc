@@ -19,6 +19,7 @@ use Text::Wrap;
 my $rpcgen = "!!RPCGEN!!";
 my $version = "!!VERSION!!";
 
+our $infile;
 our $base;
 our %outfiles;
 our %types;
@@ -762,8 +763,6 @@ sub genstubs {
 }
 
 sub parseFile {
-	my $infile = shift;
-
 	my $filename;
 	my $line;
 	my $data;
@@ -834,41 +833,38 @@ sub parseFile {
 }
 
 sub genRpclFile {
-	my @files = shift;
-
 	my $inDefs = 0;
-	my $infile;
 
 	open(XF, ">", "${base}.x.$$") || die "Can't open ${base}.x.$$";
-	for $infile (@files) {
-		open(FH, "<", $infile) || die "Can't open $infile";
-		while (<FH>) {
-			if (!$inDefs) {
-				if (/^\s*(client|server)(procs|msgs)\s+{/) {
-					$inDefs = 1;
-					print XF "\n";
-				} else {
-					print XF;
-				}
-			} else {
-				$inDefs = 0
-					if (/}/);
+	open(FH, "<", $infile) || die "Can't open $infile";
+	while (<FH>) {
+		if (!$inDefs) {
+			if (/^\s*(client|server)(procs|msgs)\s+{/) {
+				$inDefs = 1;
 				print XF "\n";
+			} else {
+				print XF;
 			}
+		} else {
+			$inDefs = 0
+				if (/}/);
+			print XF "\n";
 		}
 	}
 	close(XF);
+	close(FH);
 }
 
 
 our $opt_o;
 getopts("o:");
-if (!defined($opt_o) || @ARGV == 0) {
+if (!defined($opt_o) || @ARGV != 1) {
 	print "minirpcgen $version\n";
-	print "Usage: $0 -o <output_file_base_name> <input_files>\n";
+	print "Usage: $0 -o <output_file_base_name> <input_file>\n";
 	exit 1;
 }
 $base = $opt_o;
+$infile = $ARGV[0];
 
 # Initialize primitive types
 # These are the primitive types that can appear as procedure parameters.
@@ -880,18 +876,15 @@ $base = $opt_o;
 # since we don't know what C type "hyper" corresponds to).
 $types{"void"} = 1;
 
-# Preprocess the input files with cpp and parse them
-my $infile;
-for $infile (@ARGV) {
-	parseFile($infile);
-}
+# Preprocess the input file with cpp and parse it
+parseFile;
 
 # Generate stubs
 genstubs;
 
-# Read the input files again, this time without cpp, and generate a .x file
+# Read the input file again, this time without cpp, and generate a .x file
 # suitable for parsing with rpcgen.  Try to preserve line numbers.
-genRpclFile(@ARGV);
+genRpclFile;
 
 # Generate xdr.c
 open(IF, "-|", "$rpcgen -c $base.x.$$") or
@@ -902,6 +895,7 @@ while (<IF>) {
 		if /#include/;
 	print XCF;
 }
+close(IF);
 
 # Generate xdr.h
 my $olddefine = uc "_$base.x_H_RPCGEN";
@@ -913,6 +907,7 @@ while (<IF>) {
 	s/$olddefine/$newdefine/;
 	print XHF;
 }
+close(IF);
 
 # Commit output
 closeFiles();
