@@ -627,15 +627,20 @@ exported void mrpc_listen_close(struct mrpc_conn_set *set)
 	pthread_mutex_unlock(&set->conns_lock);
 }
 
-/* The provided @fd must be a connected socket (i.e., not a listener).
-   Ownership of @fd transfers to miniRPC. */
 exported int mrpc_bind_fd(struct mrpc_connection **new_conn,
 			struct mrpc_conn_set *set, int fd, void *data)
 {
 	struct mrpc_connection *conn;
 	int ret;
+	int accepting;
+	socklen_t accepting_len=sizeof(accepting);
 
 	*new_conn=NULL;
+	if (getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &accepting,
+				&accepting_len))
+		return errno;
+	if (accepting)
+		return EINVAL;
 	ret=mrpc_conn_add(&conn, set, fd);
 	if (ret)
 		return ret;

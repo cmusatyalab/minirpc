@@ -345,7 +345,6 @@ int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
  * @param	data
  *	An application-specific cookie for this connection
  * @stdreturn
- * @bug Should check that the fd is an active socket, not a listener
  * @bug Check for set == NULL
  *
  * Create a miniRPC connection for an existing socket, associate it with
