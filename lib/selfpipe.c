@@ -20,6 +20,7 @@ struct selfpipe {
 	int pipe[2];
 	int set;
 	pthread_mutex_t lock;
+	pthread_cond_t cond;
 };
 
 int selfpipe_create(struct selfpipe **new)
@@ -31,6 +32,7 @@ int selfpipe_create(struct selfpipe **new)
 	*new=NULL;
 	sp=g_slice_new0(struct selfpipe);
 	pthread_mutex_init(&sp->lock, NULL);
+	pthread_cond_init(&sp->cond, NULL);
 	if (pipe(sp->pipe)) {
 		ret=errno;
 		goto bad_free;
@@ -64,6 +66,7 @@ void selfpipe_set(struct selfpipe *sp)
 	if (!sp->set) {
 		write(sp->pipe[1], "a", 1);
 		sp->set=1;
+		pthread_cond_broadcast(&sp->cond);
 	}
 	pthread_mutex_unlock(&sp->lock);
 }
@@ -94,4 +97,12 @@ int selfpipe_is_set(struct selfpipe *sp)
 int selfpipe_fd(struct selfpipe *sp)
 {
 	return sp->pipe[0];
+}
+
+void selfpipe_wait(struct selfpipe *sp)
+{
+	pthread_mutex_lock(&sp->lock);
+	while (!sp->set)
+		pthread_cond_wait(&sp->cond, &sp->lock);
+	pthread_mutex_unlock(&sp->lock);
 }

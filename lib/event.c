@@ -442,30 +442,15 @@ exported int mrpc_dispatch(struct mrpc_conn_set *set, int max)
 
 exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 {
-	struct pollset *pset;
 	int ret;
-
-	ret=pollset_alloc(&pset);
-	if (ret)
-		return ret;
-	ret=pollset_add(pset, selfpipe_fd(set->events_notify_pipe),
-				POLLSET_READABLE, NULL, NULL, NULL, NULL,
-				NULL);
-	if (ret)
-		goto out;
 
 	while (1) {
 		ret=mrpc_dispatch_one(set);
-		if (ret == EAGAIN) {
-			ret=pollset_poll(pset);
-			if (ret)
-				break;
-		} else if (ret) {
+		if (ret == EAGAIN)
+			selfpipe_wait(set->events_notify_pipe);
+		else if (ret)
 			break;
-		}
 	}
-out:
-	pollset_free(pset);
 	return ret;
 }
 

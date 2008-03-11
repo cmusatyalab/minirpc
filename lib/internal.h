@@ -189,6 +189,7 @@ void selfpipe_set(struct selfpipe *sp);
 void selfpipe_clear(struct selfpipe *sp);
 int selfpipe_is_set(struct selfpipe *sp);
 int selfpipe_fd(struct selfpipe *sp);
+void selfpipe_wait(struct selfpipe *sp);
 
 /* serialize.c */
 void *mrpc_alloc_argument(unsigned len);
