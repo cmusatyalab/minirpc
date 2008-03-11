@@ -265,14 +265,24 @@ void mrpc_conn_set_destroy(struct mrpc_conn_set *set);
  * @param	data
  *	An application-specific cookie for this connection
  * @stdreturn
+ * @bug Check for set == NULL
+ * @bug Allow new_conn == NULL if data == NULL
  *
  * - list error codes?
- * - meaning of host/port NULL
- * - meaning of data==NULL
- * - can only be called with client role
+ *
+ * Make a new outgoing connection to the specified remote host and port,
+ * associate it with the given connection set and application-specific
+ * pointer, and return a handle to the new connection.  If @c data is
+ * NULL, the application-specific pointer is set to the connection handle
+ * returned in @c new_conn.  If @c host is NULL, miniRPC will connect
+ * to the loopback address.
+ *
+ * This function can only be called against connection sets with a client
+ * protocol role.
  */
 int mrpc_connect(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 			const char *host, unsigned port, void *data);
+
 /**
  * @brief Start listening for incoming connections
  * @param	set
@@ -283,16 +293,22 @@ int mrpc_connect(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
  *	The port number to listen on
  * @param[out]	bound
  *	The number of listeners created
- * @stdreturn
+ * @return 0 if at least one listening socket is created, or the POSIX error
+ *	code associated with the last error encountered
+ * @bug Handle set == NULL
+ * @bug Eliminate bound
  *
- * - in/out semantics of port
- * - meaning of host NULL, port NULL
- * - is bound optional?
- * - explain bound
- * - explain return value if one listen operation failed, and put in
- * return field
- * - return semantics of outparams on error
- * - can only be called with server role
+ * Start listening for incoming connections on the given address and port
+ * number, and fire the connection set's accept method whenever one arrives.
+ * If more than one address meets the specified criteria, more than one
+ * listening socket may be bound; the number of sockets created is returned
+ * in @c bound if it is non-NULL.  If @c listenaddr is NULL, miniRPC will
+ * listen on any local interface.  If the value pointed to by @c port is
+ * zero, miniRPC will bind to a random unused port, and will return the
+ * chosen port number in @c port.
+ *
+ * This function can only be called against connection sets with a server
+ * protocol role.
  */
 int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 			unsigned *port, int *bound);
@@ -308,11 +324,18 @@ int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
  * @param	data
  *	An application-specific cookie for this connection
  * @stdreturn
+ * @bug Should check that the fd is an active socket, not a listener
+ * @bug Check for set == NULL
  *
- * - must be an active socket, not a listener.  can we test for this in
- *   the program?
- * - ownership of socket passes to minirpc
- * - meaning of data==NULL
+ * Create a miniRPC connection for an existing socket, associate it with
+ * the specified connection set and application-specific pointer, and return
+ * a handle to the new connection.  After this call, the socket will be managed
+ * by miniRPC; the application must not read, write, or close it directly.
+ *
+ * The specified file descriptor must be associated with a connected socket,
+ * not a listening socket or another type of file.  The @c data parameter
+ * may be NULL; in this case, the application-specific pointer is set to
+ * the connection handle returned in @c new_conn.
  */
 int mrpc_bind_fd(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
 			int fd, void *data);
@@ -320,12 +343,34 @@ int mrpc_bind_fd(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
  * @brief Close an existing connection
  * @param	conn
  *	The connection to close
+ * @return 0 on success, or EALREADY if mrpc_conn_close() has already been
+ *	called on this connection
  *
- * - blocking semantics
- * - what the app should not do after the call
- * - return codes
- * - app should not expect normal close in disconnect event
- * - may be called from event handler
+ * Close the connection specified by @c conn.  Protocol messages already
+ * queued for transmission will be sent before the socket is closed.
+ * Any pending synchronous RPCs will return ::MINIRPC_NETWORK_FAILURE,
+ * and asynchronous RPCs will have their callbacks fired with a status
+ * code of ::MINIRPC_NETWORK_FAILURE.  Other events queued for the
+ * application will be dropped.
+ *
+ * Once this function returns, the application is guaranteed that no further
+ * events, other than ::MINIRPC_NETWORK_FAILURE returns and the disconnect
+ * method, will occur on this connection.  If two threads call
+ * mrpc_conn_close() at once, the second call will return EALREADY, and this
+ * guarantee will not apply to that call.
+ *
+ * The application must not free any supporting data structures until the
+ * connection set's disconnect method is called for the connection, since
+ * further events may be pending.  Simple synchronous clients with no
+ * dispatcher may free supporting data structures as soon as this function
+ * returns.  In either case, the application should not make further
+ * API calls against the connection.  In addition, applications with
+ * disconnect methods should not assume that the method's @c reason
+ * argument will be ::MRPC_DISC_USER, since the connection may have been
+ * terminated for another reason before mrpc_conn_close() was called.
+ *
+ * This function may be called from an event handler, including an event
+ * handler for the connection being closed.
  */
 int mrpc_conn_close(struct mrpc_connection *conn);
 
