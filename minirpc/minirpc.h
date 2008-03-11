@@ -224,13 +224,16 @@ int mrpc_init(void);
  * @param	config
  *	The configuration to use.  A copy of the configuration struct is
  *	stored in the connection set, so the application need not keep it
- *	around.
+ *	allocated after the call.
  * @param	set_data
  *	An application-specific cookie for this connection set
  * @stdreturn
  *
- * - starts backgorund thread
- * - meaning of set_data=NULL
+ * Create a connection set, associate it with the specified configuration
+ * and application-specific pointer, start its background thread, and return
+ * a handle to the connection set.  If @c set_data is NULL, set the
+ * application-specific pointer to the connection set handle returned in
+ * @c new_set.
  */
 int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
 			const struct mrpc_config *config, void *set_data);
@@ -240,8 +243,30 @@ int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
  * @param	set
  *	The set to destroy
  *
- * - Describe shutdown semantics
- * - Do not call from event handler
+ * Destroy the specified connection set.  This takes the following steps:
+ *
+ * -# Close all listening sockets
+ * -# Close all active connections and wait for their disconnect methods
+ * to be fired
+ * -# Shut down all threads started with mrpc_start_dispatch_thread(), and
+ * cause all other dispatch functions to return ENXIO
+ * -# Wait for dispatching threads to call mrpc_dispatcher_remove()
+ * -# Shut down the background thread associated with the connection set
+ * -# Free the set's data structures
+ *
+ * Once this function has been called, the application should no longer
+ * make API calls to create new connections or to send new RPCs on existing
+ * connections.  However, the application should continue to dispatch
+ * events against the connection set (if it is doing its own dispatching)
+ * until the dispatcher functions return ENXIO.  Note that the accept
+ * method may still be called after the call to mrpc_conn_set_destroy();
+ * any connections arriving in this window will be automatically closed
+ * along with the others.
+ *
+ * Once this function returns, the connection set is invalid and should
+ * not be used in further API calls.
+ *
+ * This function must not be called from an event handler.
  */
 void mrpc_conn_set_destroy(struct mrpc_conn_set *set);
 
