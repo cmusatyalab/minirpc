@@ -316,18 +316,14 @@ int mrpc_connect(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
  *	The hostname or address to listen on
  * @param[in,out] port
  *	The port number to listen on
- * @param[out]	bound
- *	The number of listeners created
  * @return 0 if at least one listening socket is created, or the POSIX error
  *	code associated with the last error encountered
  * @bug Handle set == NULL
- * @bug Eliminate bound
  *
  * Start listening for incoming connections on the given address and port
  * number, and fire the connection set's accept method whenever one arrives.
  * If more than one address meets the specified criteria, more than one
- * listening socket may be bound; the number of sockets created is returned
- * in @c bound if it is non-NULL.  If @c listenaddr is NULL, miniRPC will
+ * listening socket may be bound.  If @c listenaddr is NULL, miniRPC will
  * listen on any local interface.  If the value pointed to by @c port is
  * zero, miniRPC will bind to a random unused port, and will return the
  * chosen port number in @c port.
@@ -336,7 +332,7 @@ int mrpc_connect(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
  * protocol role.
  */
 int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
-			unsigned *port, int *bound);
+			unsigned *port);
 
 /**
  * @brief Bind an existing file descriptor to a connection set

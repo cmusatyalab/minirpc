@@ -536,7 +536,7 @@ exported int mrpc_connect(struct mrpc_connection **new_conn,
 }
 
 exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
-			unsigned *port, int *bound)
+			unsigned *port)
 {
 	struct addrinfo *ai;
 	struct addrinfo *cur;
@@ -545,8 +545,6 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 	int count=0;
 	int ret;
 
-	if (bound)
-		*bound=0;
 	if (port == NULL || !set->conf.protocol->is_server)
 		return EINVAL;
 	ret=lookup_addr(&ai, listenaddr, *port, 1);
@@ -611,11 +609,9 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 		}
 	}
 	freeaddrinfo(ai);
-	if (bound)
-		*bound=count;
-	if (count == 0)
-		return ret;
-	return 0;
+	if (count)
+		return 0;
+	return ret;
 }
 
 exported void mrpc_listen_close(struct mrpc_conn_set *set)
