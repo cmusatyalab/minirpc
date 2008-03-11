@@ -357,8 +357,15 @@ void mrpc_listen_close(struct mrpc_conn_set *set);
  *	The connection set
  * @stdreturn
  *
- * - Thread will persist until conn set is destroyed
- * - Simplest model
+ * This is the simplest way to start a dispatcher for the given connection
+ * set.  miniRPC will start a background thread to dispatch events; this
+ * thread will persist until the connection set is destroyed, at which point
+ * it will exit.  This function can be called more than once; each call
+ * will create a new thread.
+ *
+ * Unlike with mrpc_dispatch() and mrpc_dispatch_loop(), the caller does not
+ * need to register the dispatcher thread with mrpc_dispatcher_add().  The
+ * background thread handles this for you.
  */
 int mrpc_start_dispatch_thread(struct mrpc_conn_set *set);
 
@@ -368,7 +375,9 @@ int mrpc_start_dispatch_thread(struct mrpc_conn_set *set);
  * @param	set
  *	The connection set
  *
- * - When this is required
+ * Any thread which calls mrpc_dispatch() or mrpc_dispatch_loop() must call
+ * mrpc_dispatcher_add() before it starts dispatching for the specified
+ * connection set.
  */
 void mrpc_dispatcher_add(struct mrpc_conn_set *set);
 
@@ -377,6 +386,10 @@ void mrpc_dispatcher_add(struct mrpc_conn_set *set);
  *	events for this connection set
  * @param	set
  *	The connection set
+ *
+ * Any thread which calls mrpc_dispatch() or mrpc_dispatch_loop() must call
+ * mrpc_dispatcher_remove() when it decides it will no longer dispatch for
+ * the specified connection set.
  */
 void mrpc_dispatcher_remove(struct mrpc_conn_set *set);
 
@@ -385,24 +398,16 @@ void mrpc_dispatcher_remove(struct mrpc_conn_set *set);
  *	destroyed
  * @param	set
  *	The connection set
+ * @return ENXIO if the connection set is being destroyed, or a POSIX
+ *	error code on other error
  *
- * - Return values
- * - Must be within dispatcher_add
- * - may not be called recursively
+ * Start dispatching events for the given connection set, and do not return
+ * until the connection set is being destroyed.  The thread must call
+ * mrpc_dispatcher_add() before calling this function, and
+ * mrpc_dispatcher_remove() afterward.  This function must not be called
+ * from an event handler.
  */
 int mrpc_dispatch_loop(struct mrpc_conn_set *set);
-
-/**
- * @brief Obtain a file descriptor which will be readable when there are
- *	events to process
- * @param	set
- *	The connection set
- * @return The file descriptor
- *
- * - do not read, write, or close the fd
- * - must stop polling on it during shutdown
- */
-int mrpc_get_event_fd(struct mrpc_conn_set *set);
 
 /**
  * @brief Dispatch events from this thread and then return
@@ -411,24 +416,65 @@ int mrpc_get_event_fd(struct mrpc_conn_set *set);
  * @param	max
  *	The maximum number of events to dispatch, or 0 for no limit
  * @sa mrpc_get_event_fd()
+ * @return ENXIO if the connection set is being destroyed, 0 if more events
+ *	are pending, or EAGAIN if the event queue is empty
  *
  * Dispatch events until there are no more events to process or until
- * @c max events have been processed.
+ * @c max events have been processed.  The calling thread must call
+ * mrpc_dispatcher_add() before calling this function for the first time.
  *
- * - return semantics
- * - may not be called recursively
+ * If this function returns ENXIO, the connection set is being destroyed.
+ * The application must stop calling this function, and must call
+ * mrpc_dispatcher_remove() to indicate its intent to do so.
+ *
+ * This function must not be called from an event handler.
  */
 int mrpc_dispatch(struct mrpc_conn_set *set, int max);
+
+/**
+ * @brief Obtain a file descriptor which will be readable when there are
+ *	events to process
+ * @param	set
+ *	The connection set
+ * @return The file descriptor
+ * @bug We don't wake the event FD when the conn set is being destroyed
+ *
+ * Returns a file descriptor which can be passed to select()/poll() to
+ * determine when the connection set has events to process.  This can be
+ * used to embed processing of miniRPC events into an application-specific
+ * event loop.  When the descriptor is readable, the connection set has
+ * events to be dispatched; the application can call mrpc_dispatch() to
+ * handle them.
+ *
+ * The application must not read, write, or close the provided file
+ * descriptor.  Once mrpc_dispatch() returns ENXIO, indicating that the
+ * connection set is being shut down, the application must stop polling
+ * on the descriptor.
+ */
+int mrpc_get_event_fd(struct mrpc_conn_set *set);
 
 /**
  * @brief Disable event processing for a connection
  * @param	conn
  *	The connection
  * @stdreturn
+ * @bug We could block until we're guaranteed that no other events will
+ * fire against the conn
  *
- * - refcounted: recursive calls acceptable
- * - semantics of when we return
- * - can be called from event handler?
+ * Prevent miniRPC from processing further events for the specified
+ * connection until mrpc_unplug_conn() has been called.  This function
+ * can be called from an event handler.
+ *
+ * The application may call this function more than once against the same
+ * connection.  Event processing for the connection will not resume until
+ * the application makes the corresponding number of calls to
+ * mrpc_unplug_conn().
+ *
+ * Note that there is a window after the function is called in which new
+ * events may still be fired against the connection.  This cannot occur,
+ * however, if the function is called from an event handler for the
+ * specified connection, unless that handler has called
+ * mrpc_unplug_message().
  */
 int mrpc_plug_conn(struct mrpc_connection *conn);
 
@@ -438,17 +484,32 @@ int mrpc_plug_conn(struct mrpc_connection *conn);
  *	The connection
  * @stdreturn
  *
- * - refcounted
+ * Allow miniRPC to process events against a connection which has been
+ * plugged with mrpc_plug_conn().  If mrpc_plug_conn() has been called
+ * more than once, the connection will not be unplugged until
+ * mrpc_unplug_conn() has been called a corresponding number of times.
  */
 int mrpc_unplug_conn(struct mrpc_connection *conn);
 
 /**
  * @brief Prevent an event handler from plugging the event queue
  * @param	msg
- *	The message handle - XXX
+ *	The message handle passed to the event handler
+ * @stdreturn
  *
- * - stdreturn?
- * - explain plugging semantics - one message at a time unless you call this
+ * By default, only one event handler for a given connection can run at a
+ * time, even if there are additional events queued for the connection.  This
+ * allows the application to avoid handling concurrency issues within a
+ * connection.  However, in certain cases, the application may wish to allow
+ * events on a connection to be processed in parallel, and to handle the
+ * resulting concurrency issues itself.
+ *
+ * This function indicates to miniRPC that the specified protocol message
+ * should no longer block the handling of additional events on its associated
+ * connection.  The argument is the opaque message handle passed to the
+ * event handler function.  Note that this call is effective @em only
+ * for the event associated with the specified message; it will have no effect
+ * on any other event.
  */
 int mrpc_unplug_message(struct mrpc_message *msg);
 

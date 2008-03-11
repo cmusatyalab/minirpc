@@ -25,12 +25,32 @@ model
 
 @section terms miniRPC Terminology
 
+- A miniRPC @em connection is a single TCP connection between two endpoints
+which carries miniRPC traffic.
+
 - The @em server is the host which listens for incoming connections.  The
 @em client is the host which initiates a connection to a server.
 
 - The @em sender of an RPC is the party which initiates an RPC or transmits
 an event message.  The @em receiver is the party which receives the message
 and (if applicable) sends a reply.
+
+- A @em protocol is an application-specific set of remote procedures and data
+structures which define communication on the wire.  miniRPC is a framework
+for implementing these protocols.  The
+<a href="http://www.ietf.org/rfc/rfc1832.txt">XDR</a> serialization format
+used by miniRPC is not self-describing, so both parties to a miniRPC connection
+need to know the protocol being used.
+
+- Every protocol has two <em>protocol roles</em>: client and server.  These
+define the reponsibilities of a particular connection endpoint.  For example,
+a particular connection might be a <em>foo client</em>: a client using the
+@em foo protocol.
+
+- A <em>connection set</em> is a container for connections which provides
+infrastructure (for example, event handling) and some shared configuration
+values.  All connections in a connection set must have the same protocol
+role.  Each connection is associated with exactly one connection set.
 
 - @em Synchronous RPC calls are those which block until the RPC is complete.
 @em Sender-asynchronous calls are those in which the sender does not block; it
@@ -39,7 +59,7 @@ is notified via a callback function when the RPC reply is received.
 returns before the call has been completely processed; the receiver transmits
 its reply at a later time using a stub function provided for that purpose.
 An RPC can be both sender- and receiver-async.  It is important to note that
-these are properties of the @em implementation; the on-the-wire protocol
+these are properties of the @em implementation; the on-the-wire format
 does not distinguish between synchronous and asynchronous RPCs.
 
 @section structure Structure of the miniRPC Library

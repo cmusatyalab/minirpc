@@ -6,8 +6,82 @@
 
 
 @defgroup setup Initialization and Teardown
+miniRPC maintains the notion of a <em>connection set</em>, which is a group
+of connections sharing common configuration and infrastructure.  A connection
+set includes the following:
+
+- A background thread which handles network I/O for the associated
+connections.  This thread is started when the connection set is created,
+and stopped when it is destroyed.
+- A protocol role
+- Configuration parameters, such as the maximum message size
+- Callback functions for notification of events such as a newly-accepted
+connection or a connection shutdown
+
+An application can create as many connection sets as it wishes, but most
+applications will need only one.  In most cases, all connections with the
+same protocol role can be placed into the same connection set.
+
+
 @defgroup conn Connection Setup and Teardown
+miniRPC provides wrapper functions to handle connection setup and teardown.
+
+Normally, clients create connections using mrpc_connect().  Servers arrange
+to accept connections by calling mrpc_listen() one or more times; when
+a connection arrives on a listening socket, the connection set's accept
+method will be called to notify the application of the new connection.
+Either end of a connection (client or server) can call mrpc_conn_close()
+to close an existing connection; in addition, servers can call
+mrpc_listen_close() to close the listening sockets previously created with
+mrpc_listen().
+
+For cases in which miniRPC's connection setup code is not sufficient,
+miniRPC provides the mrpc_bind_fd() function.  This function arranges for an
+existing socket to be serviced by miniRPC, and can be used if the application
+wishes to handle connection setup itself.
+
+
 @defgroup event Event Processing
+miniRPC handles application callbacks by means of @em events.  When miniRPC
+wishes to fire a callback, it queues an event to be processed by a dispatcher
+thread.  These dispatcher threads are provided by the application, and are
+associated with a particular connection set.
+
+miniRPC places few restrictions on the application's arrangement of dispatcher
+threads.  An application can have as many dispatchers as it wants, and in
+some cases may not need one at all.  miniRPC provides several alternative
+interfaces for dispatching; the application can choose the one it needs,
+or can even alternate between them.
+
+Because application callbacks execute only in dispatcher threads, the
+application can decide how long a callback can take to complete.  For example,
+a server providing a compute-intensive procedure call can choose to
+do its computation directly within the procedure handler, and simply create
+a large number of dispatcher threads to ensure parallelism.  Or, it can
+return quickly from the procedure handler, finish processing in a dedicated
+thread, and return the result asynchronously.
+
+By default, miniRPC does not fire multiple events at a time for a given
+connection, so the application need not handle concurrency within each
+connection; however, the application can override this behavior if it wishes.
+Interfaces are also provided to request that miniRPC stop (or resume)
+dispatching events for a given connection.
+
+Dispatcher threads are subject to the following constraints:
+
+- Every connection set which expects to fire callbacks must dispatch events.
+This means that every server, every client with non-NULL mrpc_config methods,
+and every client which makes asynchronous RPCs must have a dispatcher.
+Simple synchronous clients with no mrpc_config callback methods do not need
+a dispatcher.
+
+- The dispatcher cannot be called recursively: event handlers cannot call
+the dispatch functions.
+
+- Any thread which expects to dispatch events must register its intent with
+mrpc_dispatcher_add().  When the thread is no longer dispatching events,
+it must so indicate with mrpc_dispatcher_remove().
+
 @addtogroup common
 @}
 */
