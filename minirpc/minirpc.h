@@ -502,7 +502,6 @@ int mrpc_dispatch(struct mrpc_conn_set *set, int max);
  * @param	set
  *	The connection set
  * @return The file descriptor
- * @bug We don't wake the event FD when the conn set is being destroyed
  *
  * Returns a file descriptor which can be passed to select()/poll() to
  * determine when the connection set has events to process.  This can be

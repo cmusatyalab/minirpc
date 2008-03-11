@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <errno.h>
 #include <pthread.h>
+#include <assert.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
@@ -60,21 +61,23 @@ void selfpipe_destroy(struct selfpipe *sp)
 void selfpipe_set(struct selfpipe *sp)
 {
 	pthread_mutex_lock(&sp->lock);
-	/* In order to be resilient to someone else (improperly) reading
-	   from the read end of the pipe, we always write even if the pipe
-	   is already readable. */
-	write(sp->pipe[1], "a", 1);
-	sp->set=1;
+	if (!sp->set) {
+		write(sp->pipe[1], "a", 1);
+		sp->set=1;
+	}
 	pthread_mutex_unlock(&sp->lock);
 }
 
 void selfpipe_clear(struct selfpipe *sp)
 {
-	char buf[32];
+	char buf[2];
 
 	pthread_mutex_lock(&sp->lock);
-	while (read(sp->pipe[0], buf, sizeof(buf)) == sizeof(buf));
-	sp->set=0;
+	if (sp->set) {
+		if (read(sp->pipe[0], buf, sizeof(buf)) != 1)
+			assert(0);
+		sp->set=0;
+	}
 	pthread_mutex_unlock(&sp->lock);
 }
 

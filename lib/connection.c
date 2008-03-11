@@ -778,6 +778,7 @@ exported void mrpc_conn_set_destroy(struct mrpc_conn_set *set)
 		pthread_cond_wait(&set->refs_cond, &set->conns_lock);
 	pthread_mutex_unlock(&set->conns_lock);
 	selfpipe_set(set->shutdown_pipe);
+	selfpipe_set(set->events_notify_pipe);
 	pthread_mutex_lock(&set->events_lock);
 	while (set->events_threads)
 		pthread_cond_wait(&set->events_threads_cond, &set->events_lock);

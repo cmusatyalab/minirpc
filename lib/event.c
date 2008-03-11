@@ -59,6 +59,16 @@ static int conn_is_plugged(struct mrpc_connection *conn)
 }
 
 /* set->events_lock must be held */
+static void update_notify_pipe(struct mrpc_conn_set *set)
+{
+	if (!g_queue_is_empty(set->event_conns) ||
+				selfpipe_is_set(set->shutdown_pipe))
+		selfpipe_set(set->events_notify_pipe);
+	else
+		selfpipe_clear(set->events_notify_pipe);
+}
+
+/* set->events_lock must be held */
 static void try_queue_conn(struct mrpc_connection *conn)
 {
 	struct mrpc_conn_set *set=conn->set;
@@ -66,10 +76,9 @@ static void try_queue_conn(struct mrpc_connection *conn)
 	if (conn_is_plugged(conn) || g_queue_is_empty(conn->events) ||
 				conn->lh_event_conns != NULL)
 		return;
-	if (g_queue_is_empty(set->event_conns))
-		selfpipe_set(set->events_notify_pipe);
 	conn->lh_event_conns=g_list_append(NULL, conn);
 	g_queue_push_tail_link(set->event_conns, conn->lh_event_conns);
+	update_notify_pipe(set);
 }
 
 /* set->events_lock must be held */
@@ -79,8 +88,7 @@ static void try_unqueue_conn(struct mrpc_connection *conn)
 		return;
 	g_queue_delete_link(conn->set->event_conns, conn->lh_event_conns);
 	conn->lh_event_conns=NULL;
-	if (g_queue_is_empty(conn->set->event_conns))
-		selfpipe_clear(conn->set->events_notify_pipe);
+	update_notify_pipe(conn->set);
 }
 
 void queue_event(struct mrpc_event *event)
@@ -100,16 +108,13 @@ static struct mrpc_event *unqueue_event(struct mrpc_conn_set *set)
 
 	pthread_mutex_lock(&set->events_lock);
 	conn=g_queue_pop_head(set->event_conns);
-	if (conn == NULL) {
-		selfpipe_clear(set->events_notify_pipe);
-	} else {
+	if (conn != NULL) {
 		conn->lh_event_conns=NULL;
-		if (g_queue_is_empty(set->event_conns))
-			selfpipe_clear(set->events_notify_pipe);
 		event=g_queue_pop_head(conn->events);
 		assert(event != NULL);
 		conn->plugged_event=event;
 	}
+	update_notify_pipe(set);
 	pthread_mutex_unlock(&set->events_lock);
 	return event;
 }
@@ -444,11 +449,6 @@ exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 	if (ret)
 		return ret;
 	ret=pollset_add(pset, selfpipe_fd(set->events_notify_pipe),
-				POLLSET_READABLE, NULL, NULL, NULL, NULL,
-				NULL);
-	if (ret)
-		goto out;
-	ret=pollset_add(pset, selfpipe_fd(set->shutdown_pipe),
 				POLLSET_READABLE, NULL, NULL, NULL, NULL,
 				NULL);
 	if (ret)
