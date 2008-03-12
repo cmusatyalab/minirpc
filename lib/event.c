@@ -148,12 +148,16 @@ static int mrpc_unplug_event(struct mrpc_event *event)
 
 exported int mrpc_unplug_message(struct mrpc_message *msg)
 {
+	if (msg == NULL)
+		return EINVAL;
 	return _mrpc_unplug_event(msg->conn, msg->event);
 }
 
 /* Will not affect events already in processing */
 exported int mrpc_plug_conn(struct mrpc_connection *conn)
 {
+	if (conn == NULL)
+		return EINVAL;
 	pthread_mutex_lock(&conn->set->events_lock);
 	conn->plugged_user++;
 	try_unqueue_conn(conn);
@@ -165,6 +169,8 @@ exported int mrpc_unplug_conn(struct mrpc_connection *conn)
 {
 	int ret=0;
 
+	if (conn == NULL)
+		return EINVAL;
 	pthread_mutex_lock(&conn->set->events_lock);
 	if (conn->plugged_user) {
 		conn->plugged_user--;
@@ -178,6 +184,8 @@ exported int mrpc_unplug_conn(struct mrpc_connection *conn)
 
 exported int mrpc_get_event_fd(struct mrpc_conn_set *set)
 {
+	if (set == NULL)
+		return EINVAL;
 	return selfpipe_fd(set->events_notify_pipe);
 }
 
@@ -406,6 +414,8 @@ void destroy_events(struct mrpc_connection *conn)
 
 exported void mrpc_dispatcher_add(struct mrpc_conn_set *set)
 {
+	if (set == NULL)
+		return;
 	pthread_mutex_lock(&set->events_lock);
 	set->events_threads++;
 	pthread_mutex_unlock(&set->events_lock);
@@ -413,6 +423,8 @@ exported void mrpc_dispatcher_add(struct mrpc_conn_set *set)
 
 exported void mrpc_dispatcher_remove(struct mrpc_conn_set *set)
 {
+	if (set == NULL)
+		return;
 	pthread_mutex_lock(&set->events_lock);
 	set->events_threads--;
 	pthread_cond_broadcast(&set->events_threads_cond);
@@ -423,6 +435,8 @@ static int mrpc_dispatch_one(struct mrpc_conn_set *set)
 {
 	struct mrpc_event *event;
 
+	if (set == NULL)
+		return EINVAL;
 	event=unqueue_event(set);
 	if (event != NULL)
 		dispatch_event(event);
@@ -484,6 +498,8 @@ exported int mrpc_start_dispatch_thread(struct mrpc_conn_set *set)
 	pthread_attr_t attr;
 	int ret;
 
+	if (set == NULL)
+		return EINVAL;
 	data.set=set;
 	pthread_mutex_init(&data.lock, NULL);
 	pthread_cond_init(&data.cond, NULL);

@@ -282,7 +282,11 @@ exported int mrpc_conn_create(struct mrpc_connection **new_conn,
 	struct mrpc_connection *conn;
 	pthread_mutexattr_t attr;
 
+	if (new_conn == NULL)
+		return EINVAL;
 	*new_conn=NULL;
+	if (set == NULL)
+		return EINVAL;
 	conn_set_get(set);
 	conn=g_slice_new0(struct mrpc_connection);
 	conn->send_msgs=g_queue_new();
@@ -522,7 +526,7 @@ exported int mrpc_connect(struct mrpc_connection *conn, const char *host,
 	int fd;
 	int ret;
 
-	if (conn->set->conf.protocol->is_server)
+	if (conn == NULL || conn->set->conf.protocol->is_server)
 		return EINVAL;
 	ret=lookup_addr(&ai, host, port, 0);
 	if (ret)
@@ -562,7 +566,7 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 	int count=0;
 	int ret;
 
-	if (port == NULL || !set->conf.protocol->is_server)
+	if (set == NULL || port == NULL || !set->conf.protocol->is_server)
 		return EINVAL;
 	ret=lookup_addr(&ai, listenaddr, *port, 1);
 	if (ret)
@@ -635,6 +639,8 @@ exported void mrpc_listen_close(struct mrpc_conn_set *set)
 {
 	struct mrpc_listener *lnr;
 
+	if (set == NULL)
+		return;
 	pthread_mutex_lock(&set->conns_lock);
 	while ((lnr=g_queue_pop_head(set->listeners)) != NULL) {
 		pollset_del(set->pollset, lnr->fd);
@@ -650,6 +656,8 @@ exported int mrpc_bind_fd(struct mrpc_connection *conn, int fd)
 	int accepting;
 	socklen_t accepting_len=sizeof(accepting);
 
+	if (conn == NULL)
+		return EINVAL;
 	if (getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &accepting,
 				&accepting_len))
 		return errno;
@@ -782,6 +790,8 @@ static void close_elem(void *elem, void *data)
 
 exported void mrpc_conn_set_destroy(struct mrpc_conn_set *set)
 {
+	if (set == NULL)
+		return;
 	mrpc_listen_close(set);
 	pthread_mutex_lock(&set->conns_lock);
 	g_queue_foreach(set->conns, close_elem, NULL);

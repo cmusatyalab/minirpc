@@ -286,7 +286,6 @@ void mrpc_conn_set_destroy(struct mrpc_conn_set *set);
  * @param	data
  *	An application-specific cookie for this connection
  * @stdreturn
- * @bug Check for set == NULL
  *
  * Allocate a new connection handle and associate it with the given connection
  * set and application-specific pointer.  This handle can then be used to make
@@ -340,7 +339,6 @@ int mrpc_connect(struct mrpc_connection *conn, const char *host,
  *	The port number to listen on
  * @return 0 if at least one listening socket is created, or the POSIX error
  *	code associated with the last error encountered
- * @bug Handle set == NULL
  *
  * Start listening for incoming connections on the given address and port
  * number, and fire the connection set's accept method whenever one arrives.
