@@ -93,10 +93,10 @@ enum conn_state {
 	STATE_DATA
 };
 
-enum shutdown_flags {
-	SHUT_STARTED		= 0x0001,
-	SHUT_SQUASH_EVENTS	= 0x0002,
-	SHUT_FD_CLOSED		= 0x0004,
+enum sequence_flags {
+	SEQ_SHUT_STARTED	= 0x0001,
+	SEQ_SQUASH_EVENTS	= 0x0002,
+	SEQ_FD_CLOSED		= 0x0004,
 };
 
 struct mrpc_connection {
@@ -107,8 +107,8 @@ struct mrpc_connection {
 	pthread_mutex_t startup_lock;
 	int fd;  /* -1 means not set yet */
 
-	pthread_mutex_t shutdown_lock;
-	unsigned shutdown_flags;
+	pthread_mutex_t sequence_lock;
+	unsigned sequence_flags;
 	enum mrpc_disc_reason disc_reason;
 	int running_events;
 	pthread_cond_t event_completion_cond;

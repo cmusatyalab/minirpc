@@ -99,7 +99,7 @@ static void try_read_conn(void *data, int fd)
 
 		if (conn->recv_offset < len) {
 			count = len - conn->recv_offset;
-			assert(!(conn->shutdown_flags & SHUT_FD_CLOSED));
+			assert(!(conn->sequence_flags & SEQ_FD_CLOSED));
 			rcount=read(conn->fd, buf + conn->recv_offset, count);
 			if (rcount <= 0) {
 				if (rcount == 0)
@@ -140,7 +140,7 @@ static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 	mrpc_status_t ret;
 
 	pthread_mutex_lock(&conn->send_msgs_lock);
-	assert(!(conn->shutdown_flags & SHUT_FD_CLOSED));
+	assert(!(conn->sequence_flags & SEQ_FD_CLOSED));
 	if (g_queue_is_empty(conn->send_msgs)) {
 		pollset_modify(conn->set->pollset, conn->fd, POLLSET_READABLE);
 		pthread_mutex_unlock(&conn->send_msgs_lock);
@@ -206,7 +206,7 @@ static void try_write_conn(void *data, int fd)
 
 		if (conn->send_offset < len) {
 			count = len - conn->send_offset;
-			assert(!(conn->shutdown_flags & SHUT_FD_CLOSED));
+			assert(!(conn->sequence_flags & SEQ_FD_CLOSED));
 			rcount=write(conn->fd, buf + conn->send_offset, count);
 			if (rcount == -1 && errno != EAGAIN
 						&& errno != EINTR) {
@@ -270,8 +270,8 @@ mrpc_status_t send_message(struct mrpc_message *msg)
 		return MINIRPC_INVALID_ARGUMENT;
 	}
 	pthread_mutex_lock(&conn->send_msgs_lock);
-	pthread_mutex_lock(&conn->shutdown_lock);
-	if ((conn->shutdown_flags & SHUT_STARTED) ||
+	pthread_mutex_lock(&conn->sequence_lock);
+	if ((conn->sequence_flags & SEQ_SHUT_STARTED) ||
 				pollset_modify(conn->set->pollset, conn->fd,
 				POLLSET_READABLE|POLLSET_WRITABLE)) {
 		ret=MINIRPC_NETWORK_FAILURE;
@@ -279,7 +279,7 @@ mrpc_status_t send_message(struct mrpc_message *msg)
 	}
 	g_queue_push_tail(conn->send_msgs, msg);
 out:
-	pthread_mutex_unlock(&conn->shutdown_lock);
+	pthread_mutex_unlock(&conn->sequence_lock);
 	pthread_mutex_unlock(&conn->send_msgs_lock);
 	if (ret)
 		mrpc_free_message(msg);
@@ -306,7 +306,7 @@ exported int mrpc_conn_create(struct mrpc_connection **new_conn,
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
 	pthread_mutex_init(&conn->sync_wakeup_lock, NULL);
 	pthread_mutex_init(&conn->startup_lock, NULL);
-	pthread_mutex_init(&conn->shutdown_lock, NULL);
+	pthread_mutex_init(&conn->sequence_lock, NULL);
 	pthread_cond_init(&conn->event_completion_cond, NULL);
 	conn->send_state=STATE_IDLE;
 	conn->recv_state=STATE_HEADER;
@@ -353,8 +353,8 @@ static void conn_start_shutdown(struct mrpc_connection *conn,
 {
 	int done;
 
-	done=conn->shutdown_flags & SHUT_STARTED;
-	conn->shutdown_flags |= SHUT_STARTED;
+	done=conn->sequence_flags & SEQ_SHUT_STARTED;
+	conn->sequence_flags |= SEQ_SHUT_STARTED;
 	if (!done)
 		conn->disc_reason=reason;
 }
@@ -365,17 +365,17 @@ static void try_close_fd(struct mrpc_connection *conn)
 	struct mrpc_event *event;
 	int do_event=0;
 
-	pthread_mutex_lock(&conn->shutdown_lock);
-	if ((conn->shutdown_flags & SHUT_STARTED) &&
-				!(conn->shutdown_flags & SHUT_FD_CLOSED)) {
+	pthread_mutex_lock(&conn->sequence_lock);
+	if ((conn->sequence_flags & SEQ_SHUT_STARTED) &&
+				!(conn->sequence_flags & SEQ_FD_CLOSED)) {
 		pollset_del(conn->set->pollset, conn->fd);
 		/* We are now guaranteed that the listener thread will not
 		   process this connection further */
 		close(conn->fd);
-		conn->shutdown_flags |= SHUT_FD_CLOSED;
+		conn->sequence_flags |= SEQ_FD_CLOSED;
 		do_event=1;
 	}
-	pthread_mutex_unlock(&conn->shutdown_lock);
+	pthread_mutex_unlock(&conn->sequence_lock);
 	if (do_event) {
 		event=mrpc_alloc_event(conn, EVENT_Q_SHUTDOWN);
 		queue_event(event);
@@ -386,9 +386,9 @@ static void try_close_fd(struct mrpc_connection *conn)
 static void conn_kill(struct mrpc_connection *conn,
 			enum mrpc_disc_reason reason)
 {
-	pthread_mutex_lock(&conn->shutdown_lock);
+	pthread_mutex_lock(&conn->sequence_lock);
 	conn_start_shutdown(conn, reason);
-	pthread_mutex_unlock(&conn->shutdown_lock);
+	pthread_mutex_unlock(&conn->sequence_lock);
 	/* Squash send queue */
 	try_close_fd(conn);
 }
@@ -402,23 +402,23 @@ static int _mrpc_conn_close(struct mrpc_connection *conn, int wait)
 	}
 	pthread_mutex_unlock(&conn->startup_lock);
 
-	pthread_mutex_lock(&conn->shutdown_lock);
+	pthread_mutex_lock(&conn->sequence_lock);
 	conn_start_shutdown(conn, MRPC_DISC_USER);
 	/* Squash event queue */
-	if (conn->shutdown_flags & SHUT_SQUASH_EVENTS) {
-		pthread_mutex_unlock(&conn->shutdown_lock);
+	if (conn->sequence_flags & SEQ_SQUASH_EVENTS) {
+		pthread_mutex_unlock(&conn->sequence_lock);
 		return EALREADY;
 	}
-	conn->shutdown_flags |= SHUT_SQUASH_EVENTS;
-	if (!(conn->shutdown_flags & SHUT_FD_CLOSED))
+	conn->sequence_flags |= SEQ_SQUASH_EVENTS;
+	if (!(conn->sequence_flags & SEQ_FD_CLOSED))
 		pollset_modify(conn->set->pollset, conn->fd,
 					POLLSET_READABLE | POLLSET_WRITABLE);
 	while (wait && conn->running_events != 0 &&
 				!(conn->running_events == 1 &&
 				thread_on_conn(conn)))
 		pthread_cond_wait(&conn->event_completion_cond,
-					&conn->shutdown_lock);
-	pthread_mutex_unlock(&conn->shutdown_lock);
+					&conn->sequence_lock);
+	pthread_mutex_unlock(&conn->sequence_lock);
 	return 0;
 }
 

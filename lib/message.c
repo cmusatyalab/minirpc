@@ -160,9 +160,9 @@ exported mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
 	while (reply == NULL)
 		pthread_cond_wait(&cond, &conn->sync_wakeup_lock);
 	pthread_mutex_unlock(&conn->sync_wakeup_lock);
-	pthread_mutex_lock(&conn->shutdown_lock);
-	squash=conn->shutdown_flags & SHUT_SQUASH_EVENTS;
-	pthread_mutex_unlock(&conn->shutdown_lock);
+	pthread_mutex_lock(&conn->sequence_lock);
+	squash=conn->sequence_flags & SEQ_SQUASH_EVENTS;
+	pthread_mutex_unlock(&conn->sequence_lock);
 	if (squash)
 		ret=MINIRPC_NETWORK_FAILURE;
 	else
