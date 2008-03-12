@@ -102,8 +102,10 @@ enum shutdown_flags {
 struct mrpc_connection {
 	struct mrpc_conn_set *set;
 	GList *lh_conns;
-	int fd;
 	void *private;
+
+	pthread_mutex_t startup_lock;
+	int fd;  /* -1 means not set yet */
 
 	pthread_mutex_t shutdown_lock;
 	unsigned shutdown_flags;

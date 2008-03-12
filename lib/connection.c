@@ -250,11 +250,25 @@ static void conn_error(void *data, int fd)
 	conn_kill(conn, MRPC_DISC_IOERR);
 }
 
+static int connected(struct mrpc_connection *conn)
+{
+	int ret;
+
+	pthread_mutex_lock(&conn->startup_lock);
+	ret = (conn->fd != -1);
+	pthread_mutex_unlock(&conn->startup_lock);
+	return ret;
+}
+
 mrpc_status_t send_message(struct mrpc_message *msg)
 {
 	struct mrpc_connection *conn=msg->conn;
 	mrpc_status_t ret=MINIRPC_OK;
 
+	if (!connected(conn)) {
+		mrpc_free_message(msg);
+		return MINIRPC_INVALID_ARGUMENT;
+	}
 	pthread_mutex_lock(&conn->send_msgs_lock);
 	pthread_mutex_lock(&conn->shutdown_lock);
 	if ((conn->shutdown_flags & SHUT_STARTED) ||
@@ -272,20 +286,13 @@ out:
 	return ret;
 }
 
-static int mrpc_conn_add(struct mrpc_connection **new_conn,
-			struct mrpc_conn_set *set, int fd)
+exported int mrpc_conn_create(struct mrpc_connection **new_conn,
+			struct mrpc_conn_set *set, void *data)
 {
 	struct mrpc_connection *conn;
 	pthread_mutexattr_t attr;
-	int ret;
 
 	*new_conn=NULL;
-	ret=setsockoptval(fd, SOL_SOCKET, SO_KEEPALIVE, 1);
-	if (ret)
-		return ret;
-	ret=set_nonblock(fd);
-	if (ret)
-		return ret;
 	conn_set_get(set);
 	conn=g_slice_new0(struct mrpc_connection);
 	conn->send_msgs=g_queue_new();
@@ -298,31 +305,46 @@ static int mrpc_conn_add(struct mrpc_connection **new_conn,
 	pthread_mutex_init(&conn->send_msgs_lock, NULL);
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
 	pthread_mutex_init(&conn->sync_wakeup_lock, NULL);
+	pthread_mutex_init(&conn->startup_lock, NULL);
 	pthread_mutex_init(&conn->shutdown_lock, NULL);
 	pthread_cond_init(&conn->event_completion_cond, NULL);
 	conn->send_state=STATE_IDLE;
 	conn->recv_state=STATE_HEADER;
 	conn->set=set;
-	conn->fd=fd;
+	conn->fd=-1;
+	conn->private = (data != NULL) ? data : conn;
 	conn->pending_replies=g_hash_table_new_full(g_int_hash, g_int_equal,
 				NULL, (GDestroyNotify)pending_free);
-	ret=pollset_add(set->pollset, fd, POLLSET_READABLE, conn,
-				try_read_conn, try_write_conn, conn_hangup,
-				conn_error);
-	if (ret) {
-		conn_set_put(set);
-		g_hash_table_destroy(conn->pending_replies);
-		g_queue_free(conn->events);
-		g_queue_free(conn->send_msgs);
-		g_list_free(conn->lh_conns);
-		g_slice_free(struct mrpc_connection, conn);
-		return ret;
-	}
 	pthread_mutex_lock(&set->conns_lock);
 	g_queue_push_tail_link(set->conns, conn->lh_conns);
 	pthread_mutex_unlock(&set->conns_lock);
 	*new_conn=conn;
 	return 0;
+}
+
+static int _mrpc_bind_fd(struct mrpc_connection *conn, int fd)
+{
+	int ret;
+
+	pthread_mutex_lock(&conn->startup_lock);
+	if (conn->fd != -1) {
+		ret=EINVAL;
+		goto out;
+	}
+	ret=setsockoptval(fd, SOL_SOCKET, SO_KEEPALIVE, 1);
+	if (ret)
+		goto out;
+	ret=set_nonblock(fd);
+	if (ret)
+		goto out;
+	ret=pollset_add(conn->set->pollset, fd, POLLSET_READABLE, conn,
+				try_read_conn, try_write_conn, conn_hangup,
+				conn_error);
+	if (!ret)
+		conn->fd=fd;
+out:
+	pthread_mutex_unlock(&conn->startup_lock);
+	return ret;
 }
 
 /* shutdown lock must be held */
@@ -337,6 +359,7 @@ static void conn_start_shutdown(struct mrpc_connection *conn,
 		conn->disc_reason=reason;
 }
 
+/* Must be called from listener-thread context */
 static void try_close_fd(struct mrpc_connection *conn)
 {
 	struct mrpc_event *event;
@@ -372,6 +395,13 @@ static void conn_kill(struct mrpc_connection *conn,
 
 static int _mrpc_conn_close(struct mrpc_connection *conn, int wait)
 {
+	pthread_mutex_lock(&conn->startup_lock);
+	if (conn->fd == -1) {
+		mrpc_conn_free(conn);
+		return 0;
+	}
+	pthread_mutex_unlock(&conn->startup_lock);
+
 	pthread_mutex_lock(&conn->shutdown_lock);
 	conn_start_shutdown(conn, MRPC_DISC_USER);
 	/* Squash event queue */
@@ -433,7 +463,12 @@ static void try_accept(void *data, int listenfd)
 		fd=accept(listenfd, (struct sockaddr *)&sa, &len);
 		if (fd == -1)
 			break;
-		if (mrpc_conn_add(&conn, set, fd)) {
+		if (mrpc_conn_create(&conn, set, NULL)) {
+			close(fd);
+			continue;
+		}
+		if (_mrpc_bind_fd(conn, fd)) {
+			mrpc_conn_close(conn);
 			close(fd);
 			continue;
 		}
@@ -492,18 +527,15 @@ static int lookup_addr(struct addrinfo **res, const char *host, unsigned port,
 	}
 }
 
-exported int mrpc_connect(struct mrpc_connection **new_conn,
-			struct mrpc_conn_set *set, const char *host,
-			unsigned port, void *data)
+exported int mrpc_connect(struct mrpc_connection *conn, const char *host,
+			unsigned port)
 {
-	struct mrpc_connection *conn;
 	struct addrinfo *ai;
 	struct addrinfo *cur;
 	int fd;
 	int ret;
 
-	*new_conn=NULL;
-	if (set->conf.protocol->is_server)
+	if (connected(conn) || conn->set->conf.protocol->is_server)
 		return EINVAL;
 	ret=lookup_addr(&ai, host, port, 0);
 	if (ret)
@@ -525,13 +557,11 @@ exported int mrpc_connect(struct mrpc_connection **new_conn,
 	freeaddrinfo(ai);
 	if (fd == -1)
 		return ret;
-	ret=mrpc_conn_add(&conn, set, fd);
+	ret=_mrpc_bind_fd(conn, fd);
 	if (ret) {
 		close(fd);
 		return ret;
 	}
-	conn->private = (data != NULL) ? data : conn;
-	*new_conn=conn;
 	return 0;
 }
 
@@ -627,25 +657,20 @@ exported void mrpc_listen_close(struct mrpc_conn_set *set)
 	pthread_mutex_unlock(&set->conns_lock);
 }
 
-exported int mrpc_bind_fd(struct mrpc_connection **new_conn,
-			struct mrpc_conn_set *set, int fd, void *data)
+exported int mrpc_bind_fd(struct mrpc_connection *conn, int fd)
 {
-	struct mrpc_connection *conn;
 	int ret;
 	int accepting;
 	socklen_t accepting_len=sizeof(accepting);
 
-	*new_conn=NULL;
 	if (getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &accepting,
 				&accepting_len))
 		return errno;
 	if (accepting)
 		return EINVAL;
-	ret=mrpc_conn_add(&conn, set, fd);
+	ret=_mrpc_bind_fd(conn, fd);
 	if (ret)
 		return ret;
-	conn->private = (data != NULL) ? data : conn;
-	*new_conn=conn;
 	return 0;
 }
 

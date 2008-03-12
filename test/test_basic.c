@@ -37,7 +37,10 @@ int main(int argc, char **argv)
 	if (mrpc_conn_set_create(&cset, &client_config, NULL))
 		die("Couldn't allocate conn set");
 
-	ret=mrpc_connect(&conn, cset, "localhost", port, NULL);
+	ret=mrpc_conn_create(&conn, cset, NULL);
+	if (ret)
+		die("%s", strerror(ret));
+	ret=mrpc_connect(conn, "localhost", port);
 	if (ret)
 		die("%s", strerror(ret));
 

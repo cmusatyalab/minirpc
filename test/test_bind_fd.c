@@ -73,13 +73,19 @@ int main(int argc, char **argv)
 		die("Couldn't accept connection");
 
 	/* Deliberately reverse client and server */
-	ret=mrpc_bind_fd(&sconn, sset, cfd, NULL);
+	ret=mrpc_conn_create(&sconn, sset, NULL);
+	if (ret)
+		die("Couldn't create server conn: %d", ret);
+	sync_server_set_ops(sconn);
+	ret=mrpc_bind_fd(sconn, cfd);
 	if (ret)
 		die("Couldn't bind server fd: %d", ret);
-	ret=mrpc_bind_fd(&cconn, cset, sfd, NULL);
+	ret=mrpc_conn_create(&cconn, cset, NULL);
+	if (ret)
+		die("Couldn't create client conn: %d", ret);
+	ret=mrpc_bind_fd(cconn, sfd);
 	if (ret)
 		die("Couldn't bind client fd: %d", ret);
-	sync_server_set_ops(sconn);
 	sync_client_run(cconn);
 	mrpc_conn_set_destroy(sset);
 	mrpc_conn_set_destroy(cset);

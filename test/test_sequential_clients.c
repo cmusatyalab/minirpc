@@ -41,7 +41,11 @@ int main(int argc, char **argv)
 
 	/* Try repeated connections from the same conn set */
 	for (i=0; i<500; i++) {
-		ret=mrpc_connect(&conn, cset, "localhost", port, NULL);
+		ret=mrpc_conn_create(&conn, cset, NULL);
+		if (ret)
+			die("%s in mrpc_conn_create() on iteration %d",
+						strerror(ret), i);
+		ret=mrpc_connect(conn, "localhost", port);
 		if (ret)
 			die("%s in mrpc_connect() on iteration %d",
 						strerror(ret), i);
@@ -58,7 +62,11 @@ int main(int argc, char **argv)
 			die("Couldn't create conn set");
 		mrpc_start_dispatch_thread(cset);
 
-		ret=mrpc_connect(&conn, cset, "localhost", port, NULL);
+		ret=mrpc_conn_create(&conn, cset, NULL);
+		if (ret)
+			die("%s in mrpc_conn_create() on iteration %d",
+						strerror(ret), i);
+		ret=mrpc_connect(conn, "localhost", port);
 		if (ret)
 			die("%s in mrpc_connect() on iteration %d",
 						strerror(ret), i);

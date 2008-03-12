@@ -33,7 +33,7 @@ struct mrpc_protocol {};
 struct mrpc_conn_set {};
 
 /**
- * @brief An opaque handle to an open connection
+ * @brief An opaque handle to a connection
  * @ingroup conn
  */
 struct mrpc_connection {};
@@ -278,35 +278,57 @@ void mrpc_conn_set_destroy(struct mrpc_conn_set *set);
  */
 
 /**
- * @brief Make a new outgoing connection
+ * @brief Create a new connection handle
  * @param[out]	new_conn
  *	The resulting connection handle, or NULL on error
  * @param	set
  *	The set to associate with this connection
- * @param	host
- *	The hostname or address of the remote listener
- * @param	port
- *	The TCP port number of the remote listener
  * @param	data
  *	An application-specific cookie for this connection
  * @stdreturn
  * @bug Check for set == NULL
- * @bug Allow new_conn == NULL if data == NULL
+ *
+ * Allocate a new connection handle and associate it with the given connection
+ * set and application-specific pointer.  This handle can then be used to make
+ * an outgoing connection with mrpc_connect(), or can be bound to an existing
+ * socket with mrpc_bind_fd().  Before the connection is completed using one of
+ * these functions, the only valid operations on the connection handle are:
+ * - Set the operations structure using the set_operations function for this
+ * protocol role
+ * - Plug it with mrpc_plug_conn()
+ * - Destroy it with mrpc_conn_close()
+ *
+ * If @c data is NULL, the application-specific pointer is set to the
+ * connection handle returned in @c new_conn.   */
+int mrpc_conn_create(struct mrpc_connection **new_conn,
+			struct mrpc_conn_set *set, void *data);
+
+/**
+ * @brief Make a new outgoing connection
+ * @param	conn
+ *	The connection handle to use
+ * @param	host
+ *	The hostname or address of the remote listener
+ * @param	port
+ *	The TCP port number of the remote listener
+ * @stdreturn
  *
  * - list error codes?
  *
- * Make a new outgoing connection to the specified remote host and port,
- * associate it with the given connection set and application-specific
- * pointer, and return a handle to the new connection.  If @c data is
- * NULL, the application-specific pointer is set to the connection handle
- * returned in @c new_conn.  If @c host is NULL, miniRPC will connect
- * to the loopback address.
+ * Make a new outgoing connection to the specified remote host and port
+ * and associate it with the given connection handle.  The specified
+ * handle must not have been connected already.  If @c host is NULL, miniRPC
+ * will connect to the loopback address.
  *
- * This function can only be called against connection sets with a client
+ * This function can only be called against connections with a client
  * protocol role.
+ *
+ * If the protocol allows the server to issue the first RPC on the connection,
+ * the application should ensure that the correct operations structure is set
+ * on the connection handle before calling this function.
  */
-int mrpc_connect(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
-			const char *host, unsigned port, void *data);
+int mrpc_connect(struct mrpc_connection *conn, const char *host,
+			unsigned port);
 
 /**
  * @brief Start listening for incoming connections
@@ -335,30 +357,27 @@ int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 			unsigned *port);
 
 /**
- * @brief Bind an existing file descriptor to a connection set
- * @param[out]	new_conn
- *	The resulting connection handle, or NULL on error
- * @param	set
- *	The set to associate with this connection
+ * @brief Bind an existing file descriptor to a connection handle
+ * @param	conn
+ *	The connection handle
  * @param	fd
  *	The file descriptor to bind
- * @param	data
- *	An application-specific cookie for this connection
  * @stdreturn
- * @bug Check for set == NULL
  *
- * Create a miniRPC connection for an existing socket, associate it with
- * the specified connection set and application-specific pointer, and return
- * a handle to the new connection.  After this call, the socket will be managed
- * by miniRPC; the application must not read, write, or close it directly.
+ * Associate the specified socket with an existing miniRPC connection handle.
+ * The handle must not have been connected already.  The handle may have
+ * either a client or server role.  In the server case, the connection set's
+ * accept method will @em not be called.  To avoid races, the application
+ * should ensure that the operations structure is set on the connection
+ * handle, if necessary, @em before calling this function.
  *
  * The specified file descriptor must be associated with a connected socket,
- * not a listening socket or another type of file.  The @c data parameter
- * may be NULL; in this case, the application-specific pointer is set to
- * the connection handle returned in @c new_conn.
+ * not a listening socket or another type of file.  After this call, the
+ * socket will be managed by miniRPC; the application must not read, write,
+ * or close it directly.
  */
-int mrpc_bind_fd(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
-			int fd, void *data);
+int mrpc_bind_fd(struct mrpc_connection *conn, int fd);
+
 /**
  * @brief Close an existing connection
  * @param	conn
@@ -388,6 +407,11 @@ int mrpc_bind_fd(struct mrpc_connection **new_conn, struct mrpc_conn_set *set,
  * disconnect methods should not assume that the method's @c reason
  * argument will be ::MRPC_DISC_USER, since the connection may have been
  * terminated for another reason before mrpc_conn_close() was called.
+ *
+ * If the specified connection handle was allocated with mrpc_conn_create()
+ * but has never been successfully connected with mrpc_connect() or
+ * mrpc_bind_fd(), mrpc_conn_close() will immediately free the connection
+ * handle.
  *
  * This function may be called from an event handler, including an event
  * handler for the connection being closed.
