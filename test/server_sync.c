@@ -111,10 +111,15 @@ static const struct proto_server_operations ops = {
 	.notify = do_notify,
 };
 
-void *sync_server_accept(void *set_data, struct mrpc_connection *conn,
-			struct sockaddr *from, socklen_t from_len)
+void sync_server_set_ops(struct mrpc_connection *conn)
 {
 	if (proto_server_set_operations(conn, &ops))
 		die("Error setting operations struct");
+}
+
+void *sync_server_accept(void *set_data, struct mrpc_connection *conn,
+			struct sockaddr *from, socklen_t from_len)
+{
+	sync_server_set_ops(conn);
 	return conn;
 }

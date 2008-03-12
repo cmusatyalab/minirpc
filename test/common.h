@@ -54,11 +54,13 @@ void async_client_set_ops(struct mrpc_connection *conn);
 void async_client_run(struct mrpc_connection *conn);
 
 /* server_sync.c */
+void sync_server_set_ops(struct mrpc_connection *conn);
 void *sync_server_accept(void *set_data, struct mrpc_connection *conn,
 			struct sockaddr *from, socklen_t from_len);
 
 /* server_async.c */
 void async_server_init(void);
+void async_server_set_ops(struct mrpc_connection *conn);
 void *async_server_accept(void *set_data, struct mrpc_connection *conn,
 			struct sockaddr *from, socklen_t from_len);
 

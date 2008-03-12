@@ -214,10 +214,15 @@ void async_server_init(void)
 		die("Couldn't create runner thread");
 }
 
-void *async_server_accept(void *set_data, struct mrpc_connection *conn,
-			struct sockaddr *from, socklen_t from_len)
+void async_server_set_ops(struct mrpc_connection *conn)
 {
 	if (proto_server_set_operations(conn, &ops))
 		die("Error setting operations struct");
+}
+
+void *async_server_accept(void *set_data, struct mrpc_connection *conn,
+			struct sockaddr *from, socklen_t from_len)
+{
+	async_server_set_ops(conn);
 	return conn;
 }

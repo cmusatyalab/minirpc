@@ -1,0 +1,88 @@
+/*
+ * miniRPC - TCP RPC library with asynchronous operations and TLS support
+ *
+ * Copyright (C) 2007-2008 Carnegie Mellon University
+ *
+ * This software is distributed under the terms of the Eclipse Public License,
+ * Version 1.0 which can be found in the file named LICENSE.  ANY USE,
+ * REPRODUCTION OR DISTRIBUTION OF THIS SOFTWARE CONSTITUTES RECIPIENT'S
+ * ACCEPTANCE OF THIS AGREEMENT
+ */
+
+#include "common.h"
+
+static const struct mrpc_config client_config = {
+	.protocol = &proto_client,
+	.disconnect = disconnect_normal
+};
+
+static const struct mrpc_config server_config = {
+	.protocol = &proto_server,
+	.accept = sync_server_accept,
+	.disconnect = disconnect_user
+};
+
+int main(int argc, char **argv)
+{
+	struct mrpc_conn_set *sset;
+	struct mrpc_conn_set *cset;
+	struct mrpc_connection *sconn;
+	struct mrpc_connection *cconn;
+	int port;
+	int listener;
+	int sfd;
+	int cfd;
+	int ret;
+	struct sockaddr_in addr;
+	socklen_t addrlen=sizeof(addr);
+
+	if (mrpc_init())
+		die("Couldn't initialize minirpc");
+	if (mrpc_conn_set_create(&sset, &server_config, NULL))
+		die("Couldn't allocate conn set");
+	if (mrpc_conn_set_create(&cset, &client_config, NULL))
+		die("Couldn't allocate conn set");
+	mrpc_start_dispatch_thread(sset);
+	mrpc_start_dispatch_thread(cset);
+
+	listener=socket(PF_INET, SOCK_STREAM, 0);
+	if (listener == -1)
+		die("Couldn't create socket");
+	addr.sin_family=AF_INET;
+	addr.sin_addr.s_addr=htonl(INADDR_LOOPBACK);
+	addr.sin_port=0;
+	if (bind(listener, (struct sockaddr *)&addr, sizeof(addr)))
+		die("Couldn't bind socket: %s", strerror(errno));
+	if (listen(listener, 16))
+		die("Couldn't listen on socket");
+	if (getsockname(listener, (struct sockaddr *)&addr, &addrlen))
+		die("Couldn't get socket name");
+	port=addr.sin_port;
+
+	cfd=socket(PF_INET, SOCK_STREAM, 0);
+	if (cfd == -1)
+		die("Couldn't create socket");
+	addr.sin_family=AF_INET;
+	addr.sin_addr.s_addr=htonl(INADDR_LOOPBACK);
+	addr.sin_port=port;
+	if (connect(cfd, (struct sockaddr *)&addr, sizeof(addr)))
+		die("Couldn't open connection");
+
+	sfd=accept(listener, NULL, NULL);
+	if (sfd == -1)
+		die("Couldn't accept connection");
+
+	/* Deliberately reverse client and server */
+	ret=mrpc_bind_fd(&sconn, sset, cfd, NULL);
+	if (ret)
+		die("Couldn't bind server fd: %d", ret);
+	ret=mrpc_bind_fd(&cconn, cset, sfd, NULL);
+	if (ret)
+		die("Couldn't bind client fd: %d", ret);
+	sync_server_set_ops(sconn);
+	sync_client_run(cconn);
+	mrpc_conn_set_destroy(sset);
+	mrpc_conn_set_destroy(cset);
+	expect_disconnects(1, 1, 0);
+	return 0;
+}
