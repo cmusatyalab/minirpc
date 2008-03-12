@@ -422,11 +422,10 @@ void mrpc_listen_close(struct mrpc_conn_set *set);
  *	The connection set
  * @stdreturn
  *
- * This is the simplest way to start a dispatcher for the given connection
- * set.  miniRPC will start a background thread to dispatch events; this
- * thread will persist until the connection set is destroyed, at which point
- * it will exit.  This function can be called more than once; each call
- * will create a new thread.
+ * Start a background thread to dispatch events.  This thread will persist
+ * until the connection set is destroyed, at which point it will exit.  This
+ * function can be called more than once; each call will create a new thread.
+ * This is the simplest way to start a dispatcher for a connection set.
  *
  * Unlike with mrpc_dispatch() and mrpc_dispatch_loop(), the caller does not
  * need to register the dispatcher thread with mrpc_dispatcher_add().  The
