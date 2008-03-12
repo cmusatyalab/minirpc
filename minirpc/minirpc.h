@@ -254,14 +254,14 @@ int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
  * -# Shut down the background thread associated with the connection set
  * -# Free the set's data structures
  *
- * Once this function has been called, the application should no longer
- * make API calls to create new connections or to send new RPCs on existing
- * connections.  However, the application should continue to dispatch
- * events against the connection set (if it is doing its own dispatching)
- * until the dispatcher functions return ENXIO.  Note that the accept
- * method may still be called after the call to mrpc_conn_set_destroy();
- * any connections arriving in this window will be automatically closed
- * along with the others.
+ * The application must ensure that it does not start any dispatchers,
+ * create any connections, or initiate RPCs on existing connections
+ * during or after the execution of this function.  However, the
+ * application should continue to dispatch events against the connection
+ * set (if it is doing its own dispatching) until the dispatcher functions
+ * return ENXIO.  Note that the accept method may still be called after
+ * the call to mrpc_conn_set_destroy(); any connections arriving in this
+ * window will be automatically closed along with the others.
  *
  * Once this function returns, the connection set is invalid and should
  * not be used in further API calls.

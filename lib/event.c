@@ -19,6 +19,13 @@
 
 static __thread struct mrpc_connection *active_conn;
 
+struct dispatch_thread_data {
+	struct mrpc_conn_set *set;
+	pthread_mutex_t lock;
+	pthread_cond_t cond;
+	int started;
+};
+
 struct mrpc_event *mrpc_alloc_event(struct mrpc_connection *conn,
 			enum event_type type)
 {
@@ -454,11 +461,17 @@ exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 	return ret;
 }
 
-static void *dispatch_thread(void *data)
+static void *dispatch_thread(void *arg)
 {
-	struct mrpc_conn_set *set=data;
+	struct dispatch_thread_data *data=arg;
+	struct mrpc_conn_set *set=data->set;
+
 	block_signals();
 	mrpc_dispatcher_add(set);
+	pthread_mutex_lock(&data->lock);
+	data->started=1;
+	pthread_cond_broadcast(&data->cond);
+	pthread_mutex_unlock(&data->lock);
 	mrpc_dispatch_loop(set);
 	mrpc_dispatcher_remove(set);
 	return NULL;
@@ -466,17 +479,25 @@ static void *dispatch_thread(void *data)
 
 exported int mrpc_start_dispatch_thread(struct mrpc_conn_set *set)
 {
+	struct dispatch_thread_data data = {0};
 	pthread_t thr;
 	pthread_attr_t attr;
 	int ret;
 
+	data.set=set;
+	pthread_mutex_init(&data.lock, NULL);
+	pthread_cond_init(&data.cond, NULL);
 	ret=pthread_attr_init(&attr);
 	if (ret)
 		return ret;
 	ret=pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 	if (ret)
 		goto out;
-	ret=pthread_create(&thr, &attr, dispatch_thread, set);
+	ret=pthread_create(&thr, &attr, dispatch_thread, &data);
+	pthread_mutex_lock(&data.lock);
+	while (!data.started)
+		pthread_cond_wait(&data.cond, &data.lock);
+	pthread_mutex_unlock(&data.lock);
 out:
 	pthread_attr_destroy(&attr);
 	return ret;
