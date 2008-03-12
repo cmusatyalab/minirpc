@@ -250,27 +250,17 @@ static void conn_error(void *data, int fd)
 	conn_kill(conn, MRPC_DISC_IOERR);
 }
 
-static int connected(struct mrpc_connection *conn)
-{
-	int ret;
-
-	pthread_mutex_lock(&conn->startup_lock);
-	ret = (conn->fd != -1);
-	pthread_mutex_unlock(&conn->startup_lock);
-	return ret;
-}
-
 mrpc_status_t send_message(struct mrpc_message *msg)
 {
 	struct mrpc_connection *conn=msg->conn;
 	mrpc_status_t ret=MINIRPC_OK;
 
-	if (!connected(conn)) {
-		mrpc_free_message(msg);
-		return MINIRPC_INVALID_ARGUMENT;
-	}
 	pthread_mutex_lock(&conn->send_msgs_lock);
 	pthread_mutex_lock(&conn->sequence_lock);
+	if (!(conn->sequence_flags & SEQ_HAVE_FD)) {
+		ret=MINIRPC_INVALID_ARGUMENT;
+		goto out;
+	}
 	if ((conn->sequence_flags & SEQ_SHUT_STARTED) ||
 				pollset_modify(conn->set->pollset, conn->fd,
 				POLLSET_READABLE|POLLSET_WRITABLE)) {
@@ -305,13 +295,11 @@ exported int mrpc_conn_create(struct mrpc_connection **new_conn,
 	pthread_mutex_init(&conn->send_msgs_lock, NULL);
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
 	pthread_mutex_init(&conn->sync_wakeup_lock, NULL);
-	pthread_mutex_init(&conn->startup_lock, NULL);
 	pthread_mutex_init(&conn->sequence_lock, NULL);
 	pthread_cond_init(&conn->event_completion_cond, NULL);
 	conn->send_state=STATE_IDLE;
 	conn->recv_state=STATE_HEADER;
 	conn->set=set;
-	conn->fd=-1;
 	conn->private = (data != NULL) ? data : conn;
 	conn->pending_replies=g_hash_table_new_full(g_int_hash, g_int_equal,
 				NULL, (GDestroyNotify)pending_free);
@@ -326,8 +314,8 @@ static int _mrpc_bind_fd(struct mrpc_connection *conn, int fd)
 {
 	int ret;
 
-	pthread_mutex_lock(&conn->startup_lock);
-	if (conn->fd != -1) {
+	pthread_mutex_lock(&conn->sequence_lock);
+	if (conn->sequence_flags & SEQ_HAVE_FD) {
 		ret=EINVAL;
 		goto out;
 	}
@@ -337,13 +325,14 @@ static int _mrpc_bind_fd(struct mrpc_connection *conn, int fd)
 	ret=set_nonblock(fd);
 	if (ret)
 		goto out;
+	conn->fd=fd;
 	ret=pollset_add(conn->set->pollset, fd, POLLSET_READABLE, conn,
 				try_read_conn, try_write_conn, conn_hangup,
 				conn_error);
 	if (!ret)
-		conn->fd=fd;
+		conn->sequence_flags |= SEQ_HAVE_FD;
 out:
-	pthread_mutex_unlock(&conn->startup_lock);
+	pthread_mutex_unlock(&conn->sequence_lock);
 	return ret;
 }
 
@@ -395,14 +384,12 @@ static void conn_kill(struct mrpc_connection *conn,
 
 static int _mrpc_conn_close(struct mrpc_connection *conn, int wait)
 {
-	pthread_mutex_lock(&conn->startup_lock);
-	if (conn->fd == -1) {
+	pthread_mutex_lock(&conn->sequence_lock);
+	if (!(conn->sequence_flags & SEQ_HAVE_FD)) {
+		pthread_mutex_unlock(&conn->sequence_lock);
 		mrpc_conn_free(conn);
 		return 0;
 	}
-	pthread_mutex_unlock(&conn->startup_lock);
-
-	pthread_mutex_lock(&conn->sequence_lock);
 	conn_start_shutdown(conn, MRPC_DISC_USER);
 	/* Squash event queue */
 	if (conn->sequence_flags & SEQ_SQUASH_EVENTS) {
@@ -535,7 +522,7 @@ exported int mrpc_connect(struct mrpc_connection *conn, const char *host,
 	int fd;
 	int ret;
 
-	if (connected(conn) || conn->set->conf.protocol->is_server)
+	if (conn->set->conf.protocol->is_server)
 		return EINVAL;
 	ret=lookup_addr(&ai, host, port, 0);
 	if (ret)

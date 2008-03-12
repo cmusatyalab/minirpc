@@ -94,18 +94,17 @@ enum conn_state {
 };
 
 enum sequence_flags {
-	SEQ_SHUT_STARTED	= 0x0001,
-	SEQ_SQUASH_EVENTS	= 0x0002,
-	SEQ_FD_CLOSED		= 0x0004,
+	SEQ_HAVE_FD		= 0x0001,
+	SEQ_SHUT_STARTED	= 0x0002,
+	SEQ_SQUASH_EVENTS	= 0x0004,
+	SEQ_FD_CLOSED		= 0x0008,
 };
 
 struct mrpc_connection {
 	struct mrpc_conn_set *set;
 	GList *lh_conns;
+	int fd;
 	void *private;
-
-	pthread_mutex_t startup_lock;
-	int fd;  /* -1 means not set yet */
 
 	pthread_mutex_t sequence_lock;
 	unsigned sequence_flags;
