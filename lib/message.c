@@ -141,10 +141,10 @@ exported mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
 	mrpc_status_t ret;
 	int squash;
 
+	if (conn == NULL || cmd <= 0)
+		return MINIRPC_INVALID_ARGUMENT;
 	if (protocol != conn->set->conf.protocol)
 		return MINIRPC_INVALID_PROTOCOL;
-	if (cmd <= 0)
-		return MINIRPC_INVALID_ARGUMENT;
 	ret=format_request(conn, cmd, in, &request);
 	if (ret)
 		return ret;
@@ -180,10 +180,10 @@ exported mrpc_status_t mrpc_send_request_async(
 	struct pending_reply *pending;
 	mrpc_status_t ret;
 
+	if (conn == NULL || cmd <= 0 || callback == NULL)
+		return MINIRPC_INVALID_ARGUMENT;
 	if (protocol != conn->set->conf.protocol)
 		return MINIRPC_INVALID_PROTOCOL;
-	if (callback == NULL || cmd <= 0)
-		return MINIRPC_INVALID_ARGUMENT;
 	ret=format_request(conn, cmd, in, &msg);
 	if (ret)
 		return ret;
@@ -201,10 +201,10 @@ exported mrpc_status_t mrpc_send_request_noreply(
 	struct mrpc_message *msg;
 	mrpc_status_t ret;
 
+	if (conn == NULL || cmd >= 0)
+		return MINIRPC_INVALID_ARGUMENT;
 	if (protocol != conn->set->conf.protocol)
 		return MINIRPC_INVALID_PROTOCOL;
-	if (cmd >= 0)
-		return MINIRPC_INVALID_ARGUMENT;
 	ret=format_request(conn, cmd, in, &msg);
 	if (ret)
 		return ret;
@@ -217,6 +217,8 @@ exported mrpc_status_t mrpc_send_reply(const struct mrpc_protocol *protocol,
 	struct mrpc_message *reply;
 	mrpc_status_t ret;
 
+	if (request == NULL)
+		return MINIRPC_INVALID_ARGUMENT;
 	if (protocol != request->conn->set->conf.protocol)
 		return MINIRPC_INVALID_PROTOCOL;
 	ret=format_reply(request, data, &reply);
@@ -236,10 +238,11 @@ exported mrpc_status_t mrpc_send_reply_error(
 	struct mrpc_message *reply;
 	mrpc_status_t ret;
 
+	if (request == NULL || status == MINIRPC_OK ||
+				status == MINIRPC_PENDING)
+		return MINIRPC_INVALID_ARGUMENT;
 	if (protocol != request->conn->set->conf.protocol)
 		return MINIRPC_INVALID_PROTOCOL;
-	if (status == MINIRPC_OK || status == MINIRPC_PENDING)
-		return MINIRPC_INVALID_ARGUMENT;
 	ret=format_reply_error(request, status, &reply);
 	if (ret)
 		return ret;

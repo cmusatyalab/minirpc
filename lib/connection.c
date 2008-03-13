@@ -415,6 +415,8 @@ static int _mrpc_conn_close(struct mrpc_connection *conn, int wait)
 
 exported int mrpc_conn_close(struct mrpc_connection *conn)
 {
+	if (conn == NULL)
+		return EINVAL;
 	return _mrpc_conn_close(conn, 1);
 }
 
@@ -536,7 +538,10 @@ exported int mrpc_connect(struct mrpc_connection *conn, const char *host,
 	for (cur=ai; cur != NULL; cur=cur->ai_next) {
 		fd=socket(cur->ai_family, cur->ai_socktype, cur->ai_protocol);
 		if (fd == -1) {
-			ret=errno;
+			/* Don't clobber a connect error with a less-important
+			   one */
+			if (!ret)
+				ret=errno;
 			continue;
 		}
 		if (!connect(fd, cur->ai_addr, cur->ai_addrlen))
@@ -578,7 +583,10 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 		}
 		fd=socket(cur->ai_family, cur->ai_socktype, cur->ai_protocol);
 		if (fd == -1) {
-			ret=errno;
+			/* Don't clobber a more important error with a
+			   socket-not-supported error */
+			if (!ret)
+				ret=errno;
 			continue;
 		}
 		ret=setsockoptval(fd, SOL_SOCKET, SO_REUSEADDR, 1);
@@ -676,7 +684,7 @@ exported int mrpc_bind_fd(struct mrpc_connection *conn, int fd)
 exported int mrpc_conn_set_operations(struct mrpc_connection *conn,
 			struct mrpc_protocol *protocol, const void *ops)
 {
-	if (conn->set->conf.protocol != protocol)
+	if (conn == NULL || conn->set->conf.protocol != protocol)
 		return EINVAL;
 	pthread_mutex_lock(&conn->operations_lock);
 	conn->operations=ops;
