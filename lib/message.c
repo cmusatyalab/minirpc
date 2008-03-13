@@ -212,12 +212,12 @@ exported mrpc_status_t mrpc_send_request_noreply(
 }
 
 exported mrpc_status_t mrpc_send_reply(const struct mrpc_protocol *protocol,
-			struct mrpc_message *request, void *data)
+			int cmd, struct mrpc_message *request, void *data)
 {
 	struct mrpc_message *reply;
 	mrpc_status_t ret;
 
-	if (request == NULL)
+	if (request == NULL || cmd != request->hdr.cmd)
 		return MINIRPC_INVALID_ARGUMENT;
 	if (protocol != request->conn->set->conf.protocol)
 		return MINIRPC_INVALID_PROTOCOL;
@@ -232,13 +232,14 @@ exported mrpc_status_t mrpc_send_reply(const struct mrpc_protocol *protocol,
 }
 
 exported mrpc_status_t mrpc_send_reply_error(
-			const struct mrpc_protocol *protocol,
+			const struct mrpc_protocol *protocol, int cmd,
 			struct mrpc_message *request, mrpc_status_t status)
 {
 	struct mrpc_message *reply;
 	mrpc_status_t ret;
 
-	if (request == NULL || status == MINIRPC_OK ||
+	if (request == NULL || cmd != request->hdr.cmd ||
+				status == MINIRPC_OK ||
 				status == MINIRPC_PENDING)
 		return MINIRPC_INVALID_ARGUMENT;
 	if (protocol != request->conn->set->conf.protocol)

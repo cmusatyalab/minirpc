@@ -247,7 +247,7 @@ sub gen_receiver_stub_c {
 
 mrpc_status_t ${base}_${func}_send_async_reply(struct mrpc_message *request$outarg)
 {
-	return mrpc_send_reply(&${base}_$role, request, $outparam);
+	return mrpc_send_reply(&${base}_$role, nr_${base}_$func, request, $outparam);
 }
 EOF
 }
@@ -274,7 +274,7 @@ sub gen_receiver_error_stub_c {
 
 mrpc_status_t ${base}_${func}_send_async_reply_error(struct mrpc_message *request, mrpc_status_t status)
 {
-	return mrpc_send_reply_error(&${base}_$role, request, status);
+	return mrpc_send_reply_error(&${base}_$role, nr_${base}_$func, request, status);
 }
 EOF
 }

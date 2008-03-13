@@ -194,7 +194,7 @@ static void fail_request(struct mrpc_message *request, mrpc_status_t err)
 	mrpc_unplug_message(request);
 	if (request->hdr.cmd >= 0) {
 		if (mrpc_send_reply_error(request->conn->set->conf.protocol,
-					request, err))
+					request->hdr.cmd, request, err))
 			mrpc_free_message(request);
 	} else {
 		mrpc_free_message(request);
@@ -267,9 +267,11 @@ static void dispatch_request(struct mrpc_event *event)
 		}
 		if (result)
 			ret=mrpc_send_reply_error(conn->set->conf.protocol,
-						request, result);
+						request->hdr.cmd, request,
+						result);
 		else
-			ret=mrpc_send_reply(conn->set->conf.protocol, request,
+			ret=mrpc_send_reply(conn->set->conf.protocol,
+						request->hdr.cmd, request,
 						reply_data);
 		mrpc_free_argument(reply_type, reply_data);
 		if (ret) {
