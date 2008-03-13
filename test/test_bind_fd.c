@@ -28,7 +28,7 @@ int main(int argc, char **argv)
 	struct mrpc_conn_set *cset;
 	struct mrpc_connection *sconn;
 	struct mrpc_connection *cconn;
-	int port;
+	unsigned port;
 	int listener;
 	int sfd;
 	int cfd;

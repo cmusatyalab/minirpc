@@ -27,7 +27,7 @@ int main(int argc, char **argv)
 	struct mrpc_conn_set *sset;
 	struct mrpc_conn_set *cset;
 	struct mrpc_connection *conn;
-	int port;
+	unsigned port;
 	int ret;
 
 	if (mrpc_init())
