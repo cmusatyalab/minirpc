@@ -320,6 +320,7 @@ static void dispatch_event(struct mrpc_event *event)
 	struct mrpc_config *conf=&conn->set->conf;
 	struct mrpc_event *nevent;
 	int squash;
+	int fire_disconnect;
 	enum mrpc_disc_reason reason;
 	enum event_type type=event->type;
 
@@ -328,6 +329,7 @@ static void dispatch_event(struct mrpc_event *event)
 	active_conn=conn;
 	pthread_mutex_lock(&conn->sequence_lock);
 	squash=conn->sequence_flags & SEQ_SQUASH_EVENTS;
+	fire_disconnect=conn->sequence_flags & SEQ_HAVE_FD;
 	reason=conn->disc_reason;
 	if (!squash && type != EVENT_DISCONNECT)
 		conn->running_events++;
@@ -361,7 +363,7 @@ static void dispatch_event(struct mrpc_event *event)
 		run_reply_callback(event);
 		break;
 	case EVENT_DISCONNECT:
-		if (conf->disconnect)
+		if (fire_disconnect && conf->disconnect)
 			conf->disconnect(conn->private, reason);
 		mrpc_conn_free(conn);
 		break;

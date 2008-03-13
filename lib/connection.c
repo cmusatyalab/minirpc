@@ -340,7 +340,7 @@ out:
 	return ret;
 }
 
-/* shutdown lock must be held */
+/* Sequence lock must be held */
 static void conn_start_shutdown(struct mrpc_connection *conn,
 			enum mrpc_disc_reason reason)
 {
@@ -352,10 +352,17 @@ static void conn_start_shutdown(struct mrpc_connection *conn,
 		conn->disc_reason=reason;
 }
 
+static void send_shutdown_event(struct mrpc_connection *conn)
+{
+	struct mrpc_event *event;
+
+	event=mrpc_alloc_event(conn, EVENT_Q_SHUTDOWN);
+	queue_event(event);
+}
+
 /* Must be called from listener-thread context */
 static void try_close_fd(struct mrpc_connection *conn)
 {
-	struct mrpc_event *event;
 	int do_event=0;
 
 	pthread_mutex_lock(&conn->sequence_lock);
@@ -369,10 +376,8 @@ static void try_close_fd(struct mrpc_connection *conn)
 		do_event=1;
 	}
 	pthread_mutex_unlock(&conn->sequence_lock);
-	if (do_event) {
-		event=mrpc_alloc_event(conn, EVENT_Q_SHUTDOWN);
-		queue_event(event);
-	}
+	if (do_event)
+		send_shutdown_event(conn);
 }
 
 /* Must be called from listener-thread context */
@@ -389,11 +394,6 @@ static void conn_kill(struct mrpc_connection *conn,
 static int _mrpc_conn_close(struct mrpc_connection *conn, int wait)
 {
 	pthread_mutex_lock(&conn->sequence_lock);
-	if (!(conn->sequence_flags & SEQ_HAVE_FD)) {
-		pthread_mutex_unlock(&conn->sequence_lock);
-		mrpc_conn_free(conn);
-		return 0;
-	}
 	conn_start_shutdown(conn, MRPC_DISC_USER);
 	/* Squash event queue */
 	if (conn->sequence_flags & SEQ_SQUASH_EVENTS) {
@@ -401,9 +401,16 @@ static int _mrpc_conn_close(struct mrpc_connection *conn, int wait)
 		return EALREADY;
 	}
 	conn->sequence_flags |= SEQ_SQUASH_EVENTS;
-	if (!(conn->sequence_flags & SEQ_FD_CLOSED))
-		pollset_modify(conn->set->pollset, conn->fd,
-					POLLSET_READABLE | POLLSET_WRITABLE);
+	if (!(conn->sequence_flags & SEQ_FD_CLOSED)) {
+		if (conn->sequence_flags & SEQ_HAVE_FD) {
+			pollset_modify(conn->set->pollset, conn->fd,
+						POLLSET_READABLE |
+						POLLSET_WRITABLE);
+		} else {
+			conn->sequence_flags |= SEQ_FD_CLOSED;
+			send_shutdown_event(conn);
+		}
+	}
 	while (wait && conn->running_events != 0 &&
 				!(conn->running_events == 1 &&
 				thread_on_conn(conn)))
