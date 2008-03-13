@@ -641,13 +641,17 @@ exported void mrpc_listen_close(struct mrpc_conn_set *set)
 
 	if (set == NULL)
 		return;
+	conn_set_get(set);
 	pthread_mutex_lock(&set->conns_lock);
 	while ((lnr=g_queue_pop_head(set->listeners)) != NULL) {
+		pthread_mutex_unlock(&set->conns_lock);
 		pollset_del(set->pollset, lnr->fd);
 		close(lnr->fd);
 		g_slice_free(struct mrpc_listener, lnr);
+		pthread_mutex_lock(&set->conns_lock);
 	}
 	pthread_mutex_unlock(&set->conns_lock);
+	conn_set_put(set);
 }
 
 exported int mrpc_bind_fd(struct mrpc_connection *conn, int fd)
