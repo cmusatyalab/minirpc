@@ -352,14 +352,6 @@ static void conn_start_shutdown(struct mrpc_connection *conn,
 		conn->disc_reason=reason;
 }
 
-static void send_shutdown_event(struct mrpc_connection *conn)
-{
-	struct mrpc_event *event;
-
-	event=mrpc_alloc_event(conn, EVENT_Q_SHUTDOWN);
-	queue_event(event);
-}
-
 /* Must be called from listener-thread context */
 static void try_close_fd(struct mrpc_connection *conn)
 {
@@ -377,7 +369,7 @@ static void try_close_fd(struct mrpc_connection *conn)
 	}
 	pthread_mutex_unlock(&conn->sequence_lock);
 	if (do_event)
-		send_shutdown_event(conn);
+		kick_event_shutdown_sequence(conn);
 }
 
 /* Must be called from listener-thread context */
@@ -402,14 +394,14 @@ static int _mrpc_conn_close(struct mrpc_connection *conn, int wait)
 	}
 	conn->sequence_flags |= SEQ_SQUASH_EVENTS;
 	if (!(conn->sequence_flags & SEQ_FD_CLOSED)) {
-		if (conn->sequence_flags & SEQ_HAVE_FD) {
-			pollset_modify(conn->set->pollset, conn->fd,
-						POLLSET_READABLE |
-						POLLSET_WRITABLE);
-		} else {
+		if (!(conn->sequence_flags & SEQ_HAVE_FD)) {
 			conn->sequence_flags |= SEQ_FD_CLOSED;
-			send_shutdown_event(conn);
+			pthread_mutex_unlock(&conn->sequence_lock);
+			kick_event_shutdown_sequence(conn);
+			return 0;
 		}
+		pollset_modify(conn->set->pollset, conn->fd,
+					POLLSET_READABLE | POLLSET_WRITABLE);
 	}
 	while (wait && conn->running_events != 0 &&
 				!(conn->running_events == 1 &&

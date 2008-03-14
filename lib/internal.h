@@ -58,7 +58,6 @@ enum event_type {
 	EVENT_REPLY,
 	EVENT_DISCONNECT,
 	EVENT_IOERR,
-	EVENT_Q_SHUTDOWN
 };
 
 struct mrpc_event {
@@ -98,6 +97,9 @@ enum sequence_flags {
 	SEQ_SHUT_STARTED	= 0x0002,
 	SEQ_SQUASH_EVENTS	= 0x0004,
 	SEQ_FD_CLOSED		= 0x0008,
+	SEQ_PENDING_INIT	= 0x0010,
+	SEQ_PENDING_DONE	= 0x0020,
+	SEQ_DISC_FIRED		= 0x0040,
 };
 
 struct mrpc_connection {
@@ -134,6 +136,7 @@ struct mrpc_connection {
 
 	GList *lh_event_conns;
 	GQueue *events;	/* protected by set->events_lock */
+	unsigned events_pending;
 	struct mrpc_event *plugged_event;
 	unsigned plugged_user;
 
@@ -165,6 +168,7 @@ struct mrpc_event *mrpc_alloc_message_event(struct mrpc_message *msg,
 			enum event_type type);
 void queue_event(struct mrpc_event *event);
 void destroy_events(struct mrpc_connection *conn);
+void kick_event_shutdown_sequence(struct mrpc_connection *conn);
 int thread_on_conn(struct mrpc_connection *conn);
 
 /* pollset.c */

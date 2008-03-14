@@ -104,6 +104,7 @@ void queue_event(struct mrpc_event *event)
 
 	pthread_mutex_lock(&conn->set->events_lock);
 	g_queue_push_tail(conn->events, event);
+	conn->events_pending++;
 	try_queue_conn(conn);
 	pthread_mutex_unlock(&conn->set->events_lock);
 }
@@ -124,6 +125,49 @@ static struct mrpc_event *unqueue_event(struct mrpc_conn_set *set)
 	update_notify_pipe(set);
 	pthread_mutex_unlock(&set->events_lock);
 	return event;
+}
+
+void kick_event_shutdown_sequence(struct mrpc_connection *conn)
+{
+	struct mrpc_event *event;
+
+	pthread_mutex_lock(&conn->sequence_lock);
+	pthread_mutex_lock(&conn->set->events_lock);
+	if (conn->events_pending == 0 &&
+				(conn->sequence_flags & SEQ_FD_CLOSED) &&
+				!(conn->sequence_flags & SEQ_PENDING_INIT)) {
+		conn->sequence_flags |= SEQ_PENDING_INIT;
+		pthread_mutex_unlock(&conn->set->events_lock);
+		pthread_mutex_unlock(&conn->sequence_lock);
+		pending_kill(conn);
+		pthread_mutex_lock(&conn->sequence_lock);
+		pthread_mutex_lock(&conn->set->events_lock);
+		conn->sequence_flags |= SEQ_PENDING_DONE;
+	}
+	if (conn->events_pending == 0 &&
+				(conn->sequence_flags & SEQ_PENDING_DONE) &&
+				!(conn->sequence_flags & SEQ_DISC_FIRED)) {
+		conn->sequence_flags |= SEQ_DISC_FIRED;
+		pthread_mutex_unlock(&conn->set->events_lock);
+		pthread_mutex_unlock(&conn->sequence_lock);
+		event=mrpc_alloc_event(conn, EVENT_DISCONNECT);
+		queue_event(event);
+	} else {
+		pthread_mutex_unlock(&conn->set->events_lock);
+		pthread_mutex_unlock(&conn->sequence_lock);
+	}
+}
+
+static void finish_event(struct mrpc_connection *conn)
+{
+	int count;
+
+	pthread_mutex_lock(&conn->set->events_lock);
+	assert(conn->events_pending > 0);
+	count=--conn->events_pending;
+	pthread_mutex_unlock(&conn->set->events_lock);
+	if (!count)
+		kick_event_shutdown_sequence(conn);
 }
 
 static int _mrpc_unplug_event(struct mrpc_connection *conn,
@@ -320,7 +364,6 @@ static void dispatch_event(struct mrpc_event *event)
 {
 	struct mrpc_connection *conn=event->conn;
 	struct mrpc_config *conf=&conn->set->conf;
-	struct mrpc_event *nevent;
 	int squash;
 	int fire_disconnect;
 	enum mrpc_disc_reason reason;
@@ -374,14 +417,6 @@ static void dispatch_event(struct mrpc_event *event)
 			conf->ioerr(conn->private, event->errstring);
 		free(event->errstring);
 		break;
-	case EVENT_Q_SHUTDOWN:
-		/* The send queue is empty and the event queue has been
-		   drained.  Queue events to wake all pending waiters, then
-		   a DISCONNECT event to close out the conn. */
-		pending_kill(conn);
-		nevent=mrpc_alloc_event(conn, EVENT_DISCONNECT);
-		queue_event(nevent);
-		break;
 	default:
 		assert(0);
 	}
@@ -395,6 +430,8 @@ out:
 		pthread_mutex_unlock(&conn->sequence_lock);
 		pthread_cond_broadcast(&conn->event_completion_cond);
 	}
+	if (type != EVENT_DISCONNECT)
+		finish_event(conn);
 	assert(conn != NULL);
 	assert(active_conn == conn);
 	active_conn=NULL;
