@@ -28,6 +28,7 @@ check_PROGRAMS += test_async_server
 check_PROGRAMS += test_async_client
 check_PROGRAMS += test_async_both
 check_PROGRAMS += test_sequential_clients
+check_PROGRAMS += test_simultaneous_clients
 check_PROGRAMS += test_bind_fd
 check_PROGRAMS += test_errors
 
