@@ -31,9 +31,12 @@
 #define exported
 #endif
 
+#define TRASHBUFSIZE 131072
+
 struct mrpc_conn_set {
 	struct mrpc_config conf;
 	void *private;
+	char *trashbuf;
 
 	GQueue *event_conns;
 	struct selfpipe *events_notify_pipe;
@@ -84,12 +87,14 @@ struct mrpc_message {
 	struct mrpc_event *event;
 	struct mrpc_header hdr;
 	char *data;
+	mrpc_status_t recv_error;
 };
 
 enum conn_state {
 	STATE_IDLE,
 	STATE_HEADER,
-	STATE_DATA
+	STATE_DATA,
+	STATE_INVALID
 };
 
 enum sequence_flags {
@@ -124,8 +129,7 @@ struct mrpc_connection {
 	char send_hdr_buf[MINIRPC_HEADER_LEN];
 	unsigned send_offset;
 
-	unsigned recv_offset;
-	unsigned recv_length;
+	unsigned recv_remaining;
 	char recv_hdr_buf[MINIRPC_HEADER_LEN];
 	enum conn_state recv_state;
 	struct mrpc_message *recv_msg;
@@ -215,6 +219,8 @@ mrpc_status_t unformat_reply(struct mrpc_message *msg, void **result);
 /* util.c */
 int set_nonblock(int fd);
 int block_signals(void);
+#define min(a,b) (a < b ? a : b)
+#define max(a,b) (a > b ? a : b)
 
 /* xdr_len.c */
 void xdrlen_create(XDR *xdrs);

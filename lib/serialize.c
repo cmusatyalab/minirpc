@@ -180,6 +180,8 @@ mrpc_status_t unformat_request(struct mrpc_message *msg, void **result)
 	xdrproc_t type;
 	unsigned size;
 
+	if (msg->recv_error)
+		return msg->recv_error;
 	if (msg->conn->set->conf.protocol->receiver_request_info(msg->hdr.cmd,
 				&type, &size))
 		return MINIRPC_ENCODING_ERR;
@@ -191,6 +193,8 @@ mrpc_status_t unformat_reply(struct mrpc_message *msg, void **result)
 	xdrproc_t type;
 	unsigned size;
 
+	if (msg->recv_error)
+		return msg->recv_error;
 	if (msg->hdr.status)
 		return msg->hdr.status;
 	if (msg->conn->set->conf.protocol->sender_reply_info(msg->hdr.cmd,

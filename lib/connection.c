@@ -51,7 +51,7 @@ static void conn_kill(struct mrpc_connection *conn,
 			enum mrpc_disc_reason reason);
 static void try_close_fd(struct mrpc_connection *conn);
 
-static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
+static void process_incoming_header(struct mrpc_connection *conn)
 {
 	mrpc_status_t ret;
 
@@ -59,17 +59,12 @@ static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
 				MINIRPC_HEADER_LEN, &conn->recv_msg->hdr,
 				sizeof(conn->recv_msg->hdr));
 	if (ret)
-		return ret;
-	if (conn->recv_msg->hdr.datalen > conn->set->conf.msg_max_buf_len) {
-		/* XXX doesn't get returned to client if request */
-  		return MINIRPC_ENCODING_ERR;
-	}
-
-	if (conn->recv_msg->hdr.datalen)
+		conn->recv_msg->recv_error=ret;
+	else if (conn->recv_msg->hdr.datalen > conn->set->conf.msg_max_buf_len)
+		conn->recv_msg->recv_error=MINIRPC_ENCODING_ERR;
+	else if (conn->recv_msg->hdr.datalen)
 		mrpc_alloc_message_data(conn->recv_msg,
 					conn->recv_msg->hdr.datalen);
-
-	return MINIRPC_OK;
 }
 
 static void try_read_conn(void *data, int fd)
@@ -78,29 +73,40 @@ static void try_read_conn(void *data, int fd)
 	size_t count;
 	ssize_t rcount;
 	char *buf;
-	unsigned len;
 
 	while (1) {
-		if (conn->recv_msg == NULL)
+		if (conn->recv_msg == NULL) {
 			conn->recv_msg=mrpc_alloc_message(conn);
+			conn->recv_remaining=MINIRPC_HEADER_LEN;
+		}
 
 		switch (conn->recv_state) {
 		case STATE_HEADER:
-			buf=conn->recv_hdr_buf;
-			len=MINIRPC_HEADER_LEN;
+			buf=conn->recv_hdr_buf + MINIRPC_HEADER_LEN -
+						conn->recv_remaining;
+			count=conn->recv_remaining;
 			break;
 		case STATE_DATA:
-			buf=conn->recv_msg->data;
-			len=conn->recv_msg->hdr.datalen;
+			buf=conn->recv_msg->data +
+						conn->recv_msg->hdr.datalen -
+						conn->recv_remaining;
+			count=conn->recv_remaining;
+			break;
+		case STATE_INVALID:
+			/* We defer allocation of the trash buffer until the
+			   first time we need it, since usually we won't */
+			if (conn->set->trashbuf == NULL)
+				conn->set->trashbuf=g_malloc(TRASHBUFSIZE);
+			buf=conn->set->trashbuf;
+			count=min(conn->recv_remaining, TRASHBUFSIZE);
 			break;
 		default:
 			assert(0);
 		}
 
-		if (conn->recv_offset < len) {
-			count = len - conn->recv_offset;
+		if (conn->recv_remaining) {
 			assert(!(conn->sequence_flags & SEQ_FD_CLOSED));
-			rcount=read(conn->fd, buf + conn->recv_offset, count);
+			rcount=read(conn->fd, buf, count);
 			if (rcount <= 0) {
 				if (rcount == 0)
 					conn_kill(conn, MRPC_DISC_CLOSED);
@@ -108,24 +114,24 @@ static void try_read_conn(void *data, int fd)
 					conn_kill(conn, MRPC_DISC_IOERR);
 				return;
 			}
-			conn->recv_offset += rcount;
+			conn->recv_remaining -= rcount;
 		}
 
-		if (conn->recv_offset == len) {
+		if (!conn->recv_remaining) {
 			switch (conn->recv_state) {
 			case STATE_HEADER:
-				if (process_incoming_header(conn)) {
-					/* XXX */
-					;
-				} else {
+				process_incoming_header(conn);
+				conn->recv_remaining =
+						conn->recv_msg->hdr.datalen;
+				if (conn->recv_msg->recv_error)
+					conn->recv_state=STATE_INVALID;
+				else
 					conn->recv_state=STATE_DATA;
-				}
-				conn->recv_offset=0;
 				break;
 			case STATE_DATA:
+			case STATE_INVALID:
 				process_incoming_message(conn->recv_msg);
 				conn->recv_state=STATE_HEADER;
-				conn->recv_offset=0;
 				conn->recv_msg=NULL;
 				break;
 			default:
@@ -823,5 +829,6 @@ exported void mrpc_conn_set_destroy(struct mrpc_conn_set *set)
 	g_queue_free(set->conns);
 	g_queue_free(set->listeners);
 	g_queue_free(set->event_conns);
+	g_free(set->trashbuf);
 	g_slice_free(struct mrpc_conn_set, set);
 }
