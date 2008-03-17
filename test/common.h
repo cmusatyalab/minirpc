@@ -32,6 +32,16 @@ void disconnect_normal(void *conn_data, enum mrpc_disc_reason reason);
 void disconnect_ioerr(void *conn_data, enum mrpc_disc_reason reason);
 void disconnect_user(void *conn_data, enum mrpc_disc_reason reason);
 void expect_disconnects(int user, int normal, int ioerr);
+#define expect(cmd, result) do {					\
+		int _ret=cmd;						\
+		int _expected=result;					\
+		if (_ret != _expected)					\
+			die("%s returned %d (%s), expected %d (%s)",	\
+						#cmd, _ret,		\
+						strerror(_ret),		\
+						_expected,		\
+						strerror(_expected));	\
+	} while (0)
 
 /* client_sync.c */
 void loop_int_sync(struct mrpc_connection *conn);
@@ -40,6 +50,9 @@ void error_sync(struct mrpc_connection *conn);
 void notify_sync(struct mrpc_connection *conn);
 void trigger_callback_sync(struct mrpc_connection *conn);
 void invalidate_sync(struct mrpc_connection *conn);
+mrpc_status_t send_buffer_sync(struct mrpc_connection *conn);
+mrpc_status_t recv_buffer_sync(struct mrpc_connection *conn);
+void msg_buffer_sync(struct mrpc_connection *conn);
 void sync_client_set_ops(struct mrpc_connection *conn);
 void sync_client_run(struct mrpc_connection *conn);
 

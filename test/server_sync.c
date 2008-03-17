@@ -101,6 +101,24 @@ static mrpc_status_t do_trigger_callback(void *conn_data,
 	return MINIRPC_OK;
 }
 
+static mrpc_status_t do_send_buffer(void *conn_data, struct mrpc_message *msg,
+			KBuffer *in)
+{
+	return MINIRPC_OK;
+}
+
+static mrpc_status_t do_recv_buffer(void *conn_data, struct mrpc_message *msg,
+			KBuffer *out)
+{
+	return MINIRPC_OK;
+}
+
+static void do_msg_buffer(void *conn_data, struct mrpc_message *msg,
+			KBuffer *in)
+{
+	return;
+}
+
 static const struct proto_server_operations ops = {
 	.ping = do_ping,
 	.loop_int = do_loop_int,
@@ -109,6 +127,9 @@ static const struct proto_server_operations ops = {
 	.invalidate_ops = do_invalidate_ops,
 	.trigger_callback = do_trigger_callback,
 	.notify = do_notify,
+	.send_buffer = do_send_buffer,
+	.recv_buffer = do_recv_buffer,
+	.msg_buffer = do_msg_buffer,
 };
 
 void sync_server_set_ops(struct mrpc_connection *conn)

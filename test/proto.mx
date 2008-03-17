@@ -19,6 +19,8 @@ struct CondVarPtr {
 	unsigned hyper mutex;
 };
 
+typedef opaque KBuffer[1024];
+
 serverprocs {
 	ping() = 1;
 	loop_int(IntParam, IntParam) = 2;
@@ -26,10 +28,13 @@ serverprocs {
 	error(void, IntParam) = 4;
 	invalidate_ops() = 5;
 	trigger_callback() = 6;
+	send_buffer(KBuffer) = 7;
+	recv_buffer(void, KBuffer) = 8;
 }
 
 servermsgs {
 	notify(CondVarPtr) = 1;
+	msg_buffer(KBuffer) = 2;
 }
 
 clientprocs {

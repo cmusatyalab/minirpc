@@ -12,17 +12,6 @@
 #include <unistd.h>
 #include "common.h"
 
-#define expect(cmd, result) do {					\
-		int _ret=cmd;						\
-		int _expected=result;					\
-		if (_ret != _expected)					\
-			die("%s returned %d (%s), expected %d (%s)",	\
-						#cmd, _ret,		\
-						strerror(_ret),		\
-						_expected,		\
-						strerror(_expected));	\
-	} while (0)
-
 mrpc_status_t do_ping(void *conn_data, struct mrpc_message *msg)
 {
 	expect(proto_client_check_int_send_async_reply(msg),

@@ -107,6 +107,34 @@ void invalidate_sync(struct mrpc_connection *conn)
 		die("Ping returned %d", ret);
 }
 
+mrpc_status_t send_buffer_sync(struct mrpc_connection *conn)
+{
+	KBuffer buf = {0};
+
+	return proto_send_buffer(conn, &buf);
+}
+
+mrpc_status_t recv_buffer_sync(struct mrpc_connection *conn)
+{
+	KBuffer *buf;
+	mrpc_status_t ret;
+
+	ret=proto_recv_buffer(conn, &buf);
+	if (!ret)
+		free_KBuffer(buf, 1);
+	return ret;
+}
+
+void msg_buffer_sync(struct mrpc_connection *conn)
+{
+	KBuffer buf = {0};
+	mrpc_status_t ret;
+
+	ret=proto_msg_buffer(conn, &buf);
+	if (ret)
+		die("msg_buffer returned %d", ret);
+}
+
 static mrpc_status_t client_check_int(void *conn_data,
 			struct mrpc_message *msg, IntParam *req)
 {

@@ -108,6 +108,8 @@ static void *process_pending(void *unused)
 			pthread_cond_broadcast(item->cond);
 			pthread_mutex_unlock(item->lock);
 			break;
+		default:
+			die("Unknown pending work type %d", item->proc);
 		}
 		g_slice_free(struct pending_work, item);
 	}
