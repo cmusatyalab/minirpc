@@ -18,6 +18,7 @@
 static gint disc_normal;
 static gint disc_ioerr;
 static gint disc_user;
+static gint ioerrs;
 
 void _message(const char *file, int line, const char *func, const char *fmt,
 			...)
@@ -78,6 +79,11 @@ void disconnect_user(void *conn_data, enum mrpc_disc_reason reason)
 	g_atomic_int_inc(&disc_user);
 }
 
+void handle_ioerr(void *conn_private, char *msg)
+{
+	g_atomic_int_inc(&ioerrs);
+}
+
 void expect_disconnects(int user, int normal, int ioerr)
 {
 	int count;
@@ -91,4 +97,13 @@ void expect_disconnects(int user, int normal, int ioerr)
 	count=g_atomic_int_get(&disc_ioerr);
 	if (ioerr != -1 && count != ioerr)
 		die("Expected %d ioerr disconnects, got %d", ioerr, count);
+}
+
+void expect_ioerrs(int count)
+{
+	int have;
+
+	have=g_atomic_int_get(&ioerrs);
+	if (have != count)
+		die("Expected %d I/O errors, got %d", count, have);
 }

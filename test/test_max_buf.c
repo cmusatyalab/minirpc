@@ -14,6 +14,7 @@
 static const struct mrpc_config client_config = {
 	.protocol = &proto_client,
 	.disconnect = disconnect_user,
+	.ioerr = handle_ioerr,
 	.msg_max_buf_len = 128
 };
 
@@ -21,6 +22,7 @@ static const struct mrpc_config server_config = {
 	.protocol = &proto_server,
 	.accept = sync_server_accept,
 	.disconnect = disconnect_normal,
+	.ioerr = handle_ioerr,
 	.msg_max_buf_len = 128
 };
 
@@ -55,5 +57,6 @@ int main(int argc, char **argv)
 	mrpc_conn_set_destroy(cset);
 	mrpc_conn_set_destroy(sset);
 	expect_disconnects(1, 1, 0);
+	expect_ioerrs(3);
 	return 0;
 }
