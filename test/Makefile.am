@@ -31,7 +31,7 @@ check_PROGRAMS += test_sequential_clients
 check_PROGRAMS += test_simultaneous_clients
 check_PROGRAMS += test_bind_fd
 check_PROGRAMS += test_errors
-check_PROGRAMS += test_protocol_err
+check_PROGRAMS += test_max_buf
 
 TESTS_ENVIRONMENT = $(builddir)/runtest.sh
 TESTS = $(check_PROGRAMS)
