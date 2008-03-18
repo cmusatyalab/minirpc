@@ -99,14 +99,11 @@ typedef int mrpc_status_t;
  *	The connection was closed by the remote end
  * @param	MRPC_DISC_IOERR
  *	The connection was closed due to an I/O error
- * @param	MRPC_DISC_DESYNC
- *	XXX
  */
 enum mrpc_disc_reason {
 	MRPC_DISC_USER,
 	MRPC_DISC_CLOSED,
-	MRPC_DISC_IOERR,
-	MRPC_DISC_DESYNC
+	MRPC_DISC_IOERR
 };
 
 /**

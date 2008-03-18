@@ -51,7 +51,8 @@ static void conn_kill(struct mrpc_connection *conn,
 			enum mrpc_disc_reason reason);
 static void try_close_fd(struct mrpc_connection *conn);
 
-static void process_incoming_header(struct mrpc_connection *conn)
+/* Returns error code if the connection should be killed */
+static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
 {
 	mrpc_status_t ret;
 
@@ -60,8 +61,11 @@ static void process_incoming_header(struct mrpc_connection *conn)
 				sizeof(conn->recv_msg->hdr));
 	if (ret) {
 		queue_ioerr_event(conn, "Header deserialize failure");
-		conn->recv_msg->recv_error=ret;
-	} else if (conn->recv_msg->hdr.datalen >
+		/* We are now desynchronized */
+		return MINIRPC_ENCODING_ERR;
+	}
+
+	if (conn->recv_msg->hdr.datalen >
 				conn->set->conf.msg_max_buf_len) {
 		queue_ioerr_event(conn, "Payload over maximum, seq %u len %u",
 					conn->recv_msg->hdr.sequence,
@@ -71,6 +75,7 @@ static void process_incoming_header(struct mrpc_connection *conn)
 		mrpc_alloc_message_data(conn->recv_msg,
 					conn->recv_msg->hdr.datalen);
 	}
+	return MINIRPC_OK;
 }
 
 static void try_read_conn(void *data, int fd)
@@ -114,10 +119,13 @@ static void try_read_conn(void *data, int fd)
 			assert(!(conn->sequence_flags & SEQ_FD_CLOSED));
 			rcount=read(conn->fd, buf, count);
 			if (rcount <= 0) {
-				if (rcount == 0)
+				if (rcount == 0) {
 					conn_kill(conn, MRPC_DISC_CLOSED);
-				else if (errno != EAGAIN && errno != EINTR)
+				} else if (errno != EAGAIN && errno != EINTR) {
+					queue_ioerr_event(conn, "Error %d "
+							"on read", errno);
 					conn_kill(conn, MRPC_DISC_IOERR);
+				}
 				return;
 			}
 			conn->recv_remaining -= rcount;
@@ -126,7 +134,10 @@ static void try_read_conn(void *data, int fd)
 		if (!conn->recv_remaining) {
 			switch (conn->recv_state) {
 			case STATE_HEADER:
-				process_incoming_header(conn);
+				if (process_incoming_header(conn)) {
+					conn_kill(conn, MRPC_DISC_IOERR);
+					return;
+				}
 				conn->recv_remaining =
 						conn->recv_msg->hdr.datalen;
 				if (conn->recv_msg->recv_error)
@@ -165,7 +176,8 @@ static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 	ret=serialize((xdrproc_t)xdr_mrpc_header, &conn->send_msg->hdr,
 				conn->send_hdr_buf, MINIRPC_HEADER_LEN);
 	if (ret) {
-		/* XXX message dropped on floor */
+		/* Message dropped on floor */
+		queue_ioerr_event(conn, "Header serialize failure");
 		mrpc_free_message(conn->send_msg);
 		conn->send_msg=NULL;
 		return ret;
@@ -222,6 +234,8 @@ static void try_write_conn(void *data, int fd)
 			rcount=write(conn->fd, buf + conn->send_offset, count);
 			if (rcount == -1 && errno != EAGAIN
 						&& errno != EINTR) {
+				queue_ioerr_event(conn, "Error %d on write",
+							errno);
 				conn_kill(conn, MRPC_DISC_IOERR);
 				return;
 			}
@@ -251,7 +265,6 @@ static void conn_hangup(void *data, int fd)
 {
 	struct mrpc_connection *conn=data;
 
-	/* XXX we may not get this */
 	conn_kill(conn, MRPC_DISC_CLOSED);
 }
 
@@ -259,6 +272,7 @@ static void conn_error(void *data, int fd)
 {
 	struct mrpc_connection *conn=data;
 
+	queue_ioerr_event(conn, "Poll reported I/O error");
 	conn_kill(conn, MRPC_DISC_IOERR);
 }
 
@@ -708,10 +722,8 @@ static void *listener(void *data)
 	struct mrpc_conn_set *set=data;
 
 	block_signals();
-	while (!selfpipe_is_set(set->shutdown_pipe)) {
-		if (pollset_poll(set->pollset))
-			/* XXX */;
-	}
+	while (!selfpipe_is_set(set->shutdown_pipe))
+		pollset_poll(set->pollset);
 	return NULL;
 }
 
