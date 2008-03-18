@@ -291,11 +291,10 @@ static void dispatch_request(struct mrpc_event *event)
 	mrpc_free_message_data(request);
 
 	pthread_mutex_lock(&conn->operations_lock);
-	if (conn->set->conf.protocol->request != NULL)
-		result=conn->set->conf.protocol->request(conn->operations,
-					conn->private, request,
-					request->hdr.cmd, request_data,
-					reply_data);
+	assert(conn->set->conf.protocol->request != NULL);
+	result=conn->set->conf.protocol->request(conn->operations,
+				conn->private, request, request->hdr.cmd,
+				request_data, reply_data);
 	/* Note: if the application returned MINIRPC_PENDING and then
 	   immediately sent its reply from another thread, the request has
 	   already been freed.  So, if result == MINIRPC_PENDING, we can't
@@ -384,6 +383,7 @@ static void dispatch_event(struct mrpc_event *event)
 		switch (type) {
 		case EVENT_REQUEST:
 		case EVENT_IOERR:
+			mrpc_unplug_event(event);
 			destroy_event(event);
 			goto out;
 		case EVENT_REPLY:

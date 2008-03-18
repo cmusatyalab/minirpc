@@ -270,9 +270,7 @@ void process_incoming_message(struct mrpc_message *msg)
 					&msg->hdr.sequence);
 		g_hash_table_steal(conn->pending_replies, &msg->hdr.sequence);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
-		if (pending == NULL || pending->cmd != msg->hdr.cmd ||
-					(msg->hdr.status != 0 &&
-					msg->hdr.datalen != 0)) {
+		if (pending == NULL) {
 			event=mrpc_alloc_event(conn, EVENT_IOERR);
 			if (asprintf(&event->errstring,
 					"Unmatched reply, seq %u cmd "
@@ -283,9 +281,14 @@ void process_incoming_message(struct mrpc_message *msg)
 				event->errstring=NULL;
 			queue_event(event);
 			mrpc_free_message(msg);
-			if (pending != NULL)
-				pending_free(pending);
 		} else {
+			if (!msg->recv_error) {
+				if (pending->cmd != msg->hdr.cmd)
+					msg->recv_error=MINIRPC_ENCODING_ERR;
+				else if (msg->hdr.status != 0 &&
+							msg->hdr.datalen != 0)
+					msg->recv_error=MINIRPC_ENCODING_ERR;
+			}
 			pending_dispatch(pending, msg);
 		}
 	}
