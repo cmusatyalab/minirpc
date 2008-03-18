@@ -10,6 +10,7 @@
  */
 
 #include <sys/poll.h>
+#include <stdarg.h>
 #include <unistd.h>
 #include <assert.h>
 #include <errno.h>
@@ -107,6 +108,19 @@ void queue_event(struct mrpc_event *event)
 	conn->events_pending++;
 	try_queue_conn(conn);
 	pthread_mutex_unlock(&conn->set->events_lock);
+}
+
+void queue_ioerr_event(struct mrpc_connection *conn, char *fmt, ...)
+{
+	struct mrpc_event *event;
+	va_list ap;
+
+	event=mrpc_alloc_event(conn, EVENT_IOERR);
+	va_start(ap, fmt);
+	if (vasprintf(&event->errstring, fmt, ap) == -1)
+		event->errstring=NULL;
+	va_end(ap);
+	queue_event(event);
 }
 
 static struct mrpc_event *unqueue_event(struct mrpc_conn_set *set)
@@ -245,7 +259,6 @@ static void fail_request(struct mrpc_message *request, mrpc_status_t err)
 	}
 }
 
-/* XXX notifications to application */
 static void dispatch_request(struct mrpc_event *event)
 {
 	struct mrpc_connection *conn=event->conn;

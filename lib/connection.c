@@ -58,13 +58,19 @@ static void process_incoming_header(struct mrpc_connection *conn)
 	ret=unserialize((xdrproc_t)xdr_mrpc_header, conn->recv_hdr_buf,
 				MINIRPC_HEADER_LEN, &conn->recv_msg->hdr,
 				sizeof(conn->recv_msg->hdr));
-	if (ret)
+	if (ret) {
+		queue_ioerr_event(conn, "Header deserialize failure");
 		conn->recv_msg->recv_error=ret;
-	else if (conn->recv_msg->hdr.datalen > conn->set->conf.msg_max_buf_len)
+	} else if (conn->recv_msg->hdr.datalen >
+				conn->set->conf.msg_max_buf_len) {
+		queue_ioerr_event(conn, "Payload over maximum, seq %u len %u",
+					conn->recv_msg->hdr.sequence,
+					conn->recv_msg->hdr.datalen);
 		conn->recv_msg->recv_error=MINIRPC_ENCODING_ERR;
-	else if (conn->recv_msg->hdr.datalen)
+	} else if (conn->recv_msg->hdr.datalen) {
 		mrpc_alloc_message_data(conn->recv_msg,
 					conn->recv_msg->hdr.datalen);
+	}
 }
 
 static void try_read_conn(void *data, int fd)

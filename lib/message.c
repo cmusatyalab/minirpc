@@ -254,7 +254,6 @@ exported mrpc_status_t mrpc_send_reply_error(
 	return MINIRPC_OK;
 }
 
-/* XXX what happens if we get a bad reply?  close the connection? */
 void process_incoming_message(struct mrpc_message *msg)
 {
 	struct mrpc_connection *conn=msg->conn;
@@ -271,23 +270,27 @@ void process_incoming_message(struct mrpc_message *msg)
 		g_hash_table_steal(conn->pending_replies, &msg->hdr.sequence);
 		pthread_mutex_unlock(&conn->pending_replies_lock);
 		if (pending == NULL) {
-			event=mrpc_alloc_event(conn, EVENT_IOERR);
-			if (asprintf(&event->errstring,
-					"Unmatched reply, seq %u cmd "
+			queue_ioerr_event(conn, "Unmatched reply, seq %u cmd "
 					"%d status %d len %u",
 					msg->hdr.sequence, msg->hdr.cmd,
-					msg->hdr.status, msg->hdr.datalen)
-					== -1)
-				event->errstring=NULL;
-			queue_event(event);
+					msg->hdr.status, msg->hdr.datalen);
 			mrpc_free_message(msg);
 		} else {
 			if (!msg->recv_error) {
-				if (pending->cmd != msg->hdr.cmd)
+				if (pending->cmd != msg->hdr.cmd) {
 					msg->recv_error=MINIRPC_ENCODING_ERR;
-				else if (msg->hdr.status != 0 &&
-							msg->hdr.datalen != 0)
+					queue_ioerr_event(conn, "Mismatched "
+						"command field in reply, seq "
+						"%u, expected cmd %d, found "
+						"%d", msg->hdr.sequence,
+						pending->cmd, msg->hdr.cmd);
+				} else if (msg->hdr.status != 0 &&
+						msg->hdr.datalen != 0) {
 					msg->recv_error=MINIRPC_ENCODING_ERR;
+					queue_ioerr_event(conn, "Reply with "
+						"both error and payload, seq "
+						"%u", msg->hdr.sequence);
+				}
 			}
 			pending_dispatch(pending, msg);
 		}
