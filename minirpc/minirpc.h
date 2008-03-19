@@ -164,9 +164,9 @@ struct mrpc_config {
 	 *	A string describing the error
 	 *
 	 * If non-NULL, this callback is fired whenever miniRPC encounters
-	 * an I/O error it wishes to report to the application.  @c message
-	 * is in a format suitable for logging.  @c message is no longer valid
-	 * once the callback returns.
+	 * an I/O or XDR error it wishes to report to the application.
+	 * @c message is in a format suitable for logging.  @c message is no
+	 * longer valid once the callback returns.
 	 */
 	void (*ioerr)(void *conn_data, char *message);
 
@@ -176,16 +176,14 @@ struct mrpc_config {
 	 * The maximum length, in bytes, of an XDR-encoded message received
 	 * from the remote system.  If zero, a default will be used.
 	 * Requests exceeding this threshold will be rejected and
-	 * ::MRPC_ENCODING_ERROR will be returned to the sender.
-	 * Other messages exceeding the threshold will be dropped.
+	 * ::MINIRPC_ENCODING_ERR will be returned to the sender.
+	 * Replies exceeding this threshold will be treated as though the
+	 * remote system returned ::MINIRPC_ENCODING_ERR.  Unidirectional
+	 * messages exceeding the threshold will be dropped.
 	 *
 	 * This is intended only as a DoS prevention measure, and should be
 	 * set to a value larger than any legitimate message possible in your
 	 * protocol.
-	 *
-	 * @bug We should wake up the waiter and give them a suitable error
-	 * code.
-	 * @bug We don't actually return an error to the sender
 	 */
 	unsigned msg_max_buf_len;
 
