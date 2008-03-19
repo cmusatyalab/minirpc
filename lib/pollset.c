@@ -39,10 +39,9 @@ static void pollset_free_dead(struct pollset *pset)
 		poll_fd_free(pfd);
 }
 
-static void wakeup_pipe_err(void *ignored, int fd)
+static void wakeup_pipe_err(void *ignored)
 {
 	(void)ignored;
-	(void)fd;
 	assert(0);
 }
 

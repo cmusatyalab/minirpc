@@ -78,7 +78,7 @@ static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
 	return MINIRPC_OK;
 }
 
-static void try_read_conn(void *data, int fd)
+static void try_read_conn(void *data)
 {
 	struct mrpc_connection *conn=data;
 	size_t count;
@@ -185,7 +185,7 @@ static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 	return MINIRPC_OK;
 }
 
-static void try_write_conn(void *data, int fd)
+static void try_write_conn(void *data)
 {
 	struct mrpc_connection *conn=data;
 	size_t count;
@@ -261,14 +261,14 @@ static void try_write_conn(void *data, int fd)
 	}
 }
 
-static void conn_hangup(void *data, int fd)
+static void conn_hangup(void *data)
 {
 	struct mrpc_connection *conn=data;
 
 	conn_kill(conn, MRPC_DISC_CLOSED);
 }
 
-static void conn_error(void *data, int fd)
+static void conn_error(void *data)
 {
 	struct mrpc_connection *conn=data;
 
@@ -466,9 +466,9 @@ void mrpc_conn_free(struct mrpc_connection *conn)
 	g_slice_free(struct mrpc_connection, conn);
 }
 
-static void try_accept(void *data, int listenfd)
+static void try_accept(void *data)
 {
-	struct mrpc_conn_set *set=data;
+	struct mrpc_listener *lnr=data;
 	struct mrpc_connection *conn;
 	struct mrpc_event *event;
 	struct sockaddr_storage sa;
@@ -478,10 +478,10 @@ static void try_accept(void *data, int listenfd)
 	/* XXX error handling */
 	while (1) {
 		len=sizeof(sa);
-		fd=accept(listenfd, (struct sockaddr *)&sa, &len);
+		fd=accept(lnr->fd, (struct sockaddr *)&sa, &len);
 		if (fd == -1)
 			break;
-		if (mrpc_conn_create(&conn, set, NULL)) {
+		if (mrpc_conn_create(&conn, lnr->set, NULL)) {
 			close(fd);
 			continue;
 		}
@@ -639,14 +639,16 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 			close(fd);
 			continue;
 		}
-		ret=pollset_add(set->pollset, fd, POLLSET_READABLE,
-					set, try_accept, NULL, NULL, NULL);
+		lnr=g_slice_new0(struct mrpc_listener);
+		lnr->set=set;
+		lnr->fd=fd;
+		ret=pollset_add(set->pollset, fd, POLLSET_READABLE, lnr,
+					try_accept, NULL, NULL, NULL);
 		if (ret) {
 			close(fd);
+			g_slice_free(struct mrpc_listener, lnr);
 			continue;
 		}
-		lnr=g_slice_new0(struct mrpc_listener);
-		lnr->fd=fd;
 		pthread_mutex_lock(&set->conns_lock);
 		g_queue_push_tail(set->listeners, lnr);
 		pthread_mutex_unlock(&set->conns_lock);
@@ -760,7 +762,7 @@ static int validate_copy_config(const struct mrpc_config *from,
 }
 #undef copy_default
 
-static void pipe_error(void *data, int fd)
+static void pipe_error(void *data)
 {
 	assert(0);
 }

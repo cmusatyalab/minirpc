@@ -92,16 +92,16 @@ static int epoll_poll(struct pollset *pset)
 		if ((ev[i].events & EPOLLOUT) && pfd->writable_fn &&
 					(pfd->flags & POLLSET_WRITABLE) &&
 					!pfd->dead)
-			pfd->writable_fn(pfd->private, pfd->fd);
+			pfd->writable_fn(pfd->private);
 		if ((ev[i].events & EPOLLIN) && pfd->readable_fn &&
 					(pfd->flags & POLLSET_READABLE) &&
 					!pfd->dead)
-			pfd->readable_fn(pfd->private, pfd->fd);
+			pfd->readable_fn(pfd->private);
 		if ((ev[i].events & (EPOLLERR|EPOLLHUP)) && !pfd->dead) {
 			if ((ev[i].events & EPOLLHUP) && pfd->hangup_fn)
-				pfd->hangup_fn(pfd->private, pfd->fd);
+				pfd->hangup_fn(pfd->private);
 			else if (pfd->error_fn)
-				pfd->error_fn(pfd->private, pfd->fd);
+				pfd->error_fn(pfd->private);
 			pollset_del(pset, pfd->fd);
 		}
 	}
