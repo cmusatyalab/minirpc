@@ -33,6 +33,7 @@ check_PROGRAMS += test_bind_fd
 check_PROGRAMS += test_errors
 check_PROGRAMS += test_max_buf
 check_PROGRAMS += test_protocol_err
+check_PROGRAMS += test_fd_limit
 
 TESTS_ENVIRONMENT = $(builddir)/runtest.sh
 TESTS = $(check_PROGRAMS)
