@@ -69,7 +69,7 @@ static void poll_build_table(gpointer key, gpointer value, gpointer data)
 	/* POLLERR and POLLHUP are implicitly set */
 }
 
-static int poll_poll(struct pollset *pset)
+static int poll_poll(struct pollset *pset, int timeout)
 {
 	struct poll_table pt;
 	struct poll_fd *pfd;
@@ -84,7 +84,7 @@ static int poll_poll(struct pollset *pset)
 	g_hash_table_foreach(pset->members, poll_build_table, &pt);
 	pthread_mutex_unlock(&pset->lock);
 
-	if (poll(pt.ev, pt.count, -1) == -1) {
+	if (poll(pt.ev, pt.count, timeout) == -1) {
 		g_free(pt.ev);
 		g_free(pt.pfd);
 		return errno;

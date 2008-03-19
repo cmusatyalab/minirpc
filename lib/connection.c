@@ -358,7 +358,7 @@ static int _mrpc_bind_fd(struct mrpc_connection *conn, int fd)
 	conn->fd=fd;
 	ret=pollset_add(conn->set->pollset, fd, POLLSET_READABLE, conn,
 				try_read_conn, try_write_conn, conn_hangup,
-				conn_error);
+				conn_error, NULL);
 	if (!ret)
 		conn->sequence_flags |= SEQ_HAVE_FD;
 out:
@@ -466,9 +466,17 @@ void mrpc_conn_free(struct mrpc_connection *conn)
 	g_slice_free(struct mrpc_connection, conn);
 }
 
+static void restart_accept(void *data)
+{
+	struct mrpc_listener *lnr=data;
+
+	pollset_modify(lnr->set->pollset, lnr->fd, POLLSET_READABLE);
+}
+
 static void try_accept(void *data)
 {
 	struct mrpc_listener *lnr=data;
+	struct mrpc_conn_set *set=lnr->set;
 	struct mrpc_connection *conn;
 	struct mrpc_event *event;
 	struct sockaddr_storage sa;
@@ -479,9 +487,15 @@ static void try_accept(void *data)
 	while (1) {
 		len=sizeof(sa);
 		fd=accept(lnr->fd, (struct sockaddr *)&sa, &len);
-		if (fd == -1)
+		if (fd == -1) {
+			if (errno != EAGAIN) {
+				pollset_modify(set->pollset, lnr->fd, 0);
+				pollset_set_timer(set->pollset, lnr->fd,
+						set->conf.accept_backoff);
+			}
 			break;
-		if (mrpc_conn_create(&conn, lnr->set, NULL)) {
+		}
+		if (mrpc_conn_create(&conn, set, NULL)) {
 			close(fd);
 			continue;
 		}
@@ -643,7 +657,8 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 		lnr->set=set;
 		lnr->fd=fd;
 		ret=pollset_add(set->pollset, fd, POLLSET_READABLE, lnr,
-					try_accept, NULL, NULL, NULL);
+					try_accept, NULL, NULL, NULL,
+					restart_accept);
 		if (ret) {
 			close(fd);
 			g_slice_free(struct mrpc_listener, lnr);
@@ -758,6 +773,7 @@ static int validate_copy_config(const struct mrpc_config *from,
 	to->ioerr=from->ioerr;
 	copy_default(from, to, msg_max_buf_len, 16000);
 	copy_default(from, to, listen_backlog, 16);
+	copy_default(from, to, accept_backoff, 1000);
 	return 0;
 }
 #undef copy_default
@@ -800,7 +816,7 @@ exported int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
 		goto bad;
 	ret=pollset_add(set->pollset, selfpipe_fd(set->shutdown_pipe),
 				POLLSET_READABLE, NULL, NULL, NULL, NULL,
-				pipe_error);
+				pipe_error, NULL);
 	if (ret)
 		goto bad;
 	ret=pthread_create(&set->thread, NULL, listener, set);

@@ -198,6 +198,17 @@ struct mrpc_config {
 	 * to the listen() system call.  If zero, a default will be used.
 	 */
 	unsigned listen_backlog;
+
+	/**
+	 * @brief Number of milliseconds to back off if accept() fails
+	 *
+	 * If an error occurs while accepting a connection on a listening
+	 * socket, miniRPC will wait this many milliseconds before trying to
+	 * accept any more connections on that socket.  Existing connections
+	 * are not affected.  Such an error can occur, for example, if the
+	 * process runs out of available file descriptors.
+	 */
+	unsigned accept_backoff;
 };
 
 

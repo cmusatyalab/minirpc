@@ -187,9 +187,10 @@ void pollset_free(struct pollset *pset);
 int pollset_add(struct pollset *pset, int fd, poll_flags_t flags,
 			void *private, poll_callback_fn readable,
 			poll_callback_fn writable, poll_callback_fn hangup,
-			poll_callback_fn error);
+			poll_callback_fn error, poll_callback_fn timeout);
 int pollset_modify(struct pollset *pset, int fd, poll_flags_t flags);
 void pollset_del(struct pollset *pset, int fd);
+int pollset_set_timer(struct pollset *pset, int fd, unsigned timeout_ms);
 int pollset_poll(struct pollset *pset);
 void pollset_wake(struct pollset *pset);
 

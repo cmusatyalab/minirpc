@@ -22,6 +22,8 @@ struct pollset {
 	pthread_mutex_t lock;
 	GHashTable *members;
 	GQueue *dead;
+	GTree *timers;
+	GQueue *expired;
 	int64_t serial;
 	int64_t running_serial;
 	pthread_t running_thread;
@@ -37,12 +39,14 @@ struct pollset {
 struct poll_fd {
 	int fd;
 	poll_flags_t flags;
+	struct timeval expires;  /* wall-clock time to fire timeout_fn */
 	void *private;
 	int dead;
 	poll_callback_fn readable_fn;
 	poll_callback_fn writable_fn;
 	poll_callback_fn hangup_fn;
 	poll_callback_fn error_fn;
+	poll_callback_fn timeout_fn;
 };
 
 struct pollset_ops {
@@ -51,7 +55,7 @@ struct pollset_ops {
 	int (*add)(struct pollset *pset, struct poll_fd *pfd);
 	int (*modify)(struct pollset *pset, struct poll_fd *pfd);
 	void (*remove)(struct pollset *pset, struct poll_fd *pfd);
-	int (*poll)(struct pollset *pset);
+	int (*poll)(struct pollset *pset, int timeout_ms);
 };
 
 #endif

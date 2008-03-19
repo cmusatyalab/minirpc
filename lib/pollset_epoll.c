@@ -76,14 +76,14 @@ static void epoll_remove(struct pollset *pset, struct poll_fd *pfd)
 				(struct epoll_event *)1);
 }
 
-static int epoll_poll(struct pollset *pset)
+static int epoll_poll(struct pollset *pset, int timeout)
 {
 	struct epoll_event ev[64]; /* XXX */
 	struct poll_fd *pfd;
 	int i;
 	int count;
 
-	count=epoll_wait(pset->impl->fd, ev, 16, -1);
+	count=epoll_wait(pset->impl->fd, ev, 16, timeout);
 	if (count == -1)
 		return errno;
 
