@@ -10,7 +10,7 @@
  */
 
 #include <pthread.h>
-#include <assert.h>  /* XXX */
+#include <assert.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
@@ -254,6 +254,26 @@ exported mrpc_status_t mrpc_send_reply_error(
 	return MINIRPC_OK;
 }
 
+static void check_reply_header(struct pending_reply *pending,
+			struct mrpc_message *msg)
+{
+	struct mrpc_connection *conn=msg->conn;
+
+	if (msg->recv_error) {
+		return;
+	} else if (pending->cmd != msg->hdr.cmd) {
+		msg->recv_error=MINIRPC_ENCODING_ERR;
+		queue_ioerr_event(conn, "Mismatched command field in reply, "
+					"seq %u, expected cmd %d, found %d",
+					msg->hdr.sequence, pending->cmd,
+					msg->hdr.cmd);
+	} else if (msg->hdr.status != 0 && msg->hdr.datalen != 0) {
+		msg->recv_error=MINIRPC_ENCODING_ERR;
+		queue_ioerr_event(conn, "Reply with both error and payload, "
+					"seq %u", msg->hdr.sequence);
+	}
+}
+
 void process_incoming_message(struct mrpc_message *msg)
 {
 	struct mrpc_connection *conn=msg->conn;
@@ -276,22 +296,7 @@ void process_incoming_message(struct mrpc_message *msg)
 					msg->hdr.status, msg->hdr.datalen);
 			mrpc_free_message(msg);
 		} else {
-			if (!msg->recv_error) {
-				if (pending->cmd != msg->hdr.cmd) {
-					msg->recv_error=MINIRPC_ENCODING_ERR;
-					queue_ioerr_event(conn, "Mismatched "
-						"command field in reply, seq "
-						"%u, expected cmd %d, found "
-						"%d", msg->hdr.sequence,
-						pending->cmd, msg->hdr.cmd);
-				} else if (msg->hdr.status != 0 &&
-						msg->hdr.datalen != 0) {
-					msg->recv_error=MINIRPC_ENCODING_ERR;
-					queue_ioerr_event(conn, "Reply with "
-						"both error and payload, seq "
-						"%u", msg->hdr.sequence);
-				}
-			}
+			check_reply_header(pending, msg);
 			pending_dispatch(pending, msg);
 		}
 	}

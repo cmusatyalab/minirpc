@@ -266,7 +266,7 @@ static void dispatch_request(struct mrpc_event *event)
 	void *request_data;
 	void *reply_data=NULL;
 	mrpc_status_t ret;
-	mrpc_status_t result=MINIRPC_PROCEDURE_UNAVAIL;
+	mrpc_status_t result;
 	xdrproc_t request_type;
 	xdrproc_t reply_type;
 	unsigned reply_size;
@@ -331,7 +331,11 @@ static void dispatch_request(struct mrpc_event *event)
 						reply_data);
 		mrpc_free_argument(reply_type, reply_data);
 		if (ret) {
-			/* XXX reply failed! */
+			queue_ioerr_event(conn, "Synchronous reply failed, "
+						"seq %u cmd %d status %d "
+						"err %d",
+						request->hdr.sequence,
+						request->hdr.cmd, result, ret);
 			mrpc_free_message(request);
 		}
 	} else {
@@ -349,10 +353,13 @@ static void run_reply_callback(struct mrpc_event *event)
 	unsigned size;
 	mrpc_status_t ret;
 
-	ret=reply->conn->set->conf.protocol->sender_reply_info(reply->hdr.cmd,
-				&type, &size);
-	if (ret) {
-		/* XXX */
+	if (reply->conn->set->conf.protocol->sender_reply_info(reply->hdr.cmd,
+				&type, &size)) {
+		/* Can't happen if the info tables are well-formed */
+		queue_ioerr_event(reply->conn, "Internal error running reply "
+					"callback, seq %u cmd %d status %d",
+					reply->hdr.sequence, reply->hdr.cmd,
+					reply->hdr.status);
 		mrpc_free_message(reply);
 		return;
 	}
