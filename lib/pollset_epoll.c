@@ -12,6 +12,7 @@
 #include <unistd.h>
 #include <sys/epoll.h>
 #include <errno.h>
+#include <pthread.h>
 #define MINIRPC_POLLSET
 #define MINIRPC_INTERNAL
 #include "internal.h"
@@ -78,14 +79,22 @@ static void epoll_remove(struct pollset *pset, struct poll_fd *pfd)
 
 static int epoll_poll(struct pollset *pset, int timeout)
 {
-	struct epoll_event ev[64]; /* XXX */
+	struct epoll_event *ev;
 	struct poll_fd *pfd;
 	int i;
+	int nslot;
 	int count;
+	int ret=0;
 
-	count=epoll_wait(pset->impl->fd, ev, 16, timeout);
-	if (count == -1)
-		return errno;
+	pthread_mutex_lock(&pset->lock);
+	nslot=g_hash_table_size(pset->members);
+	pthread_mutex_unlock(&pset->lock);
+	ev=g_slice_alloc(sizeof(struct epoll_event[nslot]));
+	count=epoll_wait(pset->impl->fd, ev, nslot, timeout);
+	if (count == -1) {
+		ret=errno;
+		goto out;
+	}
 
 	for (i=0; i<count; i++) {
 		pfd=ev[i].data.ptr;
@@ -105,7 +114,9 @@ static int epoll_poll(struct pollset *pset, int timeout)
 			pollset_del(pset, pfd->fd);
 		}
 	}
-	return 0;
+out:
+	g_slice_free1(sizeof(struct epoll_event[nslot]), ev);
+	return ret;
 }
 
 static const struct pollset_ops ops = {
