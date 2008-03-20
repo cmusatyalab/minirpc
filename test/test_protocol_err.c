@@ -263,6 +263,21 @@ int main(int argc, char **argv)
 	send_msg(cfd, 7, MINIRPC_OK, nr_proto_ping, 0);
 	expected_ioerrs++;
 
+	/* Unidirectional message with error code */
+	send_msg(cfd, 8, MINIRPC_OK, nr_proto_msg_buffer, 1024);
+	expected_ioerrs++;
+
+	/* Empty event queues before closing, to make sure that no ioerr
+	   events are squashed */
+	send_msg(cfd, 0, MINIRPC_PENDING, nr_proto_ping, 0);
+	recv_msg(cfd, &seq, MINIRPC_OK, nr_proto_ping, 0);
+	expect(seq, 0);
+	expected=0;
+	expect(proto_ping_async(conn, cb_ping, &expected), 0);
+	recv_msg(sfd, &seq, MINIRPC_PENDING, nr_proto_ping, 0);
+	send_msg(sfd, seq, MINIRPC_OK, nr_proto_ping, 0);
+	sem_wait(&cb_complete);
+
 	close(cfd);
 	close(sfd);
 	mrpc_conn_set_destroy(sset);
