@@ -133,9 +133,9 @@ void pollset_free(struct pollset *pset)
 }
 
 int pollset_add(struct pollset *pset, int fd, poll_flags_t flags,
-			void *private, poll_callback_fn readable,
-			poll_callback_fn writable, poll_callback_fn hangup,
-			poll_callback_fn error, poll_callback_fn timeout)
+			void *private, poll_callback_fn *readable,
+			poll_callback_fn *writable, poll_callback_fn *hangup,
+			poll_callback_fn *error, poll_callback_fn *timeout)
 {
 	struct poll_fd *pfd;
 	int ret;

@@ -42,11 +42,11 @@ struct poll_fd {
 	struct timeval expires;  /* wall-clock time to fire timeout_fn */
 	void *private;
 	int dead;
-	poll_callback_fn readable_fn;
-	poll_callback_fn writable_fn;
-	poll_callback_fn hangup_fn;
-	poll_callback_fn error_fn;
-	poll_callback_fn timeout_fn;
+	poll_callback_fn *readable_fn;
+	poll_callback_fn *writable_fn;
+	poll_callback_fn *hangup_fn;
+	poll_callback_fn *error_fn;
+	poll_callback_fn *timeout_fn;
 };
 
 struct pollset_ops {

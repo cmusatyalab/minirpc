@@ -181,13 +181,13 @@ int thread_on_conn(struct mrpc_connection *conn);
 typedef unsigned poll_flags_t;
 #define POLLSET_READABLE	((poll_flags_t) 0x1)
 #define POLLSET_WRITABLE	((poll_flags_t) 0x2)
-typedef void (*poll_callback_fn)(void *private);
+typedef void (poll_callback_fn)(void *private);
 int pollset_alloc(struct pollset **new);
 void pollset_free(struct pollset *pset);
 int pollset_add(struct pollset *pset, int fd, poll_flags_t flags,
-			void *private, poll_callback_fn readable,
-			poll_callback_fn writable, poll_callback_fn hangup,
-			poll_callback_fn error, poll_callback_fn timeout);
+			void *private, poll_callback_fn *readable,
+			poll_callback_fn *writable, poll_callback_fn *hangup,
+			poll_callback_fn *error, poll_callback_fn *timeout);
 int pollset_modify(struct pollset *pset, int fd, poll_flags_t flags);
 void pollset_del(struct pollset *pset, int fd);
 int pollset_set_timer(struct pollset *pset, int fd, unsigned timeout_ms);
