@@ -39,7 +39,7 @@ struct mrpc_protocol {
 				unsigned *size);
 };
 
-typedef void reply_callback_fn;
+typedef void (reply_callback_fn)(void);
 typedef void (long_reply_callback_fn)(void *conn_private, void *msg_private,
 			struct mrpc_message *reply, mrpc_status_t status,
 			void *data);

@@ -217,7 +217,7 @@ sub gen_sender_stub_async_c {
 
 mrpc_status_t ${base}_${func}_async(struct mrpc_connection *conn, ${base}_${func}_callback_fn *callback, void *private$inarg)
 {
-	return mrpc_send_request_async(&${base}_$antirole, conn, nr_${base}_$func, callback, private, $inparam);
+	return mrpc_send_request_async(&${base}_$antirole, conn, nr_${base}_$func, (reply_callback_fn *)callback, private, $inparam);
 }
 EOF
 }

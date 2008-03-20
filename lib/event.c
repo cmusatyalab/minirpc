@@ -346,8 +346,10 @@ static void dispatch_request(struct mrpc_event *event)
 static void run_reply_callback(struct mrpc_event *event)
 {
 	struct mrpc_message *reply=event->msg;
-	long_reply_callback_fn *longfn=event->callback;
-	short_reply_callback_fn *shortfn=event->callback;
+	long_reply_callback_fn *longfn =
+				(long_reply_callback_fn *) event->callback;
+	short_reply_callback_fn *shortfn =
+				(short_reply_callback_fn *) event->callback;
 	void *out=NULL;
 	xdrproc_t type;
 	unsigned size;
