@@ -242,8 +242,6 @@ exported int mrpc_unplug_conn(struct mrpc_connection *conn)
 
 exported int mrpc_get_event_fd(struct mrpc_conn_set *set)
 {
-	if (set == NULL)
-		return EINVAL;
 	return selfpipe_fd(set->events_notify_pipe);
 }
 

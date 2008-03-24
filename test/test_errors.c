@@ -77,7 +77,6 @@ int main(int argc, char **argv)
 	mrpc_dispatcher_remove(NULL);
 	expect(mrpc_dispatch_loop(NULL), EINVAL);
 	expect(mrpc_dispatch(NULL, 0), EINVAL);
-	expect(mrpc_get_event_fd(NULL), EINVAL);
 	expect(mrpc_plug_conn(NULL), EINVAL);
 	expect(mrpc_unplug_conn(NULL), EINVAL);
 	expect(mrpc_unplug_message(NULL), EINVAL);
