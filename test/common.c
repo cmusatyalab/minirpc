@@ -1,5 +1,5 @@
 /*
- * miniRPC - TCP RPC library with asynchronous operations and TLS support
+ * miniRPC - TCP RPC library with asynchronous operations
  *
  * Copyright (C) 2007-2008 Carnegie Mellon University
  *
