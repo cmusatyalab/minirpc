@@ -514,7 +514,8 @@ sub gen_protocol_struct_c {
 
 	print $fh wrapc(<<EOF);
 
-static const struct mrpc_protocol int_${base}_$role = {
+const struct mrpc_protocol * const ${base}_$role =
+&(const struct mrpc_protocol) {
 	.is_server = $isServer,
 	.request = $requestFunc,
 	.sender_request_info = ${base}_${antirole}_request_info,
@@ -522,7 +523,6 @@ static const struct mrpc_protocol int_${base}_$role = {
 	.receiver_request_info = ${base}_${role}_request_info,
 	.receiver_reply_info = ${base}_${role}_reply_info
 };
-const struct mrpc_protocol * const ${base}_$role = &int_${base}_$role;
 EOF
 }
 
