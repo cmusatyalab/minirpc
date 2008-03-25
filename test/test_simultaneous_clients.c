@@ -15,17 +15,6 @@
 #define THREADS 25
 #define ITERS 50
 
-static const struct mrpc_config client_config = {
-	.protocol = &proto_client,
-	.disconnect = disconnect_user
-};
-
-static const struct mrpc_config server_config = {
-	.protocol = &proto_server,
-	.accept = sync_server_accept,
-	.disconnect = disconnect_normal
-};
-
 static pthread_mutex_t lock;
 static pthread_cond_t cond;
 static int running;
@@ -76,9 +65,12 @@ int main(int argc, char **argv)
 
 	if (mrpc_init())
 		die("Couldn't initialize minirpc");
-	sset=spawn_server(&port, &server_config, NULL, DISPATCHERS);
-	if (mrpc_conn_set_create(&cset, &client_config, NULL))
+	sset=spawn_server(&port, &proto_server, sync_server_accept, NULL,
+				DISPATCHERS);
+	mrpc_set_disconnect_func(sset, disconnect_normal);
+	if (mrpc_conn_set_create(&cset, &proto_client, NULL))
 		die("Couldn't create conn set");
+	mrpc_set_disconnect_func(cset, disconnect_user);
 	for (i=0; i<DISPATCHERS; i++)
 		mrpc_start_dispatch_thread(cset);
 	pthread_mutex_init(&lock, NULL);

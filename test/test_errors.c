@@ -40,23 +40,6 @@ void *probe_server_accept(void *set_data, struct mrpc_connection *conn,
 	return conn;
 }
 
-static const struct mrpc_config client_config = {
-	.protocol = &proto_client,
-	.disconnect = disconnect_user
-};
-
-static const struct mrpc_config server_config = {
-	.protocol = &proto_server,
-	.accept = sync_server_accept,
-	.disconnect = disconnect_normal
-};
-
-static const struct mrpc_config probe_server_config = {
-	.protocol = &proto_server,
-	.accept = probe_server_accept,
-	.disconnect = disconnect_normal
-};
-
 int main(int argc, char **argv)
 {
 	struct mrpc_conn_set *sset;
@@ -69,7 +52,7 @@ int main(int argc, char **argv)
 	if (mrpc_init())
 		die("Couldn't initialize minirpc");
 
-	expect(mrpc_conn_set_create(NULL, &server_config, NULL), EINVAL);
+	expect(mrpc_conn_set_create(NULL, &proto_server, NULL), EINVAL);
 	expect(mrpc_conn_set_create(&sset, NULL, NULL), EINVAL);
 	mrpc_conn_set_destroy(NULL);
 	expect(mrpc_start_dispatch_thread(NULL), EINVAL);
@@ -81,10 +64,22 @@ int main(int argc, char **argv)
 	expect(mrpc_unplug_conn(NULL), EINVAL);
 	expect(mrpc_unplug_message(NULL), EINVAL);
 
-	if (mrpc_conn_set_create(&sset, &server_config, NULL))
+	if (mrpc_conn_set_create(&sset, &proto_server, NULL))
 		die("Couldn't allocate conn set");
-	if (mrpc_conn_set_create(&cset, &client_config, NULL))
+	if (mrpc_conn_set_create(&cset, &proto_client, NULL))
 		die("Couldn't allocate conn set");
+	expect(mrpc_set_accept_func(sset, NULL), EINVAL);
+	expect(mrpc_set_accept_func(cset, sync_server_accept), EINVAL);
+	expect(mrpc_set_max_buf_len(cset, 0), EINVAL);
+	expect(mrpc_set_listen_backlog(cset, 0), EINVAL);
+	expect(mrpc_set_accept_backoff(cset, 0), EINVAL);
+
+	if (mrpc_set_accept_func(sset, sync_server_accept))
+		die("Couldn't set accept func");
+	if (mrpc_set_disconnect_func(sset, disconnect_normal))
+		die("Couldn't set disconnect func");
+	if (mrpc_set_disconnect_func(cset, disconnect_user))
+		die("Couldn't set disconnect func");
 	if (mrpc_start_dispatch_thread(sset))
 		die("Couldn't start server dispatcher");
 	if (mrpc_start_dispatch_thread(cset))
@@ -153,9 +148,13 @@ int main(int argc, char **argv)
 	mrpc_conn_set_destroy(cset);
 	mrpc_conn_set_destroy(sset);
 
-	sset=spawn_server(&port, &probe_server_config, NULL, 1);
-	if (mrpc_conn_set_create(&cset, &client_config, NULL))
+	sset=spawn_server(&port, &proto_server, probe_server_accept, NULL, 1);
+	if (mrpc_set_disconnect_func(sset, disconnect_normal))
+		die("Couldn't set disconnect func");
+	if (mrpc_conn_set_create(&cset, &proto_client, NULL))
 		die("Couldn't allocate conn set");
+	if (mrpc_set_disconnect_func(cset, disconnect_user))
+		die("Couldn't set disconnect func");
 	if (mrpc_start_dispatch_thread(cset))
 		die("Couldn't start client dispatcher");
 	expect(mrpc_conn_create(&conn, cset, NULL), 0);

@@ -33,8 +33,20 @@
 
 #define TRASHBUFSIZE 131072
 
+struct mrpc_config {
+	mrpc_accept_fn *accept;
+	mrpc_disconnect_fn *disconnect;
+	mrpc_ioerr_fn *ioerr;
+	unsigned msg_max_buf_len;
+	unsigned listen_backlog;
+	unsigned accept_backoff;
+};
+
 struct mrpc_conn_set {
-	struct mrpc_config conf;
+	struct mrpc_config config;
+	pthread_mutex_t config_lock;
+
+	const struct mrpc_protocol *protocol;
 	void *private;
 	char *trashbuf;
 
@@ -151,6 +163,15 @@ struct mrpc_listener {
 	struct mrpc_conn_set *set;
 	int fd;
 };
+
+/* config.c */
+#define get_config(set, confvar) ({				\
+		typeof((set)->config.confvar) _res;		\
+		pthread_mutex_lock(&(set)->config_lock);	\
+		_res=(set)->config.confvar;			\
+		pthread_mutex_unlock(&(set)->config_lock);	\
+		_res;						\
+	})
 
 /* connection.c */
 mrpc_status_t send_message(struct mrpc_message *msg);

@@ -10,8 +10,8 @@ MAINTAINERCLEANFILES = minirpc_xdr.c minirpc_xdr.h
 BUILT_SOURCES = minirpc_xdr.h
 
 lib_LTLIBRARIES = libminirpc.la
-libminirpc_la_SOURCES = connection.c message.c event.c serialize.c xdr_len.c
-libminirpc_la_SOURCES += selfpipe.c pollset.c pollset_poll.c util.c
+libminirpc_la_SOURCES = config.c connection.c message.c event.c serialize.c
+libminirpc_la_SOURCES += xdr_len.c selfpipe.c pollset.c pollset_poll.c util.c
 libminirpc_la_SOURCES += internal.h minirpc.x minirpc_xdr.c minirpc_xdr.h
 libminirpc_la_SOURCES += pollset_impl.h
 if HAVE_EPOLL

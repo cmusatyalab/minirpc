@@ -29,7 +29,7 @@ miniRPC provides wrapper functions to handle connection setup and teardown.
 Normally, clients create connections using mrpc_connect().  Servers arrange
 to accept connections by calling mrpc_listen() one or more times; when
 a connection arrives on a listening socket, the connection set's accept
-method will be called to notify the application of the new connection.
+function will be called to notify the application of the new connection.
 Either end of a connection (client or server) can call mrpc_conn_close()
 to close an existing connection; in addition, servers can call
 mrpc_listen_close() to close the listening sockets previously created with

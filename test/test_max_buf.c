@@ -11,21 +11,6 @@
 
 #include "common.h"
 
-static const struct mrpc_config client_config = {
-	.protocol = &proto_client,
-	.disconnect = disconnect_user,
-	.ioerr = handle_ioerr,
-	.msg_max_buf_len = 128
-};
-
-static const struct mrpc_config server_config = {
-	.protocol = &proto_server,
-	.accept = sync_server_accept,
-	.disconnect = disconnect_normal,
-	.ioerr = handle_ioerr,
-	.msg_max_buf_len = 128
-};
-
 int main(int argc, char **argv)
 {
 	struct mrpc_conn_set *sset;
@@ -36,9 +21,15 @@ int main(int argc, char **argv)
 
 	if (mrpc_init())
 		die("Couldn't initialize minirpc");
-	sset=spawn_server(&port, &server_config, NULL, 1);
-	if (mrpc_conn_set_create(&cset, &client_config, NULL))
+	sset=spawn_server(&port, &proto_server, sync_server_accept, NULL, 1);
+	mrpc_set_disconnect_func(sset, disconnect_normal);
+	mrpc_set_ioerr_func(sset, handle_ioerr);
+	mrpc_set_max_buf_len(sset, 128);
+	if (mrpc_conn_set_create(&cset, &proto_client, NULL))
 		die("Couldn't allocate conn set");
+	mrpc_set_disconnect_func(cset, disconnect_user);
+	mrpc_set_ioerr_func(cset, handle_ioerr);
+	mrpc_set_max_buf_len(cset, 128);
 
 	ret=mrpc_conn_create(&conn, cset, NULL);
 	if (ret)

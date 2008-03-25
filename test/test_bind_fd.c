@@ -11,17 +11,6 @@
 
 #include "common.h"
 
-static const struct mrpc_config client_config = {
-	.protocol = &proto_client,
-	.disconnect = disconnect_normal
-};
-
-static const struct mrpc_config server_config = {
-	.protocol = &proto_server,
-	.accept = sync_server_accept,
-	.disconnect = disconnect_user
-};
-
 int main(int argc, char **argv)
 {
 	struct mrpc_conn_set *sset;
@@ -38,10 +27,13 @@ int main(int argc, char **argv)
 
 	if (mrpc_init())
 		die("Couldn't initialize minirpc");
-	if (mrpc_conn_set_create(&sset, &server_config, NULL))
+	if (mrpc_conn_set_create(&sset, &proto_server, NULL))
 		die("Couldn't allocate conn set");
-	if (mrpc_conn_set_create(&cset, &client_config, NULL))
+	if (mrpc_conn_set_create(&cset, &proto_client, NULL))
 		die("Couldn't allocate conn set");
+	mrpc_set_accept_func(sset, sync_server_accept);
+	mrpc_set_disconnect_func(sset, disconnect_user);
+	mrpc_set_disconnect_func(cset, disconnect_normal);
 	mrpc_start_dispatch_thread(sset);
 	mrpc_start_dispatch_thread(cset);
 

@@ -66,7 +66,7 @@ static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
 	}
 
 	if (conn->recv_msg->hdr.datalen >
-				conn->set->conf.msg_max_buf_len) {
+				get_config(conn->set, msg_max_buf_len)) {
 		queue_ioerr_event(conn, "Payload over maximum, seq %u len %u",
 					conn->recv_msg->hdr.sequence,
 					conn->recv_msg->hdr.datalen);
@@ -491,7 +491,8 @@ static void try_accept(void *data)
 			if (errno != EAGAIN) {
 				pollset_modify(set->pollset, lnr->fd, 0);
 				pollset_set_timer(set->pollset, lnr->fd,
-						set->conf.accept_backoff);
+							get_config(set,
+							accept_backoff));
 			}
 			break;
 		}
@@ -567,7 +568,7 @@ exported int mrpc_connect(struct mrpc_connection *conn, const char *host,
 	int fd;
 	int ret;
 
-	if (conn == NULL || conn->set->conf.protocol->is_server)
+	if (conn == NULL || conn->set->protocol->is_server)
 		return EINVAL;
 	ret=lookup_addr(&ai, host, port, 0);
 	if (ret)
@@ -610,7 +611,12 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 	int count=0;
 	int ret;
 
-	if (set == NULL || port == NULL || !set->conf.protocol->is_server)
+	/* We require the accept method to exist.  Without it, accepted
+	   connections will never have a non-NULL operations pointer and the
+	   application will never be aware that they exist, so connecting
+	   clients will be forever stuck in PROCEDURE_UNAVAIL limbo. */
+	if (set == NULL || port == NULL || !set->protocol->is_server ||
+				get_config(set, accept) == NULL)
 		return EINVAL;
 	ret=lookup_addr(&ai, listenaddr, *port, 1);
 	if (ret)
@@ -643,7 +649,7 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 			close(fd);
 			continue;
 		}
-		if (listen(fd, set->conf.listen_backlog)) {
+		if (listen(fd, get_config(set, listen_backlog))) {
 			ret=errno;
 			close(fd);
 			continue;
@@ -726,7 +732,7 @@ exported int mrpc_bind_fd(struct mrpc_connection *conn, int fd)
 exported int mrpc_conn_set_operations(struct mrpc_connection *conn,
 			struct mrpc_protocol *protocol, const void *ops)
 {
-	if (conn == NULL || conn->set->conf.protocol != protocol)
+	if (conn == NULL || conn->set->protocol != protocol)
 		return EINVAL;
 	pthread_mutex_lock(&conn->operations_lock);
 	conn->operations=ops;
@@ -744,62 +750,34 @@ static void *listener(void *data)
 	return NULL;
 }
 
-#define copy_default(from, to, field, default) do { \
-		to->field=from->field ? from->field : default; \
-	} while (0)
-static int validate_copy_config(const struct mrpc_config *from,
-			struct mrpc_config *to)
-{
-	if (from == NULL || from->protocol == NULL)
-		return EINVAL;
-	to->protocol=from->protocol;
-
-	if (from->protocol->is_server) {
-		/* We require the accept method to exist.  Without it, the
-		   connection will never have a non-NULL operations pointer and
-		   the application will never be aware that the connection
-		   exists, so the connecting client will be forever stuck in
-		   PROCEDURE_UNAVAIL limbo. */
-		if (from->accept == NULL)
-			return EINVAL;
-	} else {
-		/* The accept method is irrelevant for clients.  Tell the
-		   application if its assumptions are wrong. */
-		if (from->accept != NULL)
-			return EINVAL;
-	}
-	to->accept=from->accept;
-	to->disconnect=from->disconnect;
-	to->ioerr=from->ioerr;
-	copy_default(from, to, msg_max_buf_len, 16000);
-	copy_default(from, to, listen_backlog, 16);
-	copy_default(from, to, accept_backoff, 1000);
-	return 0;
-}
-#undef copy_default
-
 static void pipe_error(void *data)
 {
 	assert(0);
 }
 
+static const struct mrpc_config default_config = {
+	.msg_max_buf_len = 16384,
+	.listen_backlog = 16,
+	.accept_backoff = 1000
+};
+
 exported int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
-			const struct mrpc_config *config, void *set_data)
+			const struct mrpc_protocol *protocol, void *set_data)
 {
 	struct mrpc_conn_set *set;
 	int ret;
 
-	if (new_set == NULL)
+	if (new_set == NULL || protocol == NULL)
 		return EINVAL;
 	*new_set=NULL;
 	set=g_slice_new0(struct mrpc_conn_set);
-	ret=validate_copy_config(config, &set->conf);
-	if (ret)
-		goto bad;
+	pthread_mutex_init(&set->config_lock, NULL);
 	pthread_mutex_init(&set->conns_lock, NULL);
 	pthread_mutex_init(&set->events_lock, NULL);
 	pthread_cond_init(&set->refs_cond, NULL);
 	pthread_cond_init(&set->events_threads_cond, NULL);
+	set->config=default_config;
+	set->protocol=protocol;
 	set->refs=1;
 	set->conns=g_queue_new();
 	set->listeners=g_queue_new();

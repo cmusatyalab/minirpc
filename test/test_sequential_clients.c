@@ -11,17 +11,6 @@
 
 #include "common.h"
 
-static const struct mrpc_config client_config = {
-	.protocol = &proto_client,
-	.disconnect = disconnect_user
-};
-
-static const struct mrpc_config server_config = {
-	.protocol = &proto_server,
-	.accept = sync_server_accept,
-	.disconnect = disconnect_normal
-};
-
 int main(int argc, char **argv)
 {
 	struct mrpc_conn_set *sset;
@@ -33,10 +22,12 @@ int main(int argc, char **argv)
 
 	if (mrpc_init())
 		die("Couldn't initialize minirpc");
-	sset=spawn_server(&port, &server_config, NULL, 1);
+	sset=spawn_server(&port, &proto_server, sync_server_accept, NULL, 1);
+	mrpc_set_disconnect_func(sset, disconnect_normal);
 
-	if (mrpc_conn_set_create(&cset, &client_config, NULL))
+	if (mrpc_conn_set_create(&cset, &proto_client, NULL))
 		die("Couldn't create conn set");
+	mrpc_set_disconnect_func(cset, disconnect_user);
 	mrpc_start_dispatch_thread(cset);
 
 	/* Try repeated connections from the same conn set */
@@ -58,8 +49,9 @@ int main(int argc, char **argv)
 
 	/* Try repeated connections from different conn sets */
 	for (i=0; i<500; i++) {
-		if (mrpc_conn_set_create(&cset, &client_config, NULL))
+		if (mrpc_conn_set_create(&cset, &proto_client, NULL))
 			die("Couldn't create conn set");
+		mrpc_set_disconnect_func(cset, disconnect_user);
 		mrpc_start_dispatch_thread(cset);
 
 		ret=mrpc_conn_create(&conn, cset, NULL);

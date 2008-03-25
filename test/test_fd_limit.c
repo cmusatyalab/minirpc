@@ -36,17 +36,6 @@ struct open_conn {
 	struct timeval expire;
 } sentinel;
 
-static const struct mrpc_config client_config = {
-	.protocol = &proto_client,
-	.disconnect = disconnect_user
-};
-
-static const struct mrpc_config server_config = {
-	.protocol = &proto_server,
-	.accept = sync_server_accept,
-	.disconnect = disconnect_normal
-};
-
 int get_max_files(void)
 {
 	struct rlimit rlim;
@@ -90,8 +79,9 @@ void client(int files, unsigned port)
 	int i;
 	int ret;
 
-	if (mrpc_conn_set_create(&cset, &client_config, NULL))
+	if (mrpc_conn_set_create(&cset, &proto_client, NULL))
 		die("Couldn't allocate conn set");
+	mrpc_set_disconnect_func(cset, disconnect_user);
 	mrpc_start_dispatch_thread(cset);
 	queue=g_async_queue_new();
 	pthread_create(&thr, NULL, closer, queue);
@@ -144,7 +134,8 @@ int main(int argc, char **argv)
 
 	if (mrpc_init())
 		die("Couldn't initialize minirpc");
-	sset=spawn_server(&port, &server_config, NULL, 1);
+	sset=spawn_server(&port, &proto_server, sync_server_accept, NULL, 1);
+	mrpc_set_disconnect_func(sset, disconnect_normal);
 
 	for (i=0; i<MULTIPLE; i++)
 		if (!fork())

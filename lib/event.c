@@ -249,7 +249,7 @@ static void fail_request(struct mrpc_message *request, mrpc_status_t err)
 {
 	mrpc_unplug_message(request);
 	if (request->hdr.cmd >= 0) {
-		if (mrpc_send_reply_error(request->conn->set->conf.protocol,
+		if (mrpc_send_reply_error(request->conn->set->protocol,
 					request->hdr.cmd, request, err))
 			mrpc_free_message(request);
 	} else {
@@ -272,7 +272,7 @@ static void dispatch_request(struct mrpc_event *event)
 
 	assert(request->hdr.status == MINIRPC_PENDING);
 
-	if (conn->set->conf.protocol->receiver_request_info(request->hdr.cmd,
+	if (conn->set->protocol->receiver_request_info(request->hdr.cmd,
 				&request_type, NULL)) {
 		/* Unknown opcode */
 		fail_request(request, MINIRPC_PROCEDURE_UNAVAIL);
@@ -281,8 +281,7 @@ static void dispatch_request(struct mrpc_event *event)
 
 	doreply=(request->hdr.cmd >= 0);
 	if (doreply) {
-		if (conn->set->conf.protocol->
-					receiver_reply_info(request->hdr.cmd,
+		if (conn->set->protocol->receiver_reply_info(request->hdr.cmd,
 					&reply_type, &reply_size)) {
 			/* Can't happen if the info tables are well-formed */
 			fail_request(request, MINIRPC_ENCODING_ERR);
@@ -302,10 +301,10 @@ static void dispatch_request(struct mrpc_event *event)
 	mrpc_free_message_data(request);
 
 	pthread_mutex_lock(&conn->operations_lock);
-	assert(conn->set->conf.protocol->request != NULL);
-	result=conn->set->conf.protocol->request(conn->operations,
-				conn->private, request, request->hdr.cmd,
-				request_data, reply_data);
+	assert(conn->set->protocol->request != NULL);
+	result=conn->set->protocol->request(conn->operations, conn->private,
+				request, request->hdr.cmd, request_data,
+				reply_data);
 	/* Note: if the application returned MINIRPC_PENDING and then
 	   immediately sent its reply from another thread, the request has
 	   already been freed.  So, if result == MINIRPC_PENDING, we can't
@@ -320,11 +319,11 @@ static void dispatch_request(struct mrpc_event *event)
 			return;
 		}
 		if (result)
-			ret=mrpc_send_reply_error(conn->set->conf.protocol,
+			ret=mrpc_send_reply_error(conn->set->protocol,
 						request->hdr.cmd, request,
 						result);
 		else
-			ret=mrpc_send_reply(conn->set->conf.protocol,
+			ret=mrpc_send_reply(conn->set->protocol,
 						request->hdr.cmd, request,
 						reply_data);
 		mrpc_free_argument(reply_type, reply_data);
@@ -353,7 +352,7 @@ static void run_reply_callback(struct mrpc_event *event)
 	unsigned size;
 	mrpc_status_t ret;
 
-	if (reply->conn->set->conf.protocol->sender_reply_info(reply->hdr.cmd,
+	if (reply->conn->set->protocol->sender_reply_info(reply->hdr.cmd,
 				&type, &size)) {
 		/* Can't happen if the info tables are well-formed */
 		queue_ioerr_event(reply->conn, "Internal error running reply "
@@ -382,7 +381,9 @@ static void run_reply_callback(struct mrpc_event *event)
 static void dispatch_event(struct mrpc_event *event)
 {
 	struct mrpc_connection *conn=event->conn;
-	struct mrpc_config *conf=&conn->set->conf;
+	mrpc_accept_fn *accept;
+	mrpc_disconnect_fn *disconnect;
+	mrpc_ioerr_fn *ioerr;
 	int squash;
 	int fire_disconnect;
 	enum mrpc_disc_reason reason;
@@ -416,9 +417,10 @@ static void dispatch_event(struct mrpc_event *event)
 
 	switch (type) {
 	case EVENT_ACCEPT:
-		assert(conf->accept != NULL);
-		conn->private=conf->accept(conn->set->private, conn,
-					event->addr, event->addrlen);
+		accept=get_config(conn->set, accept);
+		assert(accept != NULL);
+		conn->private=accept(conn->set->private, conn, event->addr,
+					event->addrlen);
 		g_free(event->addr);
 		break;
 	case EVENT_REQUEST:
@@ -428,13 +430,15 @@ static void dispatch_event(struct mrpc_event *event)
 		run_reply_callback(event);
 		break;
 	case EVENT_DISCONNECT:
-		if (fire_disconnect && conf->disconnect)
-			conf->disconnect(conn->private, reason);
+		disconnect=get_config(conn->set, disconnect);
+		if (fire_disconnect && disconnect)
+			disconnect(conn->private, reason);
 		mrpc_conn_free(conn);
 		break;
 	case EVENT_IOERR:
-		if (conf->ioerr)
-			conf->ioerr(conn->private, event->errstring);
+		ioerr=get_config(conn->set, ioerr);
+		if (ioerr)
+			ioerr(conn->private, event->errstring);
 		free(event->errstring);
 		break;
 	default:

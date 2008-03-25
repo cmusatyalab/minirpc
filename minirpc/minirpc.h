@@ -23,6 +23,7 @@
 #ifdef DOXYGEN
 /**
  * @brief An opaque handle to a protocol role definition
+ * @ingroup setup
  */
 struct mrpc_protocol {};
 
@@ -107,110 +108,70 @@ enum mrpc_disc_reason {
 };
 
 /**
- * @brief Configuration parameters for a connection set
- * @ingroup setup
+ * @addtogroup event
+ * @{
  */
-struct mrpc_config {
-	/**
-	 * @brief Protocol role definition for connections in the associated
-	 *		connection set
-	 */
-	const struct mrpc_protocol *protocol;
 
-	/**
-	 * @brief Event callback fired on arrival of a new connection
-	 * @param	set_data
-	 *	The cookie associated with the connection set
-	 * @param	conn
-	 *	The handle to the newly-created connection
-	 * @param	from
-	 *	The address of the remote end of the connection
-	 * @param	from_len
-	 *	The length of the @c from structure
-	 * @return The application-specific cookie to be associated with this
-	 *		connection
-	 *
-	 * This method must be provided if #protocol specifies a server
-	 * role, and must be NULL if it specifies a client.  At minimum,
-	 * the method must set the connection's operations struct using
-	 * the protocol-specific set_operations function; otherwise, no
-	 * incoming messages for the connection will be processed.
-	 *
-	 * @c from is no longer valid after the callback returns.
-	 */
-	void *(*accept)(void *set_data, struct mrpc_connection *conn,
-				struct sockaddr *from, socklen_t from_len);
+/**
+ * @brief Event callback fired on arrival of a new connection
+ * @param	set_data
+ *	The cookie associated with the connection set
+ * @param	conn
+ *	The handle to the newly-created connection
+ * @param	from
+ *	The address of the remote end of the connection
+ * @param	from_len
+ *	The length of the @c from structure
+ * @return The application-specific cookie to be associated with this
+ *		connection
+ * @sa mrpc_set_accept_func
+ *
+ * This function is called when a new connection arrives on a listening socket
+ * created with mrpc_listen().  At minimum, the function must set the
+ * connection's operations struct using the protocol-specific set_operations
+ * function; otherwise, no incoming messages for the connection will be
+ * processed.
+ *
+ * @c from is no longer valid after the callback returns.
+ */
+typedef void *(mrpc_accept_fn)(void *set_data, struct mrpc_connection *conn,
+			struct sockaddr *from, socklen_t from_len);
 
-	/**
-	 * @brief Event callback fired on connection close
-	 * @param	conn_data
-	 *	The cookie associated with the connection
-	 * @param	reason
-	 *	The reason the connection was closed
-	 *
-	 * If non-NULL, this callback is fired when a connection is closed
-	 * for any reason, including when explicitly requested by the
-	 * application (with mrpc_conn_close()).  Once the callback returns,
-	 * the application will not receive further events on this connection
-	 * and should make no further miniRPC calls against it.
-	 */
-	void (*disconnect)(void *conn_data, enum mrpc_disc_reason reason);
+/**
+ * @brief Event callback fired on connection close
+ * @param	conn_data
+ *	The cookie associated with the connection
+ * @param	reason
+ *	The reason the connection was closed
+ * @sa mrpc_set_disconnect_func
+ *
+ * If supplied, this callback is fired when a connection is closed for any
+ * reason, including when explicitly requested by the application (with
+ * mrpc_conn_close()).  Once the callback returns, the application will not
+ * receive further events on this connection and should make no further
+ * miniRPC calls against it.
+ */
+typedef void (mrpc_disconnect_fn)(void *conn_data,
+			enum mrpc_disc_reason reason);
 
-	/**
-	 * @brief Event callback fired on I/O error
-	 * @param	conn_data
-	 *	The cookie associated with the connection
-	 * @param	message
-	 *	A string describing the error
-	 *
-	 * If non-NULL, this callback is fired whenever miniRPC encounters
-	 * an I/O or XDR error it wishes to report to the application.
-	 * @c message is in a format suitable for logging.  @c message is no
-	 * longer valid once the callback returns.
-	 */
-	void (*ioerr)(void *conn_data, char *message);
-
-	/**
-	 * @brief Maximum length of a received message payload
-	 *
-	 * The maximum length, in bytes, of an XDR-encoded message received
-	 * from the remote system.  If zero, a default will be used.
-	 * Requests exceeding this threshold will be rejected and
-	 * ::MINIRPC_ENCODING_ERR will be returned to the sender.
-	 * Replies exceeding this threshold will be treated as though the
-	 * remote system returned ::MINIRPC_ENCODING_ERR.  Unidirectional
-	 * messages exceeding the threshold will be dropped.
-	 *
-	 * This is intended only as a DoS prevention measure, and should be
-	 * set to a value larger than any legitimate message possible in your
-	 * protocol.
-	 */
-	unsigned msg_max_buf_len;
-
-	/**
-	 * @brief Number of accepted connections that can be waiting in the
-	 *		kernel
-	 *
-	 * The maximum number of connections that can be queued in the kernel
-	 * waiting for accept(); this corresponds to the @c backlog parameter
-	 * to the listen() system call.  If zero, a default will be used.
-	 */
-	unsigned listen_backlog;
-
-	/**
-	 * @brief Number of milliseconds to back off if accept() fails
-	 *
-	 * If an error occurs while accepting a connection on a listening
-	 * socket, miniRPC will wait this many milliseconds before trying to
-	 * accept any more connections on that socket.  Existing connections
-	 * are not affected.  Such an error can occur, for example, if the
-	 * process runs out of available file descriptors.
-	 */
-	unsigned accept_backoff;
-};
+/**
+ * @brief Event callback fired on I/O error
+ * @param	conn_data
+ *	The cookie associated with the connection
+ * @param	message
+ *	A string describing the error
+ * @sa mrpc_set_ioerr_func
+ *
+ * If supplied, this callback is fired whenever miniRPC encounters an I/O or
+ * XDR error it wishes to report to the application.  @c message is in a
+ * format suitable for logging.  @c message is no longer valid once the
+ * callback returns.
+ */
+typedef void (mrpc_ioerr_fn)(void *conn_data, char *message);
 
 
 /**
+ * @}
  * @addtogroup setup
  * @{
  */
@@ -227,22 +188,20 @@ int mrpc_init(void);
  * @brief Create a connection set
  * @param[out]	new_set
  *	The resulting connection set, or NULL on error
- * @param	config
- *	The configuration to use.  A copy of the configuration struct is
- *	stored in the connection set, so the application need not keep it
- *	allocated after the call.
+ * @param	protocol
+ *	Protocol role definition for connections in this connection set
  * @param	set_data
  *	An application-specific cookie for this connection set
  * @stdreturn
  *
- * Create a connection set, associate it with the specified configuration
+ * Create a connection set, associate it with the specified protocol role
  * and application-specific pointer, start its background thread, and return
  * a handle to the connection set.  If @c set_data is NULL, set the
  * application-specific pointer to the connection set handle returned in
  * @c new_set.
  */
 int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
-			const struct mrpc_config *config, void *set_data);
+			const struct mrpc_protocol *protocol, void *set_data);
 
 /**
  * @brief Destroy a connection set
@@ -252,7 +211,7 @@ int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
  * Destroy the specified connection set.  This takes the following steps:
  *
  * -# Close all listening sockets
- * -# Close all active connections and wait for their disconnect methods
+ * -# Close all active connections and wait for their disconnect functions
  * to be fired
  * -# Shut down all threads started with mrpc_start_dispatch_thread(), and
  * cause all other dispatch functions to return ENXIO
@@ -265,7 +224,7 @@ int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
  * during or after the execution of this function.  However, the
  * application should continue to dispatch events against the connection
  * set (if it is doing its own dispatching) until the dispatcher functions
- * return ENXIO.  Note that the accept method may still be called after
+ * return ENXIO.  Note that the accept function may still be called after
  * the call to mrpc_conn_set_destroy(); any connections arriving in this
  * window will be automatically closed along with the others.
  *
@@ -275,6 +234,104 @@ int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
  * This function must not be called from an event handler.
  */
 void mrpc_conn_set_destroy(struct mrpc_conn_set *set);
+
+/**
+ * @brief Set the function to be called when a new connection arrives on a
+ *	listening socket
+ * @param	set
+ *	The connection set to configure
+ * @param	func
+ *	The accept function
+ * @stdreturn
+ * @sa mrpc_accept_fn
+ *
+ * The application must set an accept function before calling mrpc_listen()
+ * on @c set.
+ */
+int mrpc_set_accept_func(struct mrpc_conn_set *set, mrpc_accept_fn *func);
+
+/**
+ * @brief Set the function to be called when a connection is closed for any
+ *	reason
+ * @param	set
+ *	The connection set to configure
+ * @param	func
+ *	The disconnect function, or NULL for none
+ * @stdreturn
+ * @sa mrpc_disconnect_fn
+ *
+ * By default, no disconnect function is provided.
+ */
+int mrpc_set_disconnect_func(struct mrpc_conn_set *set,
+			mrpc_disconnect_fn *func);
+
+/**
+ * @brief Set the function to be called when a connection encounters an I/O
+ *	error
+ * @param	set
+ *	The connection set to configure
+ * @param	func
+ *	The ioerr function, or NULL for none
+ * @stdreturn
+ * @sa mrpc_ioerr_fn
+ *
+ * By default, no ioerr function is provided.
+ */
+int mrpc_set_ioerr_func(struct mrpc_conn_set *set, mrpc_ioerr_fn *func);
+
+/**
+ * @brief Set the maximum length of a received message payload
+ * @param	set
+ *	The connection set to configure
+ * @param	len
+ *	The maximum payload length in bytes.  Must be greater than zero.
+ * @stdreturn
+ *
+ * Set the maximum length, in bytes, of an XDR-encoded message received from
+ * the remote system.  The default value is 16384.  Requests exceeding this
+ * threshold will be rejected and ::MINIRPC_ENCODING_ERR will be returned to
+ * the sender. Replies exceeding this threshold will be treated as though the
+ * remote system returned ::MINIRPC_ENCODING_ERR.  Unidirectional messages
+ * exceeding the threshold will be dropped.
+ *
+ * This is intended only as a DoS prevention measure, and should be
+ * set to a value larger than any legitimate message possible in your
+ * protocol.
+ */
+int mrpc_set_max_buf_len(struct mrpc_conn_set *set, unsigned len);
+
+/**
+ * @brief Set the number of accepted connections that can be waiting in the
+ *	kernel
+ * @param	set
+ *	The connection set to configure
+ * @param	backlog
+ *	The length of the backlog queue.  Must be greater than zero.
+ * @stdreturn
+ *
+ * Set the maximum number of connections that can be queued in the kernel
+ * waiting for accept(); this corresponds to the @c backlog parameter
+ * to the listen() system call.  The default value is 16.  The new setting
+ * will only affect future calls to mrpc_listen(); existing listening sockets
+ * will not be affected.
+ */
+int mrpc_set_listen_backlog(struct mrpc_conn_set *set, unsigned backlog);
+
+/**
+ * @brief Set the number of milliseconds to back off if accept() fails
+ * @param	set
+ *	The connection set to configure
+ * @param	ms
+ *	The number of milliseconds to wait.  Must be greater than zero.
+ * @stdreturn
+ *
+ * If an error occurs while accepting a connection on a listening socket,
+ * miniRPC will wait this many milliseconds before trying to accept any more
+ * connections on that socket.  Existing connections are not affected.  Such
+ * an error can occur, for example, if the process runs out of available file
+ * descriptors.  The default value is 1000 ms.
+ */
+int mrpc_set_accept_backoff(struct mrpc_conn_set *set, unsigned ms);
 
 
 /**
@@ -347,15 +404,15 @@ int mrpc_connect(struct mrpc_connection *conn, const char *host,
  *	code associated with the last error encountered
  *
  * Start listening for incoming connections on the given address and port
- * number, and fire the connection set's accept method whenever one arrives.
+ * number, and fire the connection set's accept function whenever one arrives.
  * If more than one address meets the specified criteria, more than one
  * listening socket may be bound.  If @c listenaddr is NULL, miniRPC will
  * listen on any local interface.  If the value pointed to by @c port is
  * zero, miniRPC will bind to a random unused port, and will return the
  * chosen port number in @c port.
  *
- * This function can only be called against connection sets with a server
- * protocol role.
+ * This function will return EINVAL if @c set has a client protocol role
+ * or if no accept function has been set with mrpc_set_accept_func().
  */
 int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 			unsigned *port);
@@ -371,7 +428,7 @@ int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
  * Associate the specified socket with an existing miniRPC connection handle.
  * The handle must not have been connected already.  The handle may have
  * either a client or server role.  In the server case, the connection set's
- * accept method will @em not be called.  To avoid races, the application
+ * accept function will @em not be called.  To avoid races, the application
  * should ensure that the operations structure is set on the connection
  * handle, if necessary, @em before calling this function.
  *
@@ -398,17 +455,17 @@ int mrpc_bind_fd(struct mrpc_connection *conn, int fd);
  *
  * Once this function returns, the application is guaranteed that no further
  * events, other than ::MINIRPC_NETWORK_FAILURE returns and the disconnect
- * method, will occur on this connection.  If two threads call
+ * function, will occur on this connection.  If two threads call
  * mrpc_conn_close() at once, the second call will return EALREADY, and this
  * guarantee will not apply to that call.
  *
  * The application must not free any supporting data structures until the
- * connection set's disconnect method is called for the connection, since
+ * connection set's disconnect function is called for the connection, since
  * further events may be pending.  Simple synchronous clients with no
  * dispatcher may free supporting data structures as soon as this function
  * returns.  In either case, the application should not make further
  * API calls against the connection.  In addition, applications with
- * disconnect methods should not assume that the method's @c reason
+ * disconnect functions should not assume that the function's @c reason
  * argument will be ::MRPC_DISC_USER, since the connection may have been
  * terminated for another reason before mrpc_conn_close() was called.
  *

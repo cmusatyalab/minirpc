@@ -33,16 +33,18 @@ void _message(const char *file, int line, const char *func, const char *fmt,
 }
 
 struct mrpc_conn_set *spawn_server(unsigned *listen_port,
-			const struct mrpc_config *config, void *set_data,
-			int threads)
+			const struct mrpc_protocol *protocol,
+			mrpc_accept_fn accept, void *set_data, int threads)
 {
 	struct mrpc_conn_set *set;
 	unsigned port=0;
 	int ret;
 	int i;
 
-	if (mrpc_conn_set_create(&set, config, set_data))
+	if (mrpc_conn_set_create(&set, protocol, set_data))
 		die("Couldn't allocate connection set");
+	if (mrpc_set_accept_func(set, accept))
+		die("Couldn't set accept function");
 	ret=mrpc_listen(set, "localhost", &port);
 	if (ret)
 		die("%s", strerror(ret));
