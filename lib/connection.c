@@ -730,7 +730,7 @@ exported int mrpc_bind_fd(struct mrpc_connection *conn, int fd)
 }
 
 exported int mrpc_conn_set_operations(struct mrpc_connection *conn,
-			struct mrpc_protocol *protocol, const void *ops)
+			const struct mrpc_protocol *protocol, const void *ops)
 {
 	if (conn == NULL || conn->set->protocol != protocol)
 		return EINVAL;

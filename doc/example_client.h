@@ -15,7 +15,7 @@
 /**
  * @brief The role definition for the example client
  */
-extern struct mrpc_protocol example_client;
+extern const struct mrpc_protocol * const example_client;
 
 /**
  * @brief Call server's ChooseColor procedure and wait for a reply

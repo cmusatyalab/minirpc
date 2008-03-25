@@ -15,7 +15,7 @@
 /**
  * @brief The role definition for the example server
  */
-extern struct mrpc_protocol example_server;
+extern const struct mrpc_protocol * const example_server;
 
 /**
  * @brief Pointers to handlers for messages received from the remote system

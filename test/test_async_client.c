@@ -23,10 +23,10 @@ int main(int argc, char **argv)
 	if (mrpc_init())
 		die("Couldn't initialize minirpc");
 	async_client_init();
-	sset=spawn_server(&port, &proto_server, sync_server_accept, NULL, 1);
+	sset=spawn_server(&port, proto_server, sync_server_accept, NULL, 1);
 	mrpc_set_disconnect_func(sset, disconnect_normal);
 
-	if (mrpc_conn_set_create(&cset, &proto_client, NULL))
+	if (mrpc_conn_set_create(&cset, proto_client, NULL))
 		die("Couldn't allocate conn set");
 	mrpc_set_disconnect_func(cset, disconnect_user);
 
