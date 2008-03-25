@@ -611,7 +611,7 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 	int count=0;
 	int ret;
 
-	/* We require the accept method to exist.  Without it, accepted
+	/* We require the accept function to exist.  Without it, accepted
 	   connections will never have a non-NULL operations pointer and the
 	   application will never be aware that they exist, so connecting
 	   clients will be forever stuck in PROCEDURE_UNAVAIL limbo. */

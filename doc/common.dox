@@ -59,10 +59,9 @@ thread.  These dispatcher threads are provided by the application, and are
 associated with a particular connection set.
 
 miniRPC places few restrictions on the application's arrangement of dispatcher
-threads.  An application can have as many dispatchers as it wants, and in
-some cases may not need one at all.  miniRPC provides several alternative
-interfaces for dispatching; the application can choose the one it needs,
-or can even alternate between them.
+threads.  miniRPC provides several alternative interfaces for dispatching; the
+application can choose the one it needs, or can even alternate between them.
+An application can have as many dispatchers as it wants.
 
 Because application callbacks execute only in dispatcher threads, the
 application can decide how long a callback can take to complete.  For example,
@@ -74,17 +73,15 @@ thread, and return the result asynchronously.
 
 By default, miniRPC does not fire multiple events at a time for a given
 connection, so the application need not handle concurrency within each
-connection; however, the application can override this behavior if it wishes.
+connection.  However, the application can override this behavior if it wishes.
 Interfaces are also provided to request that miniRPC stop (or resume)
 dispatching events for a given connection.
 
 Dispatcher threads are subject to the following constraints:
 
-- Every connection set which expects to fire callbacks must dispatch events.
-This means that every server, every client with non-NULL mrpc_config methods,
-and every client which makes asynchronous RPCs must have a dispatcher.
-Simple synchronous clients with no mrpc_config callback methods do not need
-a dispatcher.
+- Every connection set must dispatch events.  This means that at a minimum,
+the application must call mrpc_start_dispatch_thread() against a new
+connection set.
 
 - The dispatcher cannot be called recursively: event handlers cannot call
 the dispatch functions.

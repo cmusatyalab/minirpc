@@ -69,7 +69,7 @@ is notified via a callback function when the RPC reply is received.
 @em Receiver-asynchronous calls are those where the receiver's event handler
 returns before the call has been completely processed; the receiver transmits
 its reply at a later time using a stub function provided for that purpose.
-An RPC can be both sender- and receiver-async.  It is important to note that
+An RPC can be both sender- and receiver-async.  Note that
 these are properties of the @em implementation; the on-the-wire format
 does not distinguish between synchronous and asynchronous RPCs.
 

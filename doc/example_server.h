@@ -107,14 +107,14 @@ struct example_server_operations {
  *
  * This function can be used to change the handlers which will be called when
  * a message arrives on the given connection.  It @em must be called from the
- * accept method, to set an initial set of handlers for an incoming connection.
- * It can also be called at any point thereafter, including from an event
- * handler.
+ * accept function, to set an initial set of handlers for an incoming
+ * connection.  It can also be called at any point thereafter, including from
+ * an event handler.
  *
  * The operations structure is not copied, so it must not be freed until no
  * connections are still using it.
  *
- * - be careful when unplugging the conn
+ * @bug note: be careful when unplugging the conn
  *
  * @bug Should we be copying the ops structure?  We don't know its size.
  * @bug Should we be blocking until all pending ops are complete?

@@ -108,7 +108,7 @@ enum mrpc_disc_reason {
 };
 
 /**
- * @addtogroup event
+ * @addtogroup setup
  * @{
  */
 
@@ -168,13 +168,6 @@ typedef void (mrpc_disconnect_fn)(void *conn_data,
  * callback returns.
  */
 typedef void (mrpc_ioerr_fn)(void *conn_data, char *message);
-
-
-/**
- * @}
- * @addtogroup setup
- * @{
- */
 
 /**
  * @brief Initialize the miniRPC library
@@ -375,7 +368,7 @@ int mrpc_conn_create(struct mrpc_connection **new_conn,
  *	The TCP port number of the remote listener
  * @stdreturn
  *
- * - list error codes?
+ * @bug list error codes
  *
  * Make a new outgoing connection to the specified remote host and port
  * and associate it with the given connection handle.  The specified
@@ -427,10 +420,10 @@ int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
  *
  * Associate the specified socket with an existing miniRPC connection handle.
  * The handle must not have been connected already.  The handle may have
- * either a client or server role.  In the server case, the connection set's
- * accept function will @em not be called.  To avoid races, the application
- * should ensure that the operations structure is set on the connection
- * handle, if necessary, @em before calling this function.
+ * either a client or server role.  The connection set's accept function
+ * will @em not be called.  To avoid races, the application should ensure
+ * that the operations structure is set on the connection handle, if
+ * necessary, @em before calling this function.
  *
  * The specified file descriptor must be associated with a connected socket,
  * not a listening socket or another type of file.  After this call, the
@@ -459,15 +452,13 @@ int mrpc_bind_fd(struct mrpc_connection *conn, int fd);
  * mrpc_conn_close() at once, the second call will return EALREADY, and this
  * guarantee will not apply to that call.
  *
+ * The application should not make further API calls against the connection.
  * The application must not free any supporting data structures until the
  * connection set's disconnect function is called for the connection, since
- * further events may be pending.  Simple synchronous clients with no
- * dispatcher may free supporting data structures as soon as this function
- * returns.  In either case, the application should not make further
- * API calls against the connection.  In addition, applications with
- * disconnect functions should not assume that the function's @c reason
- * argument will be ::MRPC_DISC_USER, since the connection may have been
- * terminated for another reason before mrpc_conn_close() was called.
+ * further events may be pending.  In addition, the application should not
+ * assume that the disconnect function's @c reason argument will be
+ * ::MRPC_DISC_USER, since the connection may have been terminated for
+ * another reason before mrpc_conn_close() was called.
  *
  * If the specified connection handle was allocated with mrpc_conn_create()
  * but has never been successfully connected with mrpc_connect() or
