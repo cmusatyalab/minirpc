@@ -12,6 +12,7 @@
 #include <fcntl.h>
 #include <signal.h>
 #include <errno.h>
+#include <assert.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
@@ -41,4 +42,9 @@ int block_signals(void)
 	if (sigfillset(&sigs))
 		return errno;
 	return pthread_sigmask(SIG_SETMASK, &sigs, NULL);
+}
+
+void assert_callback_func(void *ignored)
+{
+	assert(0);
 }

@@ -807,11 +807,6 @@ static void *listener(void *data)
 	return NULL;
 }
 
-static void pipe_error(void *data)
-{
-	assert(0);
-}
-
 static const struct mrpc_config default_config = {
 	.msg_max_buf_len = 16384,
 	.listen_backlog = 16,
@@ -855,7 +850,7 @@ exported int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
 		goto bad;
 	ret=pollset_add(set->pollset, selfpipe_fd(set->shutdown_pipe),
 				POLLSET_READABLE, NULL, NULL, NULL, NULL,
-				pipe_error, NULL);
+				assert_callback_func, NULL);
 	if (ret)
 		goto bad;
 	ret=pthread_create(&set->thread, NULL, listener, set);

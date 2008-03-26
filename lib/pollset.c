@@ -64,12 +64,6 @@ static int timeval_compare(const void *ta, const void *tb)
 		return 0;
 }
 
-static void wakeup_pipe_err(void *ignored)
-{
-	(void)ignored;
-	assert(0);
-}
-
 int pollset_alloc(struct pollset **new)
 {
 	struct pollset *pset;
@@ -101,7 +95,8 @@ again:
 		goto cleanup;
 	}
 	ret=pollset_add(pset, selfpipe_fd(pset->wakeup), POLLSET_READABLE,
-				NULL, NULL, NULL, NULL, wakeup_pipe_err, NULL);
+				NULL, NULL, NULL, NULL, assert_callback_func,
+				NULL);
 	if (ret) {
 		pset->ops->destroy(pset);
 		goto cleanup;
