@@ -41,7 +41,7 @@ void send_msg(int fd, unsigned sequence, int status, int cmd, unsigned datalen)
 	if (datalen) {
 		payload=malloc(datalen);
 		memset(payload, 0, datalen);
-		if (write(fd, payload, datalen) != datalen)
+		if (write(fd, payload, datalen) != (ssize_t) datalen)
 			die("Short write on data");
 		free(payload);
 	}
@@ -71,7 +71,7 @@ void _recv_msg(unsigned line, int fd, unsigned *sequence, int status, int cmd,
 					datalen, hdr.datalen);
 	if (hdr.datalen) {
 		payload=malloc(datalen);
-		if (read(fd, payload, datalen) != datalen)
+		if (read(fd, payload, datalen) != (ssize_t) datalen)
 			die("Short read on data");
 		free(payload);
 	}

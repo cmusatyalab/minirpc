@@ -1,5 +1,6 @@
 AM_CPPFLAGS = -I$(top_srcdir) -D_GNU_SOURCE
-CFLAGS_WARNINGS = -Wall -Wstrict-prototypes -Wmissing-prototypes
+CFLAGS_WARNINGS = -W -Wall -Wstrict-prototypes -Wmissing-prototypes
+CFLAGS_WARNINGS += -Wno-unused-parameter -Wno-missing-field-initializers
 CFLAGS_OTHER = -pthread
 if HAVE_VISIBILITY
 CFLAGS_OTHER += -fvisibility=hidden

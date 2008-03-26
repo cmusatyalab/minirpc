@@ -1,5 +1,6 @@
 AM_CPPFLAGS = -I$(top_srcdir)
-CFLAGS_WARNINGS = -Wall -Wstrict-prototypes
+CFLAGS_WARNINGS = -W -Wall -Wstrict-prototypes -Wno-unused-parameter
+CFLAGS_WARNINGS += -Wno-missing-field-initializers
 CFLAGS_OTHER = -pthread
 AM_CFLAGS = $(CFLAGS_WARNINGS) $(CFLAGS_OTHER)
 AM_LDFLAGS = -L$(top_builddir)/lib -lminirpc -lpthread

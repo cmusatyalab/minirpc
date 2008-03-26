@@ -16,7 +16,7 @@
 
 struct pending_reply {
 	unsigned sequence;
-	unsigned cmd;
+	int cmd;
 	int async;
 	union {
 		struct {
