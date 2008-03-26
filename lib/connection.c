@@ -745,17 +745,26 @@ exported void mrpc_listen_close(struct mrpc_conn_set *set)
 
 exported int mrpc_bind_fd(struct mrpc_connection *conn, int fd)
 {
+	struct sockaddr_storage sa;
+	int type;
+	socklen_t len;
 	int ret;
-	int accepting;
-	socklen_t accepting_len=sizeof(accepting);
 
 	if (conn == NULL)
 		return EINVAL;
-	if (getsockopt(fd, SOL_SOCKET, SO_ACCEPTCONN, &accepting,
-				&accepting_len))
+
+	/* Make sure this is a connected socket */
+	len=sizeof(sa);
+	if (getpeername(fd, (struct sockaddr *)&sa, &len))
 		return errno;
-	if (accepting)
-		return EINVAL;
+
+	/* Make sure it's SOCK_STREAM */
+	len=sizeof(type);
+	if (getsockopt(fd, SOL_SOCKET, SO_TYPE, &type, &len))
+		return errno;
+	if (type != SOCK_STREAM)
+		return EPROTONOSUPPORT;
+
 	ret=_mrpc_bind_fd(conn, fd);
 	if (ret)
 		return ret;

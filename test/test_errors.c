@@ -9,6 +9,8 @@
  * ACCEPTANCE OF THIS AGREEMENT
  */
 
+#include <sys/types.h>
+#include <sys/socket.h>
 #include <unistd.h>
 #include "common.h"
 
@@ -48,6 +50,7 @@ int main(int argc, char **argv)
 	struct sockaddr_in addr;
 	unsigned port;
 	int fd;
+	int fdpair[2];
 	uint64_t counter;
 
 	if (mrpc_init())
@@ -125,10 +128,15 @@ int main(int argc, char **argv)
 	fd=socket(PF_INET, SOCK_STREAM, 0);
 	if (fd == -1)
 		die("Couldn't create socket");
+	expect(mrpc_bind_fd(conn, fd), ENOTCONN);
 	expect(listen(fd, 16), 0);
-	expect(mrpc_bind_fd(conn, fd), EINVAL);
+	expect(mrpc_bind_fd(conn, fd), ENOTCONN);
 	close(fd);
 	expect(mrpc_bind_fd(conn, 0), ENOTSOCK);
+	expect(socketpair(AF_UNIX, SOCK_DGRAM, 0, fdpair), 0);
+	expect(mrpc_bind_fd(conn, fdpair[0]), EPROTONOSUPPORT);
+	close(fdpair[0]);
+	close(fdpair[1]);
 
 	expect(mrpc_connect(conn, NULL, port), 0);
 	expect(proto_client_set_operations(NULL, NULL), EINVAL);
