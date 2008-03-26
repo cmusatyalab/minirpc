@@ -60,18 +60,16 @@ struct mrpc_message;
  *	Special return code used by request handlers to indicate that they
  *	will complete the request asynchronously
  * @param	MINIRPC_ENCODING_ERR
- *	XXX
+ *	An error occurred during serialization/deserialization
  * @param	MINIRPC_PROCEDURE_UNAVAIL
- *	XXX
+ *	The requested procedure is not available at this time
  * @param	MINIRPC_INVALID_ARGUMENT
- *	XXX
+ *	An invalid argument was provided
  * @param	MINIRPC_INVALID_PROTOCOL
- *	XXX
+ *	The implied protocol role does not match the connection
  * @param	MINIRPC_NETWORK_FAILURE
- *	The network connection has failed
- *
- * - these are only used on the wire
- * - negative for minirpc errors, positive for your own errors
+ *	The action could not be completed due to a temporary or permanent
+ *	network problem
  */
 enum mrpc_status_codes {
 	MINIRPC_OK			=  0,
