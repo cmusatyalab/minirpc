@@ -8,4 +8,4 @@ Description: TCP RPC library with asynchronous operations
 Version: @VERSION@
 Requires.private: glib-2.0 >= 2.10, gthread-2.0
 Libs: -L${libdir} -lminirpc
-Cflags: -I${includedir}
+Cflags: -I${includedir} -pthread

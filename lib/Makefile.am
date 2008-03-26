@@ -1,5 +1,5 @@
 AM_CPPFLAGS = -I$(top_srcdir) -D_GNU_SOURCE
-AM_CFLAGS = -Wall -Wstrict-prototypes -Wmissing-prototypes
+AM_CFLAGS = -Wall -Wstrict-prototypes -Wmissing-prototypes -pthread
 AM_LDFLAGS = -lpthread
 
 if HAVE_VISIBILITY

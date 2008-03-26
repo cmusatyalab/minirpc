@@ -1,5 +1,5 @@
 AM_CPPFLAGS = -I$(top_srcdir)
-AM_CFLAGS = -Wall -Wstrict-prototypes
+AM_CFLAGS = -Wall -Wstrict-prototypes -pthread
 AM_LDFLAGS = -L$(top_builddir)/lib -lminirpc -lpthread
 
 GEN_C = proto_minirpc.c proto_xdr.c
