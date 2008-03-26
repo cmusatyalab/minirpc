@@ -1,17 +1,27 @@
 AM_CPPFLAGS = -I$(top_srcdir)
-AM_CFLAGS = -Wall -Wstrict-prototypes -pthread
+CFLAGS_WARNINGS = -Wall -Wstrict-prototypes
+CFLAGS_OTHER = -pthread
+AM_CFLAGS = $(CFLAGS_WARNINGS) $(CFLAGS_OTHER)
 AM_LDFLAGS = -L$(top_builddir)/lib -lminirpc -lpthread
 
-GEN_C = proto_minirpc.c proto_xdr.c
-GEN_H = proto_minirpc.h proto_client.h proto_server.h proto_xdr.h
-GEN = $(GEN_C) $(GEN_H)
+# Build generated XDR sources as a separate convenience library with warnings
+# disabled, since rpcgen-produced code generates warnings
+GEN_NOXDR_C = proto_minirpc.c
+GEN_NOXDR_H = proto_minirpc.h proto_client.h proto_server.h
+GEN_NOXDR = $(GEN_NOXDR_C) $(GEN_NOXDR_H)
+GEN_XDR_C = proto_xdr.c
+GEN_XDR_H = proto_xdr.h
+GEN_XDR = $(GEN_XDR_C) $(GEN_XDR_H)
+GEN = $(GEN_NOXDR) $(GEN_XDR)
 MAINTAINERCLEANFILES = $(GEN)
-BUILT_SOURCES = $(GEN_H)
+BUILT_SOURCES = $(GEN_H) $(GEN_XDR_H)
 
-check_LIBRARIES = libcommon.a
+check_LIBRARIES = libcommon.a libxdr.a
+libxdr_a_SOURCES = $(GEN_XDR)
+libxdr_a_CFLAGS = $(CFLAGS_OTHER)
 libcommon_a_SOURCES  = common.c common.h client_sync.c client_async.c
-libcommon_a_SOURCES += server_sync.c server_async.c $(GEN)
-LDADD = libcommon.a
+libcommon_a_SOURCES += server_sync.c server_async.c $(GEN_NOXDR)
+LDADD = libcommon.a libxdr.a
 
 check_SCRIPTS = runtest.sh
 CLEANFILES = $(check_SCRIPTS)
