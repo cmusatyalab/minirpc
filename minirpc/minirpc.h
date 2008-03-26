@@ -350,16 +350,16 @@ int mrpc_set_listen_backlog(struct mrpc_conn_set *set, unsigned backlog);
 int mrpc_set_accept_backoff(struct mrpc_conn_set *set, unsigned ms);
 
 /**
- * @brief Set whether TCP keepalives will be enabled on new connections
+ * @brief Set whether keepalives will be enabled on new connections
  * @param	set
  *	The connection set to configure
  * @param	enabled
  *	Nonzero to enable keepalive, zero to disable it
  * @stdreturn
  *
- * Configure whether TCP keepalives will be enabled on newly-created
- * connections.  Existing connections will not be affected.  The default
- * is to enable keepalives.
+ * Configure whether keepalives will be enabled on newly-created connections.
+ * Existing connections will not be affected.  The default is to enable
+ * keepalives.
  */
 int mrpc_set_keepalive_enabled(struct mrpc_conn_set *set, int enabled);
 
@@ -378,7 +378,8 @@ int mrpc_set_keepalive_enabled(struct mrpc_conn_set *set, int enabled);
  * @stdreturn
  *
  * Configure parameters for TCP keepalives.  These settings will only be
- * applied to new connections, and only if keepalives are enabled.
+ * applied to new connections, and only if keepalives are enabled.  These
+ * settings will be ignored for connections not using TCP.
  */
 int mrpc_set_keepalive_parameters(struct mrpc_conn_set *set, unsigned idletime,
 			unsigned count, unsigned interval);
@@ -481,10 +482,9 @@ int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
  * that the operations structure is set on the connection handle, if
  * necessary, @em before calling this function.
  *
- * The specified file descriptor must be associated with a connected socket,
- * not a listening socket or another type of file.  After this call, the
- * socket will be managed by miniRPC; the application must not read, write,
- * or close it directly.
+ * The specified file descriptor must be associated with a connected socket
+ * of type SOCK_STREAM.  After this call, the socket will be managed by
+ * miniRPC; the application must not read, write, or close it directly.
  */
 int mrpc_bind_fd(struct mrpc_connection *conn, int fd);
 

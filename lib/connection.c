@@ -213,15 +213,18 @@ static void try_write_conn(void *data)
 			}
 			if (conn->send_msg == NULL) {
 				if (conn->send_state != STATE_IDLE) {
-					setsockoptval(conn->fd, IPPROTO_TCP,
-							TCP_CORK, 0);
+					if (conn->is_tcp)
+						setsockoptval(conn->fd,
+								IPPROTO_TCP,
+								TCP_CORK, 0);
 					conn->send_state=STATE_IDLE;
 				}
 				break;
 			}
 			if (conn->send_state == STATE_IDLE) {
-				setsockoptval(conn->fd, IPPROTO_TCP, TCP_CORK,
-							1);
+				if (conn->is_tcp)
+					setsockoptval(conn->fd, IPPROTO_TCP,
+							TCP_CORK, 1);
 				conn->send_state=STATE_HEADER;
 			}
 		}
@@ -356,7 +359,7 @@ exported int mrpc_conn_create(struct mrpc_connection **new_conn,
 	return 0;
 }
 
-static int _mrpc_bind_fd(struct mrpc_connection *conn, int fd)
+static int _mrpc_bind_fd(struct mrpc_connection *conn, int addr_family, int fd)
 {
 	int ret;
 	int keepalive=get_config(conn->set, keepalive_enabled);
@@ -366,7 +369,9 @@ static int _mrpc_bind_fd(struct mrpc_connection *conn, int fd)
 		ret=EINVAL;
 		goto out;
 	}
-	if (keepalive) {
+	if (addr_family == AF_INET || addr_family == AF_INET6)
+		conn->is_tcp=1;
+	if (keepalive && conn->is_tcp) {
 		ret=setsockoptval(fd, IPPROTO_TCP, TCP_KEEPIDLE,
 					get_config(conn->set, keepalive_time));
 		if (ret)
@@ -533,7 +538,7 @@ static void try_accept(void *data)
 			close(fd);
 			continue;
 		}
-		if (_mrpc_bind_fd(conn, fd)) {
+		if (_mrpc_bind_fd(conn, sa.ss_family, fd)) {
 			mrpc_conn_close(conn);
 			close(fd);
 			continue;
@@ -623,15 +628,13 @@ exported int mrpc_connect(struct mrpc_connection *conn, const char *host,
 		close(fd);
 		fd=-1;
 	}
-	freeaddrinfo(ai);
-	if (fd == -1)
-		return ret;
-	ret=_mrpc_bind_fd(conn, fd);
-	if (ret) {
-		close(fd);
-		return ret;
+	if (fd != -1) {
+		ret=_mrpc_bind_fd(conn, cur->ai_family, fd);
+		if (ret)
+			close(fd);
 	}
-	return 0;
+	freeaddrinfo(ai);
+	return ret;
 }
 
 exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
@@ -765,7 +768,7 @@ exported int mrpc_bind_fd(struct mrpc_connection *conn, int fd)
 	if (type != SOCK_STREAM)
 		return EPROTONOSUPPORT;
 
-	ret=_mrpc_bind_fd(conn, fd);
+	ret=_mrpc_bind_fd(conn, sa.ss_family, fd);
 	if (ret)
 		return ret;
 	return 0;

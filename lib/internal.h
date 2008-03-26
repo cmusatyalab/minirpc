@@ -127,6 +127,7 @@ struct mrpc_connection {
 	struct mrpc_conn_set *set;
 	GList *lh_conns;
 	int fd;
+	int is_tcp;
 	void *private;
 
 	pthread_mutex_t sequence_lock;

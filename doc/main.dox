@@ -15,8 +15,8 @@
 
 @section about About miniRPC
 
-miniRPC is a remote procedure call library which works on top of TCP.
-It has the following design goals:
+miniRPC is a remote procedure call library which works on top of TCP and other
+stream-oriented transports.  It has the following design goals:
 
 - Simple on-the-wire protocol
 - Automatic stub generation
@@ -36,8 +36,8 @@ model
 
 @section terms miniRPC Terminology
 
-- A miniRPC @em connection is a single TCP connection between two endpoints
-which carries miniRPC traffic.
+- A miniRPC @em connection is a single network connection between two
+endpoints which carries miniRPC traffic.
 
 - The @em server is the host which listens for incoming connections.  The
 @em client is the host which initiates a connection to a server.

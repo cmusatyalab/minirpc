@@ -49,8 +49,8 @@ mrpc_listen().
 For cases in which miniRPC's connection setup code is not sufficient,
 miniRPC provides the mrpc_bind_fd() function.  This function arranges for an
 existing socket to be serviced by miniRPC, and can be used if the application
-wishes to handle connection setup itself.
-
+wishes to handle connection setup itself.  This can be used, for example, to
+service Unix domain sockets with miniRPC.
 
 @defgroup event Event Processing
 miniRPC handles application callbacks by means of @em events.  When miniRPC
