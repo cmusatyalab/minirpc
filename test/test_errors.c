@@ -48,6 +48,7 @@ int main(int argc, char **argv)
 	struct sockaddr_in addr;
 	unsigned port;
 	int fd;
+	uint64_t counter;
 
 	if (mrpc_init())
 		die("Couldn't initialize minirpc");
@@ -141,6 +142,11 @@ int main(int argc, char **argv)
 	expect(proto_client_check_int_async(conn,
 				(proto_client_check_int_callback_fn*)1,
 				NULL, NULL), MINIRPC_INVALID_PROTOCOL);
+	expect(mrpc_conn_get_counter(NULL, 0, &counter), EINVAL);
+	expect(mrpc_conn_get_counter(conn, 0, NULL), EINVAL);
+	expect(mrpc_conn_get_counter(conn, 9999, &counter), EINVAL);
+	expect(mrpc_conn_get_counter(conn, MRPC_CONNCTR_NR, &counter), EINVAL);
+	expect(mrpc_conn_get_counter(conn, 0, &counter), 0);
 	expect(mrpc_conn_close(conn), 0);
 
 	expect(mrpc_conn_create(&conn, cset, NULL), 0);

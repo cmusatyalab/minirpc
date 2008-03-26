@@ -19,6 +19,7 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <stdint.h>
 
 #ifdef DOXYGEN
 /**
@@ -105,6 +106,30 @@ enum mrpc_disc_reason {
 	MRPC_DISC_USER,
 	MRPC_DISC_CLOSED,
 	MRPC_DISC_IOERR
+};
+
+/**
+ * @brief Statistics counters maintained by a connection
+ * @ingroup conn
+ * @param	MRPC_CONNCTR_SEND_BYTES
+ *	The number of bytes sent on the connection
+ * @param	MRPC_CONNCTR_RECV_BYTES
+ *	The number of bytes received on the connection
+ * @param	MRPC_CONNCTR_SEND_MSGS
+ *	The number of miniRPC protocol messages sent on the connection
+ * @param	MRPC_CONNCTR_RECV_MSGS
+ *	The number of miniRPC protocol messages received on the connection
+ * @param	MRPC_CONNCTR_NR
+ *	Sentinel constant which evaluates to the number of counters supported.
+ *	This does not correspond to an actual counter; passing it to
+ *	mrpc_conn_get_counter() will result in EINVAL.
+ */
+enum mrpc_conn_counter {
+	MRPC_CONNCTR_SEND_BYTES,
+	MRPC_CONNCTR_RECV_BYTES,
+	MRPC_CONNCTR_SEND_MSGS,
+	MRPC_CONNCTR_RECV_MSGS,
+	MRPC_CONNCTR_NR
 };
 
 /**
@@ -431,6 +456,19 @@ int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
  * or close it directly.
  */
 int mrpc_bind_fd(struct mrpc_connection *conn, int fd);
+
+/**
+ * @brief Get statistics counter value for the specified connection
+ * @param	conn
+ *	The connection handle
+ * @param	counter
+ *	The particular counter being requested
+ * @param[out]	result
+ *	The current value of the counter
+ * @stdreturn
+ */
+int mrpc_conn_get_counter(struct mrpc_connection *conn,
+			enum mrpc_conn_counter counter, uint64_t *result);
 
 /**
  * @brief Close an existing connection

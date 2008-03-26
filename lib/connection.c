@@ -78,6 +78,13 @@ static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
 	return MINIRPC_OK;
 }
 
+/* We'd rather use atomic operations, but we need 64-bit counters */
+#define conn_counter_inc(conn, ctr, amount) do {		\
+		pthread_mutex_lock(&(conn)->counters_lock);	\
+		(conn)->counters[ctr] += amount;		\
+		pthread_mutex_unlock(&(conn)->counters_lock);	\
+	} while (0)
+
 static void try_read_conn(void *data)
 {
 	struct mrpc_connection *conn=data;
@@ -129,6 +136,8 @@ static void try_read_conn(void *data)
 				return;
 			}
 			conn->recv_remaining -= rcount;
+			conn_counter_inc(conn, MRPC_CONNCTR_RECV_BYTES,
+						rcount);
 		}
 
 		if (!conn->recv_remaining) {
@@ -147,6 +156,8 @@ static void try_read_conn(void *data)
 				break;
 			case STATE_DATA:
 			case STATE_INVALID:
+				conn_counter_inc(conn, MRPC_CONNCTR_RECV_MSGS,
+							1);
 				process_incoming_message(conn->recv_msg);
 				conn->recv_state=STATE_HEADER;
 				conn->recv_msg=NULL;
@@ -240,6 +251,8 @@ static void try_write_conn(void *data)
 				return;
 			}
 			conn->send_offset += rcount;
+			conn_counter_inc(conn, MRPC_CONNCTR_SEND_BYTES,
+						rcount);
 		}
 
 		if (conn->send_offset == len) {
@@ -253,6 +266,8 @@ static void try_write_conn(void *data)
 				conn->send_offset=0;
 				mrpc_free_message(conn->send_msg);
 				conn->send_msg=NULL;
+				conn_counter_inc(conn, MRPC_CONNCTR_SEND_MSGS,
+							1);
 				break;
 			default:
 				assert(0);
@@ -323,6 +338,7 @@ exported int mrpc_conn_create(struct mrpc_connection **new_conn,
 	pthread_mutex_init(&conn->operations_lock, &attr);
 	pthread_mutexattr_destroy(&attr);
 	pthread_mutex_init(&conn->send_msgs_lock, NULL);
+	pthread_mutex_init(&conn->counters_lock, NULL);
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
 	pthread_mutex_init(&conn->sync_wakeup_lock, NULL);
 	pthread_mutex_init(&conn->sequence_lock, NULL);
@@ -737,6 +753,18 @@ exported int mrpc_conn_set_operations(struct mrpc_connection *conn,
 	pthread_mutex_lock(&conn->operations_lock);
 	conn->operations=ops;
 	pthread_mutex_unlock(&conn->operations_lock);
+	return 0;
+}
+
+exported int mrpc_conn_get_counter(struct mrpc_connection *conn,
+			enum mrpc_conn_counter counter, uint64_t *result)
+{
+	if (conn == NULL || result == NULL || counter < 0 ||
+				counter >= MRPC_CONNCTR_NR)
+		return EINVAL;
+	pthread_mutex_lock(&conn->counters_lock);
+	*result=conn->counters[counter];
+	pthread_mutex_unlock(&conn->counters_lock);
 	return 0;
 }
 
