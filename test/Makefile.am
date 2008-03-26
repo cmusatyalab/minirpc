@@ -34,6 +34,7 @@ check_PROGRAMS += test_errors
 check_PROGRAMS += test_max_buf
 check_PROGRAMS += test_protocol_err
 check_PROGRAMS += test_fd_limit
+check_PROGRAMS += test_unix
 
 TESTS_ENVIRONMENT = $(builddir)/runtest.sh
 TESTS = $(check_PROGRAMS)
