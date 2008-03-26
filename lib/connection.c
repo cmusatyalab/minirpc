@@ -359,13 +359,30 @@ exported int mrpc_conn_create(struct mrpc_connection **new_conn,
 static int _mrpc_bind_fd(struct mrpc_connection *conn, int fd)
 {
 	int ret;
+	int keepalive=get_config(conn->set, keepalive_enabled);
 
 	pthread_mutex_lock(&conn->sequence_lock);
 	if (conn->sequence_flags & SEQ_HAVE_FD) {
 		ret=EINVAL;
 		goto out;
 	}
-	ret=setsockoptval(fd, SOL_SOCKET, SO_KEEPALIVE, 1);
+	if (keepalive) {
+		ret=setsockoptval(fd, IPPROTO_TCP, TCP_KEEPIDLE,
+					get_config(conn->set, keepalive_time));
+		if (ret)
+			goto out;
+		ret=setsockoptval(fd, IPPROTO_TCP, TCP_KEEPCNT,
+					get_config(conn->set,
+					keepalive_count));
+		if (ret)
+			goto out;
+		ret=setsockoptval(fd, IPPROTO_TCP, TCP_KEEPINTVL,
+					get_config(conn->set,
+					keepalive_interval));
+		if (ret)
+			goto out;
+	}
+	ret=setsockoptval(fd, SOL_SOCKET, SO_KEEPALIVE, keepalive);
 	if (ret)
 		goto out;
 	ret=set_nonblock(fd);
@@ -786,7 +803,11 @@ static void pipe_error(void *data)
 static const struct mrpc_config default_config = {
 	.msg_max_buf_len = 16384,
 	.listen_backlog = 16,
-	.accept_backoff = 1000
+	.accept_backoff = 1000,
+	.keepalive_enabled = 1,
+	.keepalive_time = 7200,
+	.keepalive_count = 9,
+	.keepalive_interval = 75,
 };
 
 exported int mrpc_conn_set_create(struct mrpc_conn_set **new_set,

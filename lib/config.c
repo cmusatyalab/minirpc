@@ -71,3 +71,22 @@ exported int mrpc_set_accept_backoff(struct mrpc_conn_set *set, unsigned ms)
 	set_config(set, accept_backoff, ms);
 	return 0;
 }
+
+exported int mrpc_set_keepalive_enabled(struct mrpc_conn_set *set, int enabled)
+{
+	if (set == NULL)
+		return EINVAL;
+	set_config(set, keepalive_enabled, enabled);
+	return 0;
+}
+
+exported int mrpc_set_keepalive_parameters(struct mrpc_conn_set *set,
+			unsigned idletime, unsigned count, unsigned interval)
+{
+	if (set == NULL || idletime == 0 || count == 0 || interval == 0)
+		return EINVAL;
+	set_config(set, keepalive_time, idletime);
+	set_config(set, keepalive_count, count);
+	set_config(set, keepalive_interval, interval);
+	return 0;
+}

@@ -40,6 +40,10 @@ struct mrpc_config {
 	unsigned msg_max_buf_len;
 	unsigned listen_backlog;
 	unsigned accept_backoff;
+	int keepalive_enabled;
+	unsigned keepalive_time;
+	unsigned keepalive_count;
+	unsigned keepalive_interval;
 };
 
 struct mrpc_conn_set {

@@ -349,6 +349,39 @@ int mrpc_set_listen_backlog(struct mrpc_conn_set *set, unsigned backlog);
  */
 int mrpc_set_accept_backoff(struct mrpc_conn_set *set, unsigned ms);
 
+/**
+ * @brief Set whether TCP keepalives will be enabled on new connections
+ * @param	set
+ *	The connection set to configure
+ * @param	enabled
+ *	Nonzero to enable keepalive, zero to disable it
+ * @stdreturn
+ *
+ * Configure whether TCP keepalives will be enabled on newly-created
+ * connections.  Existing connections will not be affected.  The default
+ * is to enable keepalives.
+ */
+int mrpc_set_keepalive_enabled(struct mrpc_conn_set *set, int enabled);
+
+/**
+ * @brief Set TCP keepalive parameters for new connections
+ * @param	set
+ *	The connection set to configure
+ * @param	idletime
+ *	The number of seconds a connection can be idle before keepalive probes
+ *	are sent (default: 7200)
+ * @param	count
+ *	The number of keepalive probes to send before closing the connection
+ *	(default: 9)
+ * @param	interval
+ *	The number of seconds between keepalive probe attempts (default: 75)
+ * @stdreturn
+ *
+ * Configure parameters for TCP keepalives.  These settings will only be
+ * applied to new connections, and only if keepalives are enabled.
+ */
+int mrpc_set_keepalive_parameters(struct mrpc_conn_set *set, unsigned idletime,
+			unsigned count, unsigned interval);
 
 /**
  * @}
