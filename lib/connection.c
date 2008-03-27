@@ -334,6 +334,7 @@ exported int mrpc_conn_create(struct mrpc_connection **new_conn,
 	conn=g_slice_new0(struct mrpc_connection);
 	conn->send_msgs=g_queue_new();
 	conn->events=g_queue_new();
+	conn->running_event_ref=ref_alloc();
 	conn->operations_ref=ref_alloc();
 	conn->lh_conns=g_list_append(NULL, conn);
 	pthread_mutex_init(&conn->send_msgs_lock, NULL);
@@ -341,7 +342,6 @@ exported int mrpc_conn_create(struct mrpc_connection **new_conn,
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
 	pthread_mutex_init(&conn->sync_wakeup_lock, NULL);
 	pthread_mutex_init(&conn->sequence_lock, NULL);
-	pthread_cond_init(&conn->event_completion_cond, NULL);
 	conn->send_state=STATE_IDLE;
 	conn->recv_state=STATE_HEADER;
 	conn->set=set;
@@ -445,6 +445,8 @@ static void conn_kill(struct mrpc_connection *conn,
 
 static int _mrpc_conn_close(struct mrpc_connection *conn, int wait)
 {
+	refserial_t serial;
+
 	pthread_mutex_lock(&conn->sequence_lock);
 	conn_start_shutdown(conn, MRPC_DISC_USER);
 	/* Squash event queue */
@@ -463,12 +465,11 @@ static int _mrpc_conn_close(struct mrpc_connection *conn, int wait)
 		pollset_modify(conn->set->pollset, conn->fd,
 					POLLSET_READABLE | POLLSET_WRITABLE);
 	}
-	while (wait && conn->running_events != 0 &&
-				!(conn->running_events == 1 &&
-				thread_on_conn(conn)))
-		pthread_cond_wait(&conn->event_completion_cond,
-					&conn->sequence_lock);
 	pthread_mutex_unlock(&conn->sequence_lock);
+	if (wait) {
+		serial=ref_update(conn->running_event_ref);
+		ref_wait(conn->running_event_ref, serial);
+	}
 	return 0;
 }
 
@@ -488,6 +489,7 @@ void mrpc_conn_free(struct mrpc_connection *conn)
 	pthread_mutex_unlock(&conn->set->conns_lock);
 	destroy_events(conn);
 	g_queue_free(conn->events);
+	ref_free(conn->running_event_ref);
 	ref_free(conn->operations_ref);
 	g_hash_table_destroy(conn->pending_replies);
 	if (conn->send_msg)

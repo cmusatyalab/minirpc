@@ -387,6 +387,7 @@ static void dispatch_event(struct mrpc_event *event)
 	mrpc_disconnect_fn *disconnect;
 	mrpc_ioerr_fn *ioerr;
 	int squash;
+	refserial_t serial;
 	int fire_disconnect;
 	enum mrpc_disc_reason reason;
 	enum event_type type=event->type;
@@ -398,8 +399,8 @@ static void dispatch_event(struct mrpc_event *event)
 	squash=conn->sequence_flags & SEQ_SQUASH_EVENTS;
 	fire_disconnect=conn->sequence_flags & SEQ_HAVE_FD;
 	reason=conn->disc_reason;
-	if (!squash && type != EVENT_DISCONNECT)
-		conn->running_events++;
+	if (type != EVENT_DISCONNECT)
+		serial=ref_get(conn->running_event_ref);
 	pthread_mutex_unlock(&conn->sequence_lock);
 
 	if (squash) {
@@ -450,22 +451,13 @@ static void dispatch_event(struct mrpc_event *event)
 		mrpc_unplug_event(event);
 	g_slice_free(struct mrpc_event, event);
 out:
-	if (!squash && type != EVENT_DISCONNECT) {
-		pthread_mutex_lock(&conn->sequence_lock);
-		conn->running_events--;
-		pthread_mutex_unlock(&conn->sequence_lock);
-		pthread_cond_broadcast(&conn->event_completion_cond);
-	}
-	if (type != EVENT_DISCONNECT)
+	if (type != EVENT_DISCONNECT) {
+		ref_put(conn->running_event_ref, serial);
 		finish_event(conn);
+	}
 	assert(conn != NULL);
 	assert(active_conn == conn);
 	active_conn=NULL;
-}
-
-int thread_on_conn(struct mrpc_connection *conn)
-{
-	return (active_conn == conn);
 }
 
 void destroy_events(struct mrpc_connection *conn)

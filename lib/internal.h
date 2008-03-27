@@ -133,8 +133,7 @@ struct mrpc_connection {
 	pthread_mutex_t sequence_lock;
 	unsigned sequence_flags;
 	enum mrpc_disc_reason disc_reason;
-	int running_events;
-	pthread_cond_t event_completion_cond;
+	struct reftrack *running_event_ref;
 
 	gconstpointer operations;  /* atomic operations only */
 	struct reftrack *operations_ref;
@@ -204,7 +203,6 @@ void queue_event(struct mrpc_event *event);
 void queue_ioerr_event(struct mrpc_connection *conn, char *fmt, ...);
 void destroy_events(struct mrpc_connection *conn);
 void kick_event_shutdown_sequence(struct mrpc_connection *conn);
-int thread_on_conn(struct mrpc_connection *conn);
 
 /* pollset.c */
 typedef unsigned poll_flags_t;
