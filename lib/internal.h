@@ -130,10 +130,12 @@ struct mrpc_connection {
 	int is_tcp;
 	void *private;
 
+	gint refs;  /* atomic operations only */
+	struct reftrack *running_event_ref;
+
 	pthread_mutex_t sequence_lock;
 	unsigned sequence_flags;
 	enum mrpc_disc_reason disc_reason;
-	struct reftrack *running_event_ref;
 
 	gconstpointer operations;  /* atomic operations only */
 	struct reftrack *operations_ref;
@@ -182,7 +184,8 @@ struct mrpc_listener {
 
 /* connection.c */
 mrpc_status_t send_message(struct mrpc_message *msg);
-void mrpc_conn_free(struct mrpc_connection *conn);
+void conn_get(struct mrpc_connection *conn);
+void conn_put(struct mrpc_connection *conn);
 
 /* message.c */
 struct pending_reply;

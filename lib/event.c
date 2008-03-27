@@ -171,10 +171,11 @@ void kick_event_shutdown_sequence(struct mrpc_connection *conn)
 	}
 }
 
-static void finish_event(struct mrpc_connection *conn)
+static void finish_event(struct mrpc_connection *conn, refserial_t serial)
 {
 	int count;
 
+	ref_put(conn->running_event_ref, serial);
 	pthread_mutex_lock(&conn->set->events_lock);
 	assert(conn->events_pending > 0);
 	count=--conn->events_pending;
@@ -396,11 +397,11 @@ static void dispatch_event(struct mrpc_event *event, refserial_t serial)
 	int squash;
 	int fire_disconnect;
 	enum mrpc_disc_reason reason;
-	enum event_type type=event->type;
 
 	assert(conn != NULL);
 	assert(active_conn == NULL);
 	active_conn=conn;
+	conn_get(conn);
 	pthread_mutex_lock(&conn->sequence_lock);
 	squash=conn->sequence_flags & SEQ_SQUASH_EVENTS;
 	fire_disconnect=conn->sequence_flags & SEQ_HAVE_FD;
@@ -408,7 +409,7 @@ static void dispatch_event(struct mrpc_event *event, refserial_t serial)
 	pthread_mutex_unlock(&conn->sequence_lock);
 
 	if (squash) {
-		switch (type) {
+		switch (event->type) {
 		case EVENT_REQUEST:
 		case EVENT_IOERR:
 			mrpc_unplug_event(event);
@@ -422,7 +423,7 @@ static void dispatch_event(struct mrpc_event *event, refserial_t serial)
 		}
 	}
 
-	switch (type) {
+	switch (event->type) {
 	case EVENT_ACCEPT:
 		accept=get_config(conn->set, accept);
 		assert(accept != NULL);
@@ -440,8 +441,7 @@ static void dispatch_event(struct mrpc_event *event, refserial_t serial)
 		disconnect=get_config(conn->set, disconnect);
 		if (fire_disconnect && disconnect)
 			disconnect(conn->private, reason);
-		ref_put(conn->running_event_ref, serial);
-		mrpc_conn_free(conn);
+		conn_put(conn);
 		break;
 	case EVENT_IOERR:
 		ioerr=get_config(conn->set, ioerr);
@@ -452,14 +452,11 @@ static void dispatch_event(struct mrpc_event *event, refserial_t serial)
 	default:
 		assert(0);
 	}
-	if (type != EVENT_DISCONNECT)
-		mrpc_unplug_event(event);
+	mrpc_unplug_event(event);
 	g_slice_free(struct mrpc_event, event);
 out:
-	if (type != EVENT_DISCONNECT) {
-		ref_put(conn->running_event_ref, serial);
-		finish_event(conn);
-	}
+	finish_event(conn, serial);
+	conn_put(conn);
 	assert(conn != NULL);
 	assert(active_conn == conn);
 	active_conn=NULL;

@@ -332,6 +332,7 @@ exported int mrpc_conn_create(struct mrpc_connection **new_conn,
 		return EINVAL;
 	conn_set_get(set);
 	conn=g_slice_new0(struct mrpc_connection);
+	g_atomic_int_set(&conn->refs, 1);
 	conn->send_msgs=g_queue_new();
 	conn->events=g_queue_new();
 	conn->running_event_ref=ref_alloc();
@@ -446,13 +447,16 @@ static void conn_kill(struct mrpc_connection *conn,
 static int _mrpc_conn_close(struct mrpc_connection *conn, int wait)
 {
 	refserial_t serial;
+	int ret=0;
 
+	conn_get(conn);
 	pthread_mutex_lock(&conn->sequence_lock);
 	conn_start_shutdown(conn, MRPC_DISC_USER);
 	/* Squash event queue */
 	if (conn->sequence_flags & SEQ_SQUASH_EVENTS) {
 		pthread_mutex_unlock(&conn->sequence_lock);
-		return EALREADY;
+		ret=EALREADY;
+		goto out;
 	}
 	conn->sequence_flags |= SEQ_SQUASH_EVENTS;
 	if (!(conn->sequence_flags & SEQ_FD_CLOSED)) {
@@ -460,7 +464,7 @@ static int _mrpc_conn_close(struct mrpc_connection *conn, int wait)
 			conn->sequence_flags |= SEQ_FD_CLOSED;
 			pthread_mutex_unlock(&conn->sequence_lock);
 			kick_event_shutdown_sequence(conn);
-			return 0;
+			goto out;
 		}
 		pollset_modify(conn->set->pollset, conn->fd,
 					POLLSET_READABLE | POLLSET_WRITABLE);
@@ -470,7 +474,9 @@ static int _mrpc_conn_close(struct mrpc_connection *conn, int wait)
 		serial=ref_update(conn->running_event_ref);
 		ref_wait(conn->running_event_ref, serial);
 	}
-	return 0;
+out:
+	conn_put(conn);
+	return ret;
 }
 
 exported int mrpc_conn_close(struct mrpc_connection *conn)
@@ -480,7 +486,7 @@ exported int mrpc_conn_close(struct mrpc_connection *conn)
 	return _mrpc_conn_close(conn, 1);
 }
 
-void mrpc_conn_free(struct mrpc_connection *conn)
+static void mrpc_conn_free(struct mrpc_connection *conn)
 {
 	struct mrpc_message *msg;
 
@@ -501,6 +507,20 @@ void mrpc_conn_free(struct mrpc_connection *conn)
 	g_queue_free(conn->send_msgs);
 	conn_set_put(conn->set);
 	g_slice_free(struct mrpc_connection, conn);
+}
+
+void conn_get(struct mrpc_connection *conn)
+{
+	gint old;
+
+	old=g_atomic_int_exchange_and_add(&conn->refs, 1);
+	assert(old > 0);
+}
+
+void conn_put(struct mrpc_connection *conn)
+{
+	if (g_atomic_int_dec_and_test(&conn->refs))
+		mrpc_conn_free(conn);
 }
 
 static void restart_accept(void *data)
