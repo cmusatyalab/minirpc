@@ -341,7 +341,6 @@ exported int mrpc_conn_create(struct mrpc_connection **new_conn,
 	pthread_mutex_init(&conn->send_msgs_lock, NULL);
 	pthread_mutex_init(&conn->counters_lock, NULL);
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
-	pthread_mutex_init(&conn->sync_wakeup_lock, NULL);
 	pthread_mutex_init(&conn->sequence_lock, NULL);
 	conn->send_state=STATE_IDLE;
 	conn->recv_state=STATE_HEADER;

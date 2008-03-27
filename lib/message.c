@@ -9,6 +9,7 @@
  * ACCEPTANCE OF THIS AGREEMENT
  */
 
+#include <semaphore.h>
 #include <pthread.h>
 #include <assert.h>
 #define MINIRPC_INTERNAL
@@ -20,7 +21,7 @@ struct pending_reply {
 	int async;
 	union {
 		struct {
-			pthread_cond_t *cond;
+			sem_t *sem;
 			struct mrpc_message **reply;
 		} sync;
 		struct {
@@ -73,7 +74,6 @@ static struct pending_reply *pending_alloc(struct mrpc_message *request)
 static void pending_dispatch(struct pending_reply *pending,
 			struct mrpc_message *msg)
 {
-	struct mrpc_connection *conn=msg->conn;
 	struct mrpc_event *event;
 
 	if (pending->async) {
@@ -82,10 +82,9 @@ static void pending_dispatch(struct pending_reply *pending,
 		event->private=pending->data.async.private;
 		queue_event(event);
 	} else {
-		pthread_mutex_lock(&conn->sync_wakeup_lock);
-		*pending->data.sync.reply=msg;
-		pthread_mutex_unlock(&conn->sync_wakeup_lock);
-		pthread_cond_signal(pending->data.sync.cond);
+		/* We need the memory barrier */
+		g_atomic_pointer_set(pending->data.sync.reply, msg);
+		sem_post(pending->data.sync.sem);
 	}
 	pending_free(pending);
 }
@@ -135,9 +134,9 @@ exported mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
 			void **out)
 {
 	struct mrpc_message *request;
-	struct mrpc_message *reply=NULL;
+	struct mrpc_message *reply;
 	struct pending_reply *pending;
-	pthread_cond_t cond=PTHREAD_COND_INITIALIZER;
+	sem_t sem;
 	mrpc_status_t ret;
 	int squash;
 
@@ -148,18 +147,20 @@ exported mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
 	ret=format_request(conn, cmd, in, &request);
 	if (ret)
 		return ret;
+	sem_init(&sem, 0, 0);
 	pending=pending_alloc(request);
 	pending->async=0;
-	pending->data.sync.cond=&cond;
+	pending->data.sync.sem=&sem;
 	pending->data.sync.reply=&reply;
 	ret=send_request_pending(request, pending);
-	if (ret)
+	if (ret) {
+		sem_destroy(&sem);
 		return ret;
+	}
 
-	pthread_mutex_lock(&conn->sync_wakeup_lock);
-	while (reply == NULL)
-		pthread_cond_wait(&cond, &conn->sync_wakeup_lock);
-	pthread_mutex_unlock(&conn->sync_wakeup_lock);
+	sem_wait(&sem);
+	sem_destroy(&sem);
+	reply=g_atomic_pointer_get(&reply);
 	pthread_mutex_lock(&conn->sequence_lock);
 	squash=conn->sequence_flags & SEQ_SQUASH_EVENTS;
 	pthread_mutex_unlock(&conn->sequence_lock);

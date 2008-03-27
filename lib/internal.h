@@ -157,7 +157,6 @@ struct mrpc_connection {
 
 	GHashTable *pending_replies;
 	pthread_mutex_t pending_replies_lock;
-	pthread_mutex_t sync_wakeup_lock;
 
 	GList *lh_event_conns;
 	GQueue *events;	/* protected by set->events_lock */
