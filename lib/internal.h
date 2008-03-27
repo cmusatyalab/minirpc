@@ -223,6 +223,16 @@ int pollset_set_timer(struct pollset *pset, int fd, unsigned timeout_ms);
 int pollset_poll(struct pollset *pset);
 void pollset_wake(struct pollset *pset);
 
+/* reftrack.c */
+typedef uint64_t refserial_t;
+struct reftrack *ref_alloc(void);
+void ref_free(struct reftrack *ref);
+refserial_t ref_get(struct reftrack *ref);
+void ref_put(struct reftrack *ref, refserial_t serial);
+refserial_t ref_update(struct reftrack *ref);
+void ref_wait(struct reftrack *ref, refserial_t serial);
+int ref_is_held(struct reftrack *ref);
+
 /* selfpipe.c */
 int selfpipe_create(struct selfpipe **new);
 void selfpipe_destroy(struct selfpipe *sp);

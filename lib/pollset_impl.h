@@ -16,18 +16,13 @@
 #ifndef MINIRPC_POLLSET_IMPL_H
 #define MINIRPC_POLLSET_IMPL_H
 
-#define NOT_RUNNING -1
-
 struct pollset {
 	pthread_mutex_t lock;
 	GHashTable *members;
 	GQueue *dead;
 	GTree *timers;
 	GQueue *expired;
-	int64_t serial;
-	int64_t running_serial;
-	pthread_t running_thread;
-	pthread_cond_t serial_cond;
+	struct reftrack *ref;
 
 	const struct pollset_ops *ops;
 	struct impl_data *impl;

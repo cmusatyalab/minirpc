@@ -78,8 +78,7 @@ int pollset_alloc(struct pollset **new)
 	}
 	pthread_mutex_init(&pset->lock, NULL);
 	pthread_mutex_init(&pset->poll_lock, NULL);
-	pthread_cond_init(&pset->serial_cond, NULL);
-	pset->running_serial=NOT_RUNNING;
+	pset->ref=ref_alloc();
 	pset->members=g_hash_table_new_full(g_int_hash, g_int_equal, NULL,
 				(GDestroyNotify)poll_fd_free);
 	pset->dead=g_queue_new();
@@ -115,7 +114,7 @@ cleanup:
 void pollset_free(struct pollset *pset)
 {
 	pthread_mutex_lock(&pset->lock);
-	assert(pset->running_serial == NOT_RUNNING);
+	assert(!ref_is_held(pset->ref));
 	pset->ops->destroy(pset);
 	g_hash_table_destroy(pset->members);
 	pollset_free_dead(pset);
@@ -123,6 +122,7 @@ void pollset_free(struct pollset *pset)
 	g_tree_destroy(pset->timers);
 	g_queue_free(pset->expired);
 	selfpipe_destroy(pset->wakeup);
+	ref_free(pset->ref);
 	pthread_mutex_unlock(&pset->lock);
 	g_slice_free(struct pollset, pset);
 }
@@ -183,7 +183,7 @@ int pollset_modify(struct pollset *pset, int fd, poll_flags_t flags)
 void pollset_del(struct pollset *pset, int fd)
 {
 	struct poll_fd *pfd;
-	int64_t need_serial;
+	refserial_t serial;
 
 	pthread_mutex_lock(&pset->lock);
 	pfd=g_hash_table_lookup(pset->members, &fd);
@@ -193,19 +193,13 @@ void pollset_del(struct pollset *pset, int fd)
 	}
 	g_hash_table_steal(pset->members, &fd);
 	g_tree_remove(pset->timers, &pfd->expires);
-	need_serial=++pset->serial;
-	pthread_mutex_unlock(&pset->lock);
 	pset->ops->remove(pset, pfd);
-	pollset_wake(pset);
-	pthread_mutex_lock(&pset->lock);
 	pfd->dead=1;
 	g_queue_push_tail(pset->dead, pfd);
-	while (pset->running_serial != NOT_RUNNING &&
-				!pthread_equal(pset->running_thread,
-				pthread_self()) &&
-				pset->running_serial < need_serial)
-		pthread_cond_wait(&pset->serial_cond, &pset->lock);
 	pthread_mutex_unlock(&pset->lock);
+	serial=ref_update(pset->ref);
+	pollset_wake(pset);
+	ref_wait(pset->ref, serial);
 }
 
 int pollset_set_timer(struct pollset *pset, int fd, unsigned timeout_ms)
@@ -289,23 +283,20 @@ static void pollset_run_timers(struct pollset *pset, int *timeout_ms)
 
 int pollset_poll(struct pollset *pset)
 {
+	refserial_t serial;
 	int timeout;
 	int ret;
 
 	pthread_mutex_lock(&pset->poll_lock);
-	pthread_mutex_lock(&pset->lock);
-	pset->running_serial=pset->serial;
-	pset->running_thread=pthread_self();
-	pthread_mutex_unlock(&pset->lock);
+	serial=ref_get(pset->ref);
 	do {
 		pollset_run_timers(pset, &timeout);
 	} while ((ret=pset->ops->poll(pset, timeout)) == EINTR);
 	pollset_run_timers(pset, NULL);
 	pthread_mutex_lock(&pset->lock);
 	pollset_free_dead(pset);
-	pset->running_serial=NOT_RUNNING;
-	pthread_cond_broadcast(&pset->serial_cond);
 	pthread_mutex_unlock(&pset->lock);
+	ref_put(pset->ref, serial);
 	selfpipe_clear(pset->wakeup);
 	pthread_mutex_unlock(&pset->poll_lock);
 	return ret;
