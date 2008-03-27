@@ -123,12 +123,12 @@ void queue_ioerr_event(struct mrpc_connection *conn, char *fmt, ...)
 	queue_event(event);
 }
 
+/* events_lock must be held */
 static struct mrpc_event *unqueue_event(struct mrpc_conn_set *set)
 {
 	struct mrpc_connection *conn;
 	struct mrpc_event *event=NULL;
 
-	pthread_mutex_lock(&set->events_lock);
 	conn=g_queue_pop_head(set->event_conns);
 	if (conn != NULL) {
 		conn->lh_event_conns=NULL;
@@ -137,7 +137,6 @@ static struct mrpc_event *unqueue_event(struct mrpc_conn_set *set)
 		conn->plugged_event=event;
 	}
 	update_notify_pipe(set);
-	pthread_mutex_unlock(&set->events_lock);
 	return event;
 }
 
@@ -214,12 +213,20 @@ exported int mrpc_unplug_message(struct mrpc_message *msg)
 /* Will not affect events already in processing */
 exported int mrpc_plug_conn(struct mrpc_connection *conn)
 {
+	int was_plugged;
+	refserial_t serial;
+
 	if (conn == NULL)
 		return EINVAL;
 	pthread_mutex_lock(&conn->set->events_lock);
-	conn->plugged_user++;
+	was_plugged=conn->plugged_user++;
 	try_unqueue_conn(conn);
+	if (!was_plugged)
+		serial=ref_update(conn->running_event_ref);
 	pthread_mutex_unlock(&conn->set->events_lock);
+	if (was_plugged)
+		return EALREADY;
+	ref_wait(conn->running_event_ref, serial);
 	return 0;
 }
 
@@ -380,14 +387,13 @@ static void run_reply_callback(struct mrpc_event *event)
 	mrpc_free_message(reply);
 }
 
-static void dispatch_event(struct mrpc_event *event)
+static void dispatch_event(struct mrpc_event *event, refserial_t serial)
 {
 	struct mrpc_connection *conn=event->conn;
 	mrpc_accept_fn *accept;
 	mrpc_disconnect_fn *disconnect;
 	mrpc_ioerr_fn *ioerr;
 	int squash;
-	refserial_t serial;
 	int fire_disconnect;
 	enum mrpc_disc_reason reason;
 	enum event_type type=event->type;
@@ -399,8 +405,6 @@ static void dispatch_event(struct mrpc_event *event)
 	squash=conn->sequence_flags & SEQ_SQUASH_EVENTS;
 	fire_disconnect=conn->sequence_flags & SEQ_HAVE_FD;
 	reason=conn->disc_reason;
-	if (type != EVENT_DISCONNECT)
-		serial=ref_get(conn->running_event_ref);
 	pthread_mutex_unlock(&conn->sequence_lock);
 
 	if (squash) {
@@ -436,6 +440,7 @@ static void dispatch_event(struct mrpc_event *event)
 		disconnect=get_config(conn->set, disconnect);
 		if (fire_disconnect && disconnect)
 			disconnect(conn->private, reason);
+		ref_put(conn->running_event_ref, serial);
 		mrpc_conn_free(conn);
 		break;
 	case EVENT_IOERR:
@@ -493,12 +498,19 @@ exported void mrpc_dispatcher_remove(struct mrpc_conn_set *set)
 static int mrpc_dispatch_one(struct mrpc_conn_set *set)
 {
 	struct mrpc_event *event;
+	refserial_t serial;
 
 	if (set == NULL)
 		return EINVAL;
+	pthread_mutex_lock(&set->events_lock);
 	event=unqueue_event(set);
-	if (event != NULL)
-		dispatch_event(event);
+	if (event != NULL) {
+		serial=ref_get(event->conn->running_event_ref);
+		pthread_mutex_unlock(&set->events_lock);
+		dispatch_event(event, serial);
+	} else {
+		pthread_mutex_unlock(&set->events_lock);
+	}
 	if (selfpipe_is_set(set->shutdown_pipe))
 		return ENXIO;
 	else if (event)

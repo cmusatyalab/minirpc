@@ -665,9 +665,8 @@ int mrpc_get_event_fd(struct mrpc_conn_set *set);
  * @brief Disable event processing for a connection
  * @param	conn
  *	The connection
- * @stdreturn
- * @bug We could block until we're guaranteed that no other events will
- * fire against the conn
+ * @return 0 on success, EALREADY if the connection was already plugged with
+ *	mrpc_plug_conn(), or a POSIX error code on error
  *
  * Prevent miniRPC from processing further events for the specified
  * connection until mrpc_unplug_conn() has been called.  This function
@@ -677,6 +676,12 @@ int mrpc_get_event_fd(struct mrpc_conn_set *set);
  * connection.  Event processing for the connection will not resume until
  * the application makes the corresponding number of calls to
  * mrpc_unplug_conn().
+ *
+ * If the function is called on a connection which was not already plugged,
+ * it will not return until no other event handlers are running against the
+ * connection.  If the connection was already plugged, the function will
+ * return EALREADY to indicate that it cannot make this guarantee.  Note
+ * that this does not represent a failure to plug the connection.
  *
  * Note that there is a window after the function is called in which new
  * events may still be fired against the connection.  This cannot occur,
