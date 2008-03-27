@@ -109,15 +109,13 @@ struct example_server_operations {
  * a message arrives on the given connection.  It @em must be called from the
  * accept function, to set an initial set of handlers for an incoming
  * connection.  It can also be called at any point thereafter, including from
- * an event handler.
+ * an event handler.  When this function returns, the application is guaranteed
+ * that no other event handler is running against the old operations structure.
  *
  * The operations structure is not copied, so it must not be freed until no
  * connections are still using it.
  *
- * @bug note: be careful when unplugging the conn
- *
  * @bug Should we be copying the ops structure?  We don't know its size.
- * @bug Should we be blocking until all pending ops are complete?
  */
 int example_server_set_operations(struct mrpc_connection *conn,
 			const struct example_server_operations *ops);

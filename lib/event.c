@@ -261,6 +261,8 @@ static void dispatch_request(struct mrpc_event *event)
 {
 	struct mrpc_connection *conn=event->conn;
 	struct mrpc_message *request=event->msg;
+	const void *ops;
+	refserial_t serial;
 	void *request_data;
 	void *reply_data=NULL;
 	mrpc_status_t ret;
@@ -300,16 +302,16 @@ static void dispatch_request(struct mrpc_event *event)
 	   struct may stay around for a while, so free up some memory. */
 	mrpc_free_message_data(request);
 
-	pthread_mutex_lock(&conn->operations_lock);
 	assert(conn->set->protocol->request != NULL);
-	result=conn->set->protocol->request(conn->operations, conn->private,
-				request, request->hdr.cmd, request_data,
-				reply_data);
+	serial=ref_get(conn->operations_ref);
+	ops=g_atomic_pointer_get(&conn->operations);
+	result=conn->set->protocol->request(ops, conn->private, request,
+				request->hdr.cmd, request_data, reply_data);
 	/* Note: if the application returned MINIRPC_PENDING and then
 	   immediately sent its reply from another thread, the request has
 	   already been freed.  So, if result == MINIRPC_PENDING, we can't
 	   access @request anymore. */
-	pthread_mutex_unlock(&conn->operations_lock);
+	ref_put(conn->operations_ref, serial);
 	mrpc_unplug_event(event);
 	mrpc_free_argument(request_type, request_data);
 

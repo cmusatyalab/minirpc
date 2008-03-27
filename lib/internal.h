@@ -136,8 +136,8 @@ struct mrpc_connection {
 	int running_events;
 	pthread_cond_t event_completion_cond;
 
-	const void *operations;
-	pthread_mutex_t operations_lock;
+	gconstpointer operations;  /* atomic operations only */
+	struct reftrack *operations_ref;
 
 	GQueue *send_msgs;
 	pthread_mutex_t send_msgs_lock;

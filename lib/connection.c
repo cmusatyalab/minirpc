@@ -324,7 +324,6 @@ exported int mrpc_conn_create(struct mrpc_connection **new_conn,
 			struct mrpc_conn_set *set, void *data)
 {
 	struct mrpc_connection *conn;
-	pthread_mutexattr_t attr;
 
 	if (new_conn == NULL)
 		return EINVAL;
@@ -335,11 +334,8 @@ exported int mrpc_conn_create(struct mrpc_connection **new_conn,
 	conn=g_slice_new0(struct mrpc_connection);
 	conn->send_msgs=g_queue_new();
 	conn->events=g_queue_new();
+	conn->operations_ref=ref_alloc();
 	conn->lh_conns=g_list_append(NULL, conn);
-	pthread_mutexattr_init(&attr);
-	pthread_mutexattr_settype(&attr, PTHREAD_MUTEX_RECURSIVE_NP);
-	pthread_mutex_init(&conn->operations_lock, &attr);
-	pthread_mutexattr_destroy(&attr);
 	pthread_mutex_init(&conn->send_msgs_lock, NULL);
 	pthread_mutex_init(&conn->counters_lock, NULL);
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
@@ -492,6 +488,7 @@ void mrpc_conn_free(struct mrpc_connection *conn)
 	pthread_mutex_unlock(&conn->set->conns_lock);
 	destroy_events(conn);
 	g_queue_free(conn->events);
+	ref_free(conn->operations_ref);
 	g_hash_table_destroy(conn->pending_replies);
 	if (conn->send_msg)
 		mrpc_free_message(conn->send_msg);
@@ -777,11 +774,13 @@ exported int mrpc_bind_fd(struct mrpc_connection *conn, int fd)
 exported int mrpc_conn_set_operations(struct mrpc_connection *conn,
 			const struct mrpc_protocol *protocol, const void *ops)
 {
+	refserial_t serial;
+
 	if (conn == NULL || conn->set->protocol != protocol)
 		return EINVAL;
-	pthread_mutex_lock(&conn->operations_lock);
-	conn->operations=ops;
-	pthread_mutex_unlock(&conn->operations_lock);
+	g_atomic_pointer_set(&conn->operations, ops);
+	serial=ref_update(conn->operations_ref);
+	ref_wait(conn->operations_ref, serial);
 	return 0;
 }
 
