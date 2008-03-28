@@ -695,10 +695,8 @@ int mrpc_stop_events(struct mrpc_connection *conn);
 int mrpc_start_events(struct mrpc_connection *conn);
 
 /**
- * @brief Allow an event handler to run in parallel with other handlers for
- *	the same connection
- * @param	msg
- *	The message handle passed to the event handler
+ * @brief Allow the current event handler to run in parallel with other
+ *	handlers for the same connection
  * @stdreturn
  *
  * By default, miniRPC ensures that only one event is processed at a time
@@ -707,19 +705,17 @@ int mrpc_start_events(struct mrpc_connection *conn);
  * cases, the application may be willing to handle these concurrency issues
  * so that a connection can process multiple events in parallel.
  *
- * This function indicates to miniRPC that the specified protocol message
- * should no longer block the handling of additional events on its associated
- * connection.  The argument is the opaque message handle passed to the
- * event handler function which should be allowed to run in parallel with
- * others.  Note that this call is effective @em only for the event
- * associated with the specified message; it will have no effect on any other
- * event.
+ * This function indicates to miniRPC that the calling event handler should
+ * no longer block the handling of additional events on its associated
+ * connection.  Note that this call is effective @em only for the current
+ * invocation of the calling event handler; it will have no effect on any
+ * other event.
  *
- * This function may only be called while the event handler for the specified
- * message is still running.  miniRPC automatically releases messages after
- * their event handler returns.
+ * Returning from an event handler implicitly calls this function.  If
+ * called from outside an event handler, this function returns EINVAL
+ * and has no other effect.
  */
-int mrpc_release_message(struct mrpc_message *msg);
+int mrpc_release_event(void);
 
 /**
  * @}

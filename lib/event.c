@@ -18,7 +18,7 @@
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
-static __thread struct mrpc_connection *active_conn;
+static __thread struct mrpc_event *active_event;
 
 struct dispatch_thread_data {
 	struct mrpc_conn_set *set;
@@ -184,9 +184,10 @@ static void finish_event(struct mrpc_connection *conn, refserial_t serial)
 		kick_event_shutdown_sequence(conn);
 }
 
-static int _mrpc_release_event(struct mrpc_connection *conn,
-			struct mrpc_event *event)
+static int _mrpc_release_event(struct mrpc_event *event)
 {
+	struct mrpc_connection *conn=event->conn;
+
 	pthread_mutex_lock(&conn->set->events_lock);
 	if (conn->plugged_event == NULL || conn->plugged_event != event) {
 		pthread_mutex_unlock(&conn->set->events_lock);
@@ -199,16 +200,13 @@ static int _mrpc_release_event(struct mrpc_connection *conn,
 	return 0;
 }
 
-static int mrpc_release_event(struct mrpc_event *event)
+/* Hidden parameter: "active_event", a thread-local variable set by
+   dispatch_event().  For external use only! */
+exported int mrpc_release_event(void)
 {
-	return _mrpc_release_event(event->conn, event);
-}
-
-exported int mrpc_release_message(struct mrpc_message *msg)
-{
-	if (msg == NULL)
+	if (active_event == NULL)
 		return EINVAL;
-	return _mrpc_release_event(msg->conn, msg->event);
+	return _mrpc_release_event(active_event);
 }
 
 exported int mrpc_stop_events(struct mrpc_connection *conn)
@@ -252,9 +250,11 @@ exported int mrpc_get_event_fd(struct mrpc_conn_set *set)
 	return selfpipe_fd(set->events_notify_pipe);
 }
 
-static void fail_request(struct mrpc_message *request, mrpc_status_t err)
+static void fail_request(struct mrpc_event *event, mrpc_status_t err)
 {
-	mrpc_release_message(request);
+	struct mrpc_message *request=event->msg;
+
+	_mrpc_release_event(event);
 	if (request->hdr.cmd >= 0) {
 		if (mrpc_send_reply_error(request->conn->set->protocol,
 					request->hdr.cmd, request, err))
@@ -284,7 +284,7 @@ static void dispatch_request(struct mrpc_event *event)
 	if (conn->set->protocol->receiver_request_info(request->hdr.cmd,
 				&request_type, NULL)) {
 		/* Unknown opcode */
-		fail_request(request, MINIRPC_PROCEDURE_UNAVAIL);
+		fail_request(event, MINIRPC_PROCEDURE_UNAVAIL);
 		return;
 	}
 
@@ -293,7 +293,7 @@ static void dispatch_request(struct mrpc_event *event)
 		if (conn->set->protocol->receiver_reply_info(request->hdr.cmd,
 					&reply_type, &reply_size)) {
 			/* Can't happen if the info tables are well-formed */
-			fail_request(request, MINIRPC_ENCODING_ERR);
+			fail_request(event, MINIRPC_ENCODING_ERR);
 			return;
 		}
 		reply_data=mrpc_alloc_argument(reply_size);
@@ -301,7 +301,7 @@ static void dispatch_request(struct mrpc_event *event)
 	ret=unformat_request(request, &request_data);
 	if (ret) {
 		/* Invalid datalen, etc. */
-		fail_request(request, ret);
+		fail_request(event, ret);
 		mrpc_free_argument(NULL, reply_data);
 		return;
 	}
@@ -319,7 +319,7 @@ static void dispatch_request(struct mrpc_event *event)
 	   already been freed.  So, if result == MINIRPC_PENDING, we can't
 	   access @request anymore. */
 	ref_put(conn->operations_ref, serial);
-	mrpc_release_event(event);
+	_mrpc_release_event(event);
 	mrpc_free_argument(request_type, request_data);
 
 	if (doreply) {
@@ -397,9 +397,8 @@ static void dispatch_event(struct mrpc_event *event, refserial_t serial)
 	int fire_disconnect;
 	enum mrpc_disc_reason reason;
 
-	assert(conn != NULL);
-	assert(active_conn == NULL);
-	active_conn=conn;
+	assert(active_event == NULL);
+	active_event=event;
 	conn_get(conn);
 	pthread_mutex_lock(&conn->sequence_lock);
 	squash=conn->sequence_flags & SEQ_SQUASH_EVENTS;
@@ -411,7 +410,7 @@ static void dispatch_event(struct mrpc_event *event, refserial_t serial)
 		switch (event->type) {
 		case EVENT_REQUEST:
 		case EVENT_IOERR:
-			mrpc_release_event(event);
+			_mrpc_release_event(event);
 			destroy_event(event);
 			goto out;
 		case EVENT_REPLY:
@@ -451,14 +450,13 @@ static void dispatch_event(struct mrpc_event *event, refserial_t serial)
 	default:
 		assert(0);
 	}
-	mrpc_release_event(event);
+	_mrpc_release_event(event);
 	g_slice_free(struct mrpc_event, event);
 out:
 	finish_event(conn, serial);
 	conn_put(conn);
-	assert(conn != NULL);
-	assert(active_conn == conn);
-	active_conn=NULL;
+	assert(active_event == event);
+	active_event=NULL;
 }
 
 void destroy_events(struct mrpc_connection *conn)
