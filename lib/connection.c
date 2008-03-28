@@ -49,7 +49,7 @@ static void conn_set_put(struct mrpc_conn_set *set)
 
 static void conn_kill(struct mrpc_connection *conn,
 			enum mrpc_disc_reason reason);
-static void try_close_fd(struct mrpc_connection *conn);
+static int try_close_fd(struct mrpc_connection *conn);
 
 /* Returns error code if the connection should be killed */
 static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
@@ -171,27 +171,26 @@ static void try_read_conn(void *data)
 
 static mrpc_status_t get_next_message(struct mrpc_connection *conn)
 {
-	mrpc_status_t ret;
-
+again:
 	pthread_mutex_lock(&conn->send_msgs_lock);
 	assert(!(conn->sequence_flags & SEQ_FD_CLOSED));
 	if (g_queue_is_empty(conn->send_msgs)) {
 		pollset_modify(conn->set->pollset, conn->fd, POLLSET_READABLE);
 		pthread_mutex_unlock(&conn->send_msgs_lock);
-		try_close_fd(conn);
+		if (try_close_fd(conn))
+			return MINIRPC_NETWORK_FAILURE;
 		return MINIRPC_OK;
 	}
 	conn->send_msg=g_queue_pop_head(conn->send_msgs);
 	pthread_mutex_unlock(&conn->send_msgs_lock);
 
-	ret=serialize((xdrproc_t)xdr_mrpc_header, &conn->send_msg->hdr,
-				conn->send_hdr_buf, MINIRPC_HEADER_LEN);
-	if (ret) {
+	if (serialize((xdrproc_t)xdr_mrpc_header, &conn->send_msg->hdr,
+				conn->send_hdr_buf, MINIRPC_HEADER_LEN)) {
 		/* Message dropped on floor */
 		queue_ioerr_event(conn, "Header serialize failure");
 		mrpc_free_message(conn->send_msg);
 		conn->send_msg=NULL;
-		return ret;
+		goto again;
 	}
 	return MINIRPC_OK;
 }
@@ -207,9 +206,9 @@ static void try_write_conn(void *data)
 	while (1) {
 		if (conn->send_msg == NULL) {
 			if (get_next_message(conn)) {
-				/* Message dropped on floor.  Better luck
-				   next time? */
-				continue;
+				/* The fd has been closed, and the conn handle
+				   may already be invalid */
+				break;
 			}
 			if (conn->send_msg == NULL) {
 				if (conn->send_state != STATE_IDLE) {
@@ -412,8 +411,9 @@ static void conn_start_shutdown(struct mrpc_connection *conn,
 		conn->disc_reason=reason;
 }
 
-/* Must be called from listener-thread context */
-static void try_close_fd(struct mrpc_connection *conn)
+/* Must be called from listener-thread context.  Returns true if the fd was
+   closed. */
+static int try_close_fd(struct mrpc_connection *conn)
 {
 	int do_event=0;
 
@@ -422,7 +422,8 @@ static void try_close_fd(struct mrpc_connection *conn)
 				!(conn->sequence_flags & SEQ_FD_CLOSED)) {
 		pollset_del(conn->set->pollset, conn->fd);
 		/* We are now guaranteed that the listener thread will not
-		   process this connection further */
+		   process this connection further (once the current handler
+		   returns) */
 		close(conn->fd);
 		conn->sequence_flags |= SEQ_FD_CLOSED;
 		do_event=1;
@@ -430,6 +431,7 @@ static void try_close_fd(struct mrpc_connection *conn)
 	pthread_mutex_unlock(&conn->sequence_lock);
 	if (do_event)
 		kick_event_shutdown_sequence(conn);
+	return do_event;
 }
 
 /* Must be called from listener-thread context */
