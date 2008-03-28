@@ -415,9 +415,11 @@ int mrpc_conn_create(struct mrpc_connection **new_conn,
  *	The hostname or address of the remote listener
  * @param	port
  *	The TCP port number of the remote listener
- * @stdreturn
- *
- * @bug list error codes
+ * @return 0 on success, or a POSIX error code, including:
+ *	- @c ENOENT: could not look up the specified host
+ *	- @c ECONNREFUSED: connection refused
+ *	- @c ETIMEDOUT: connection timed out
+ *	- @c EMFILE: too many open files
  *
  * Make a new outgoing connection to the specified remote host and port
  * and associate it with the given connection handle.  The specified

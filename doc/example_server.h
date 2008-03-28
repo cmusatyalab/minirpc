@@ -112,10 +112,8 @@ struct example_server_operations {
  * an event handler.  When this function returns, the application is guaranteed
  * that no other event handler is running against the old operations structure.
  *
- * The operations structure is not copied, so it must not be freed until no
- * connections are still using it.
- *
- * @bug Should we be copying the ops structure?  We don't know its size.
+ * The operations structure must not be modified or freed while it is
+ * associated with one or more connections.
  */
 int example_server_set_operations(struct mrpc_connection *conn,
 			const struct example_server_operations *ops);
