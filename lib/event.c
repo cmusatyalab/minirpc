@@ -43,10 +43,8 @@ struct mrpc_event *mrpc_alloc_message_event(struct mrpc_message *msg,
 {
 	struct mrpc_event *event;
 
-	assert(msg->event == NULL);
 	event=mrpc_alloc_event(msg->conn, type);
 	event->msg=msg;
-	msg->event=event;
 	return event;
 }
 

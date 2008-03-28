@@ -100,7 +100,6 @@ struct mrpc_event {
 
 struct mrpc_message {
 	struct mrpc_connection *conn;
-	struct mrpc_event *event;
 	struct mrpc_header hdr;
 	char *data;
 	mrpc_status_t recv_error;
