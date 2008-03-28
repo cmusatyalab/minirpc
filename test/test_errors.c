@@ -65,9 +65,9 @@ int main(int argc, char **argv)
 	mrpc_dispatcher_remove(NULL);
 	expect(mrpc_dispatch_loop(NULL), EINVAL);
 	expect(mrpc_dispatch(NULL, 0), EINVAL);
-	expect(mrpc_plug_conn(NULL), EINVAL);
-	expect(mrpc_unplug_conn(NULL), EINVAL);
-	expect(mrpc_unplug_message(NULL), EINVAL);
+	expect(mrpc_stop_events(NULL), EINVAL);
+	expect(mrpc_start_events(NULL), EINVAL);
+	expect(mrpc_release_message(NULL), EINVAL);
 
 	if (mrpc_conn_set_create(&sset, proto_server, NULL))
 		die("Couldn't allocate conn set");

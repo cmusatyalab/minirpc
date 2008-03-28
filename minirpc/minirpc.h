@@ -659,31 +659,26 @@ int mrpc_get_event_fd(struct mrpc_conn_set *set);
  * @brief Disable event processing for a connection
  * @param	conn
  *	The connection
- * @return 0 on success, EALREADY if the connection was already plugged with
- *	mrpc_plug_conn(), or a POSIX error code on error
+ * @return 0 on success, EALREADY if events were already stopped with
+ *	mrpc_stop_events(), or a POSIX error code on error
  *
  * Prevent miniRPC from processing further events for the specified
- * connection until mrpc_unplug_conn() has been called.  This function
- * can be called from an event handler.
+ * connection until mrpc_start_events() is called.  This function can be
+ * called from an event handler.
  *
  * The application may call this function more than once against the same
  * connection.  Event processing for the connection will not resume until
  * the application makes the corresponding number of calls to
- * mrpc_unplug_conn().
+ * mrpc_start_events().
  *
- * If the function is called on a connection which was not already plugged,
+ * If the function is called on a connection which is processing events,
  * it will not return until no other event handlers are running against the
- * connection.  If the connection was already plugged, the function will
- * return EALREADY to indicate that it cannot make this guarantee.  Note
- * that this does not represent a failure to plug the connection.
- *
- * Note that there is a window after the function is called in which new
- * events may still be fired against the connection.  This cannot occur,
- * however, if the function is called from an event handler for the
- * specified connection, unless that handler has called
- * mrpc_unplug_message().
+ * connection.  However, if event processing was already disabled with
+ * another call to mrpc_stop_events(), the function will return EALREADY to
+ * indicate that it cannot make this guarantee.  Note that this does not
+ * represent an error.
  */
-int mrpc_plug_conn(struct mrpc_connection *conn);
+int mrpc_stop_events(struct mrpc_connection *conn);
 
 /**
  * @brief Re-enable event processing for a connection
@@ -691,34 +686,40 @@ int mrpc_plug_conn(struct mrpc_connection *conn);
  *	The connection
  * @stdreturn
  *
- * Allow miniRPC to process events against a connection which has been
- * plugged with mrpc_plug_conn().  If mrpc_plug_conn() has been called
- * more than once, the connection will not be unplugged until
- * mrpc_unplug_conn() has been called a corresponding number of times.
+ * Allow miniRPC to resume processing events against a connection for which
+ * event processing has been disabled with mrpc_stop_events().  If
+ * mrpc_stop_events() has been called more than once, event processing will
+ * not resume until mrpc_start_events() has been called a corresponding
+ * number of times.
  */
-int mrpc_unplug_conn(struct mrpc_connection *conn);
+int mrpc_start_events(struct mrpc_connection *conn);
 
 /**
- * @brief Prevent an event handler from plugging the event queue
+ * @brief Allow an event handler to run in parallel with other handlers for
+ *	the same connection
  * @param	msg
  *	The message handle passed to the event handler
  * @stdreturn
  *
- * By default, only one event handler for a given connection can run at a
- * time, even if there are additional events queued for the connection.  This
- * allows the application to avoid handling concurrency issues within a
- * connection.  However, in certain cases, the application may wish to allow
- * events on a connection to be processed in parallel, and to handle the
- * resulting concurrency issues itself.
+ * By default, miniRPC ensures that only one event is processed at a time
+ * for a given connection.  This frees the application from handling
+ * concurrency between RPCs on a particular connection.  However, in certain
+ * cases, the application may be willing to handle these concurrency issues
+ * so that a connection can process multiple events in parallel.
  *
  * This function indicates to miniRPC that the specified protocol message
  * should no longer block the handling of additional events on its associated
  * connection.  The argument is the opaque message handle passed to the
- * event handler function.  Note that this call is effective @em only
- * for the event associated with the specified message; it will have no effect
- * on any other event.
+ * event handler function which should be allowed to run in parallel with
+ * others.  Note that this call is effective @em only for the event
+ * associated with the specified message; it will have no effect on any other
+ * event.
+ *
+ * This function may only be called while the event handler for the specified
+ * message is still running.  miniRPC automatically releases messages after
+ * their event handler returns.
  */
-int mrpc_unplug_message(struct mrpc_message *msg);
+int mrpc_release_message(struct mrpc_message *msg);
 
 /**
  * @}

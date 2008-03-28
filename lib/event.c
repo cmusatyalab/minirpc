@@ -184,7 +184,7 @@ static void finish_event(struct mrpc_connection *conn, refserial_t serial)
 		kick_event_shutdown_sequence(conn);
 }
 
-static int _mrpc_unplug_event(struct mrpc_connection *conn,
+static int _mrpc_release_event(struct mrpc_connection *conn,
 			struct mrpc_event *event)
 {
 	pthread_mutex_lock(&conn->set->events_lock);
@@ -199,20 +199,19 @@ static int _mrpc_unplug_event(struct mrpc_connection *conn,
 	return 0;
 }
 
-static int mrpc_unplug_event(struct mrpc_event *event)
+static int mrpc_release_event(struct mrpc_event *event)
 {
-	return _mrpc_unplug_event(event->conn, event);
+	return _mrpc_release_event(event->conn, event);
 }
 
-exported int mrpc_unplug_message(struct mrpc_message *msg)
+exported int mrpc_release_message(struct mrpc_message *msg)
 {
 	if (msg == NULL)
 		return EINVAL;
-	return _mrpc_unplug_event(msg->conn, msg->event);
+	return _mrpc_release_event(msg->conn, msg->event);
 }
 
-/* Will not affect events already in processing */
-exported int mrpc_plug_conn(struct mrpc_connection *conn)
+exported int mrpc_stop_events(struct mrpc_connection *conn)
 {
 	int was_plugged;
 	refserial_t serial;
@@ -231,7 +230,7 @@ exported int mrpc_plug_conn(struct mrpc_connection *conn)
 	return 0;
 }
 
-exported int mrpc_unplug_conn(struct mrpc_connection *conn)
+exported int mrpc_start_events(struct mrpc_connection *conn)
 {
 	int ret=0;
 
@@ -255,7 +254,7 @@ exported int mrpc_get_event_fd(struct mrpc_conn_set *set)
 
 static void fail_request(struct mrpc_message *request, mrpc_status_t err)
 {
-	mrpc_unplug_message(request);
+	mrpc_release_message(request);
 	if (request->hdr.cmd >= 0) {
 		if (mrpc_send_reply_error(request->conn->set->protocol,
 					request->hdr.cmd, request, err))
@@ -320,7 +319,7 @@ static void dispatch_request(struct mrpc_event *event)
 	   already been freed.  So, if result == MINIRPC_PENDING, we can't
 	   access @request anymore. */
 	ref_put(conn->operations_ref, serial);
-	mrpc_unplug_event(event);
+	mrpc_release_event(event);
 	mrpc_free_argument(request_type, request_data);
 
 	if (doreply) {
@@ -412,7 +411,7 @@ static void dispatch_event(struct mrpc_event *event, refserial_t serial)
 		switch (event->type) {
 		case EVENT_REQUEST:
 		case EVENT_IOERR:
-			mrpc_unplug_event(event);
+			mrpc_release_event(event);
 			destroy_event(event);
 			goto out;
 		case EVENT_REPLY:
@@ -452,7 +451,7 @@ static void dispatch_event(struct mrpc_event *event, refserial_t serial)
 	default:
 		assert(0);
 	}
-	mrpc_unplug_event(event);
+	mrpc_release_event(event);
 	g_slice_free(struct mrpc_event, event);
 out:
 	finish_event(conn, serial);
