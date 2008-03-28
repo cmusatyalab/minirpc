@@ -199,7 +199,7 @@ sub gen_sender_stub_typedef_h {
 	my $outarg = argument($out, "*reply");
 
 	print $fh wrapc(<<EOF);
-typedef void (${base}_${func}_callback_fn)(void *conn_private, void *msg_private, struct mrpc_message *msg, mrpc_status_t status$outarg);
+typedef void (${base}_${func}_callback_fn)(void *conn_private, void *msg_private, mrpc_status_t status$outarg);
 EOF
 }
 

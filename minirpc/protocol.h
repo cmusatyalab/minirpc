@@ -41,10 +41,9 @@ struct mrpc_protocol {
 
 typedef void (reply_callback_fn)(void);
 typedef void (long_reply_callback_fn)(void *conn_private, void *msg_private,
-			struct mrpc_message *reply, mrpc_status_t status,
-			void *data);
+			mrpc_status_t status, void *data);
 typedef void (short_reply_callback_fn)(void *conn_private, void *msg_private,
-			struct mrpc_message *reply, mrpc_status_t status);
+			mrpc_status_t status);
 
 /* connection.c */
 int mrpc_conn_set_operations(struct mrpc_connection *conn,

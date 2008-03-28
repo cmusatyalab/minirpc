@@ -51,7 +51,7 @@ static void dec_pending(void)
 }
 
 static void cb_expect_success(void *conn_private, void *msg_private,
-			struct mrpc_message *msg, mrpc_status_t status)
+			mrpc_status_t status)
 {
 	if (status != MINIRPC_OK)
 		die("%s: received status %d", msg_private, status);
@@ -59,7 +59,7 @@ static void cb_expect_success(void *conn_private, void *msg_private,
 }
 
 static void cb_expect_one(void *conn_private, void *msg_private,
-			struct mrpc_message *msg, mrpc_status_t status)
+			mrpc_status_t status)
 {
 	if (status != 1)
 		die("%s: received status %d", msg_private, status);
@@ -67,8 +67,7 @@ static void cb_expect_one(void *conn_private, void *msg_private,
 }
 
 static void cb_loop(void *conn_private, void *msg_private,
-			struct mrpc_message *msg, mrpc_status_t status,
-			struct IntParam *reply)
+			mrpc_status_t status, struct IntParam *reply)
 {
 	if (msg_private != MSGPRIV)
 		die("Received incorrect msg_private parameter");
@@ -115,8 +114,7 @@ void check_int_async(struct mrpc_connection *conn)
 }
 
 static void cb_error(void *conn_private, void *msg_private,
-			struct mrpc_message *msg, mrpc_status_t status,
-			struct IntParam *reply)
+			mrpc_status_t status, struct IntParam *reply)
 {
 	if (msg_private != MSGPRIV)
 		die("Received incorrect msg_private parameter");

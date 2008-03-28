@@ -87,14 +87,13 @@ void cb_func(void *msg_private, mrpc_status_t status)
 	sem_post(&cb_complete);
 }
 
-void cb_ping(void *conn_private, void *msg_private, struct mrpc_message *msg,
-			mrpc_status_t status)
+void cb_ping(void *conn_private, void *msg_private, mrpc_status_t status)
 {
 	cb_func(msg_private, status);
 }
 
-void cb_recv(void *conn_private, void *msg_private, struct mrpc_message *msg,
-			mrpc_status_t status, KBuffer *out)
+void cb_recv(void *conn_private, void *msg_private, mrpc_status_t status,
+			KBuffer *out)
 {
 	cb_func(msg_private, status);
 }
