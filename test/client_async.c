@@ -208,6 +208,8 @@ void async_client_init(void)
 {
 	pthread_t thr;
 
+	if (!g_thread_supported())
+		g_thread_init(NULL);
 	pthread_mutex_init(&pending_replies.lock, NULL);
 	pthread_cond_init(&pending_replies.cond, NULL);
 	pending_work_queue=g_async_queue_new();

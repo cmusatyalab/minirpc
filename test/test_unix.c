@@ -22,8 +22,6 @@ int main(int argc, char **argv)
 	int sock[2];
 	int ret;
 
-	if (mrpc_init())
-		die("Couldn't initialize minirpc");
 	if (mrpc_conn_set_create(&sset, proto_server, NULL))
 		die("Couldn't allocate conn set");
 	mrpc_set_disconnect_func(sset, disconnect_normal);

@@ -19,8 +19,6 @@ int main(int argc, char **argv)
 	unsigned port;
 	int ret;
 
-	if (mrpc_init())
-		die("Couldn't initialize minirpc");
 	async_server_init();
 	sset=spawn_server(&port, proto_server, async_server_accept, NULL, 1);
 	mrpc_set_disconnect_func(sset, disconnect_normal);

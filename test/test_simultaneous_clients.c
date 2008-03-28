@@ -63,8 +63,6 @@ int main(int argc, char **argv)
 	pthread_t thr;
 	int i;
 
-	if (mrpc_init())
-		die("Couldn't initialize minirpc");
 	sset=spawn_server(&port, proto_server, sync_server_accept, NULL,
 				DISPATCHERS);
 	mrpc_set_disconnect_func(sset, disconnect_normal);

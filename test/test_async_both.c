@@ -20,8 +20,6 @@ int main(int argc, char **argv)
 	unsigned port;
 	int ret;
 
-	if (mrpc_init())
-		die("Couldn't initialize minirpc");
 	async_server_init();
 	async_client_init();
 	sset=spawn_server(&port, proto_server, async_server_accept, NULL, 1);

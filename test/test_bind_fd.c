@@ -25,8 +25,6 @@ int main(int argc, char **argv)
 	struct sockaddr_in addr;
 	socklen_t addrlen=sizeof(addr);
 
-	if (mrpc_init())
-		die("Couldn't initialize minirpc");
 	if (mrpc_conn_set_create(&sset, proto_server, NULL))
 		die("Couldn't allocate conn set");
 	if (mrpc_conn_set_create(&cset, proto_client, NULL))

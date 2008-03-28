@@ -211,6 +211,8 @@ void async_server_init(void)
 {
 	pthread_t thr;
 
+	if (!g_thread_supported())
+		g_thread_init(NULL);
 	pending=g_async_queue_new();
 	if (pthread_create(&thr, NULL, process_pending, NULL))
 		die("Couldn't create runner thread");

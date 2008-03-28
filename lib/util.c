@@ -13,14 +13,21 @@
 #include <signal.h>
 #include <errno.h>
 #include <assert.h>
+#include <pthread.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
-exported int mrpc_init(void)
+static void _mrpc_init(void)
 {
 	if (!g_thread_supported())
 		g_thread_init(NULL);
-	return 0;
+}
+
+void mrpc_init(void)
+{
+	static pthread_once_t started = PTHREAD_ONCE_INIT;
+
+	pthread_once(&started, _mrpc_init);
 }
 
 int set_nonblock(int fd)

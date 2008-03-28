@@ -53,9 +53,6 @@ int main(int argc, char **argv)
 	int fdpair[2];
 	uint64_t counter;
 
-	if (mrpc_init())
-		die("Couldn't initialize minirpc");
-
 	expect(mrpc_conn_set_create(NULL, proto_server, NULL), EINVAL);
 	expect(mrpc_conn_set_create(&sset, NULL, NULL), EINVAL);
 	mrpc_conn_set_destroy(NULL);

@@ -132,8 +132,6 @@ int main(int argc, char **argv)
 	if (sem_init(&shared->start, 1, 0))
 		die("Couldn't initialize semaphore: %s", strerror(errno));
 
-	if (mrpc_init())
-		die("Couldn't initialize minirpc");
 	sset=spawn_server(&port, proto_server, sync_server_accept, NULL, 1);
 	mrpc_set_disconnect_func(sset, disconnect_normal);
 

@@ -193,14 +193,6 @@ typedef void (mrpc_disconnect_fn)(void *conn_data,
 typedef void (mrpc_ioerr_fn)(void *conn_data, char *message);
 
 /**
- * @brief Initialize the miniRPC library
- *
- * The application must call this function before any threads have been
- * started.
- */
-int mrpc_init(void);
-
-/**
  * @brief Create a connection set
  * @param[out]	new_set
  *	The resulting connection set, or NULL on error
