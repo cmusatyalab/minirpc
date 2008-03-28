@@ -191,7 +191,7 @@ static int _mrpc_release_event(struct mrpc_event *event)
 	pthread_mutex_lock(&conn->set->events_lock);
 	if (conn->plugged_event == NULL || conn->plugged_event != event) {
 		pthread_mutex_unlock(&conn->set->events_lock);
-		return EINVAL;
+		return ENOENT;
 	}
 	assert(conn->lh_event_conns == NULL);
 	conn->plugged_event=NULL;
@@ -205,7 +205,7 @@ static int _mrpc_release_event(struct mrpc_event *event)
 exported int mrpc_release_event(void)
 {
 	if (active_event == NULL)
-		return EINVAL;
+		return EPERM;
 	return _mrpc_release_event(active_event);
 }
 
