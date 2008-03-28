@@ -48,12 +48,14 @@ void check_int_sync(struct mrpc_connection *conn)
 
 void error_sync(struct mrpc_connection *conn)
 {
-	struct IntParam *reply;
+	struct IntParam *reply=(void*)1;
 	mrpc_status_t ret;
 
 	ret=proto_error(conn, &reply);
 	if (ret != 1)
 		die("Error returned %d", ret);
+	if (reply != NULL)
+		die("Error did not produce NULL reply pointer");
 }
 
 void notify_sync(struct mrpc_connection *conn)

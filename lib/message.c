@@ -140,6 +140,8 @@ exported mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
 	mrpc_status_t ret;
 	int squash;
 
+	if (out != NULL)
+		*out=NULL;
 	if (conn == NULL || cmd <= 0)
 		return MINIRPC_INVALID_ARGUMENT;
 	if (protocol != conn->set->protocol)

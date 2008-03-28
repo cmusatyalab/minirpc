@@ -52,6 +52,8 @@ int main(int argc, char **argv)
 	int fd;
 	int fdpair[2];
 	uint64_t counter;
+	IntParam ip = {INT_VALUE};
+	IntParam *ipp;
 
 	expect(mrpc_conn_set_create(NULL, proto_server, NULL), EINVAL);
 	sset=(void*)1;
@@ -144,6 +146,13 @@ int main(int argc, char **argv)
 	expect(proto_ping(NULL), MINIRPC_INVALID_ARGUMENT);
 	expect(proto_ping_async(conn, NULL, NULL), MINIRPC_INVALID_ARGUMENT);
 	expect(proto_notify(NULL, NULL), MINIRPC_INVALID_ARGUMENT);
+	ipp=(void*)1;
+	expect(proto_loop_int(conn, NULL, &ipp), MINIRPC_ENCODING_ERR);
+	expect(ipp == NULL, 1);
+	ipp=(void*)1;
+	expect(proto_loop_int(NULL, NULL, &ipp), MINIRPC_INVALID_ARGUMENT);
+	expect(ipp == NULL, 1);
+	expect(proto_loop_int(conn, &ip, NULL), MINIRPC_ENCODING_ERR);
 	expect(proto_ping_send_async_reply(NULL), MINIRPC_INVALID_ARGUMENT);
 	expect(proto_ping_send_async_reply_error(NULL, 0),
 				MINIRPC_INVALID_ARGUMENT);

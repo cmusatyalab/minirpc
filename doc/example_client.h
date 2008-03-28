@@ -50,13 +50,11 @@ mrpc_status_t example_ChooseColor(struct mrpc_connection *conn,
  * @c out is allocated by miniRPC but must be freed by the application.
  *
  * A return code of MINIRPC_OK indicates that the server completed the
- * procedure call and returned a Count structure in @c out.  A positive
+ * procedure call and returned a Count structure in @c *out.  A positive
  * return code is a protocol-specific error returned by the server's
  * procedure handler.  A negative return code is a miniRPC error generated
  * either by the local or remote system.  If the return code is not
- * MINIRPC_OK, @c out is not valid on return.
- *
- * @bug We don't null out @c out if the return value is nonzero
+ * MINIRPC_OK, @c *out is NULL on return.
  */
 mrpc_status_t example_GetNumColors(struct mrpc_connection *conn, Count **out);
 
