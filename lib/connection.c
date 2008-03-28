@@ -843,9 +843,11 @@ exported int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
 	struct mrpc_conn_set *set;
 	int ret;
 
-	if (new_set == NULL || protocol == NULL)
+	if (new_set == NULL)
 		return EINVAL;
 	*new_set=NULL;
+	if (protocol == NULL)
+		return EINVAL;
 	mrpc_init();
 	set=g_slice_new0(struct mrpc_conn_set);
 	pthread_mutex_init(&set->config_lock, NULL);

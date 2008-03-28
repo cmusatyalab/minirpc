@@ -54,7 +54,9 @@ int main(int argc, char **argv)
 	uint64_t counter;
 
 	expect(mrpc_conn_set_create(NULL, proto_server, NULL), EINVAL);
+	sset=(void*)1;
 	expect(mrpc_conn_set_create(&sset, NULL, NULL), EINVAL);
+	expect(sset == NULL, 1);
 	mrpc_conn_set_destroy(NULL);
 	expect(mrpc_start_dispatch_thread(NULL), EINVAL);
 	mrpc_dispatcher_add(NULL);
@@ -104,7 +106,9 @@ int main(int argc, char **argv)
 	port=0;
 	expect(mrpc_listen(sset, "localhost", &port), 0);
 	expect(mrpc_conn_create(NULL, cset, NULL), EINVAL);
+	conn=(void*)1;
 	expect(mrpc_conn_create(&conn, NULL, NULL), EINVAL);
+	expect(conn == NULL, 1);
 	expect(mrpc_conn_create(&conn, cset, NULL), 0);
 	expect(mrpc_connect(NULL, "localhost", port), EINVAL);
 	expect(mrpc_connect(conn, "localhost", 0), ECONNREFUSED);
