@@ -99,6 +99,7 @@ struct mrpc_event {
 };
 
 struct mrpc_message {
+	GList *lh_msgs;
 	struct mrpc_connection *conn;
 	struct mrpc_header hdr;
 	char *data;
@@ -135,6 +136,10 @@ struct mrpc_connection {
 	enum mrpc_disc_reason disc_reason;
 
 	gconstpointer operations;  /* atomic operations only */
+
+	/* For garbage collection of unreplied requests */
+	GQueue *msgs;
+	pthread_mutex_t msgs_lock;
 
 	GQueue *send_msgs;
 	pthread_mutex_t send_msgs_lock;

@@ -37,12 +37,22 @@ struct mrpc_message *mrpc_alloc_message(struct mrpc_connection *conn)
 
 	msg=g_slice_new0(struct mrpc_message);
 	msg->conn=conn;
+	msg->lh_msgs=g_list_prepend(NULL, msg);
+	pthread_mutex_lock(&conn->msgs_lock);
+	g_queue_push_tail_link(conn->msgs, msg->lh_msgs);
+	pthread_mutex_unlock(&conn->msgs_lock);
 	return msg;
 }
 
 void mrpc_free_message(struct mrpc_message *msg)
 {
+	struct mrpc_connection *conn=msg->conn;
+
 	mrpc_free_message_data(msg);
+	pthread_mutex_lock(&conn->msgs_lock);
+	if (msg->lh_msgs)
+		g_queue_delete_link(conn->msgs, msg->lh_msgs);
+	pthread_mutex_unlock(&conn->msgs_lock);
 	g_slice_free(struct mrpc_message, msg);
 }
 

@@ -332,9 +332,11 @@ exported int mrpc_conn_create(struct mrpc_connection **new_conn,
 	conn_set_get(set);
 	conn=g_slice_new0(struct mrpc_connection);
 	g_atomic_int_set(&conn->refs, 1);
+	conn->msgs=g_queue_new();
 	conn->send_msgs=g_queue_new();
 	conn->events=g_queue_new();
 	conn->lh_conns=g_list_append(NULL, conn);
+	pthread_mutex_init(&conn->msgs_lock, NULL);
 	pthread_mutex_init(&conn->send_msgs_lock, NULL);
 	pthread_mutex_init(&conn->counters_lock, NULL);
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
@@ -489,6 +491,11 @@ static void mrpc_conn_free(struct mrpc_connection *conn)
 	while ((msg=g_queue_pop_head(conn->send_msgs)) != NULL)
 		mrpc_free_message(msg);
 	g_queue_free(conn->send_msgs);
+	while ((msg=g_queue_pop_head(conn->msgs)) != NULL) {
+		msg->lh_msgs=NULL;
+		mrpc_free_message(msg);
+	}
+	g_queue_free(conn->msgs);
 	conn_set_put(conn->set);
 	g_slice_free(struct mrpc_connection, conn);
 }
