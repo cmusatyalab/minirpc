@@ -121,12 +121,12 @@ void queue_ioerr_event(struct mrpc_connection *conn, char *fmt, ...)
 	queue_event(event);
 }
 
-/* events_lock must be held */
 static struct mrpc_event *unqueue_event(struct mrpc_conn_set *set)
 {
 	struct mrpc_connection *conn;
 	struct mrpc_event *event=NULL;
 
+	pthread_mutex_lock(&set->events_lock);
 	conn=g_queue_pop_head(set->event_conns);
 	if (conn != NULL) {
 		conn->lh_event_conns=NULL;
@@ -135,6 +135,7 @@ static struct mrpc_event *unqueue_event(struct mrpc_conn_set *set)
 		conn->plugged_event=event;
 	}
 	update_notify_pipe(set);
+	pthread_mutex_unlock(&set->events_lock);
 	return event;
 }
 
@@ -169,11 +170,10 @@ void kick_event_shutdown_sequence(struct mrpc_connection *conn)
 	}
 }
 
-static void finish_event(struct mrpc_connection *conn, refserial_t serial)
+static void finish_event(struct mrpc_connection *conn)
 {
 	int count;
 
-	ref_put(conn->running_event_ref, serial);
 	pthread_mutex_lock(&conn->set->events_lock);
 	assert(conn->events_pending > 0);
 	count=--conn->events_pending;
@@ -209,20 +209,12 @@ exported int mrpc_release_event(void)
 
 exported int mrpc_stop_events(struct mrpc_connection *conn)
 {
-	int was_plugged;
-	refserial_t serial;
-
 	if (conn == NULL)
 		return EINVAL;
 	pthread_mutex_lock(&conn->set->events_lock);
-	was_plugged=conn->plugged_user++;
+	conn->plugged_user++;
 	try_unqueue_conn(conn);
-	if (!was_plugged)
-		serial=ref_update(conn->running_event_ref);
 	pthread_mutex_unlock(&conn->set->events_lock);
-	if (was_plugged)
-		return EALREADY;
-	ref_wait(conn->running_event_ref, serial);
 	return 0;
 }
 
@@ -267,7 +259,6 @@ static void dispatch_request(struct mrpc_event *event)
 	struct mrpc_connection *conn=event->conn;
 	struct mrpc_message *request=event->msg;
 	const void *ops;
-	refserial_t serial;
 	void *request_data;
 	void *reply_data=NULL;
 	mrpc_status_t ret;
@@ -308,7 +299,6 @@ static void dispatch_request(struct mrpc_event *event)
 	mrpc_free_message_data(request);
 
 	assert(conn->set->protocol->request != NULL);
-	serial=ref_get(conn->operations_ref);
 	ops=g_atomic_pointer_get(&conn->operations);
 	result=conn->set->protocol->request(ops, conn->private, request,
 				request->hdr.cmd, request_data, reply_data);
@@ -316,7 +306,6 @@ static void dispatch_request(struct mrpc_event *event)
 	   immediately sent its reply from another thread, the request has
 	   already been freed.  So, if result == MINIRPC_PENDING, we can't
 	   access @request anymore. */
-	ref_put(conn->operations_ref, serial);
 	_mrpc_release_event(event);
 	mrpc_free_argument(request_type, request_data);
 
@@ -385,7 +374,7 @@ static void run_reply_callback(struct mrpc_event *event)
 	mrpc_free_message(reply);
 }
 
-static void dispatch_event(struct mrpc_event *event, refserial_t serial)
+static void dispatch_event(struct mrpc_event *event)
 {
 	struct mrpc_connection *conn=event->conn;
 	mrpc_accept_fn *accept;
@@ -451,7 +440,7 @@ static void dispatch_event(struct mrpc_event *event, refserial_t serial)
 	_mrpc_release_event(event);
 	g_slice_free(struct mrpc_event, event);
 out:
-	finish_event(conn, serial);
+	finish_event(conn);
 	conn_put(conn);
 	assert(active_event == event);
 	active_event=NULL;
@@ -490,19 +479,12 @@ exported void mrpc_dispatcher_remove(struct mrpc_conn_set *set)
 static int mrpc_dispatch_one(struct mrpc_conn_set *set)
 {
 	struct mrpc_event *event;
-	refserial_t serial;
 
 	if (set == NULL)
 		return EINVAL;
-	pthread_mutex_lock(&set->events_lock);
 	event=unqueue_event(set);
-	if (event != NULL) {
-		serial=ref_get(event->conn->running_event_ref);
-		pthread_mutex_unlock(&set->events_lock);
-		dispatch_event(event, serial);
-	} else {
-		pthread_mutex_unlock(&set->events_lock);
-	}
+	if (event != NULL)
+		dispatch_event(event);
 	if (selfpipe_is_set(set->shutdown_pipe))
 		return ENXIO;
 	else if (event)

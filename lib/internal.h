@@ -128,16 +128,13 @@ struct mrpc_connection {
 	int fd;
 	int is_tcp;
 	void *private;
-
 	gint refs;  /* atomic operations only */
-	struct reftrack *running_event_ref;
 
 	pthread_mutex_t sequence_lock;
 	unsigned sequence_flags;
 	enum mrpc_disc_reason disc_reason;
 
 	gconstpointer operations;  /* atomic operations only */
-	struct reftrack *operations_ref;
 
 	GQueue *send_msgs;
 	pthread_mutex_t send_msgs_lock;

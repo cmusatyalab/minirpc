@@ -509,11 +509,12 @@ int mrpc_conn_get_counter(struct mrpc_connection *conn,
  * code of ::MINIRPC_NETWORK_FAILURE.  Other events queued for the
  * application will be dropped.
  *
- * Once this function returns, the application is guaranteed that no further
- * events, other than ::MINIRPC_NETWORK_FAILURE returns and the disconnect
- * function, will occur on this connection.  If two threads call
- * mrpc_conn_close() at once, the second call will return EALREADY, and this
- * guarantee will not apply to that call.
+ * There is a window of time after this function returns in which further
+ * non-error events may occur on the connection.  The application must be
+ * prepared to handle these events.  If this function is called from an
+ * event handler for the connection being closed, and the handler has not
+ * called mrpc_release_event(), then the application is guaranteed that no
+ * more non-error events will occur on the connection once the call returns.
  *
  * The application should not make further API calls against the connection.
  * The application must not free any supporting data structures until the
@@ -671,12 +672,11 @@ int mrpc_get_event_fd(struct mrpc_conn_set *set);
  * the application makes the corresponding number of calls to
  * mrpc_start_events().
  *
- * If the function is called on a connection which is processing events,
- * it will not return until no other event handlers are running against the
- * connection.  However, if event processing was already disabled with
- * another call to mrpc_stop_events(), the function will return EALREADY to
- * indicate that it cannot make this guarantee.  Note that this does not
- * represent an error.
+ * If this function is called from an event handler for the same connection,
+ * and the handler has not called mrpc_release_event(), the application is
+ * guaranteed that no further events will be fired on the connection once the
+ * call returns.  Otherwise, there is a window after the function returns in
+ * which further events may be fired.
  */
 int mrpc_stop_events(struct mrpc_connection *conn);
 

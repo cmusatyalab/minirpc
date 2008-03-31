@@ -109,8 +109,7 @@ struct example_server_operations {
  * a message arrives on the given connection.  It @em must be called from the
  * accept function, to set an initial set of handlers for an incoming
  * connection.  It can also be called at any point thereafter, including from
- * an event handler.  When this function returns, the application is guaranteed
- * that no other event handler is running against the old operations structure.
+ * an event handler.
  *
  * The operations structure must not be modified or freed while it is
  * associated with one or more connections.

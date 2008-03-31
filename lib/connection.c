@@ -334,8 +334,6 @@ exported int mrpc_conn_create(struct mrpc_connection **new_conn,
 	g_atomic_int_set(&conn->refs, 1);
 	conn->send_msgs=g_queue_new();
 	conn->events=g_queue_new();
-	conn->running_event_ref=ref_alloc();
-	conn->operations_ref=ref_alloc();
 	conn->lh_conns=g_list_append(NULL, conn);
 	pthread_mutex_init(&conn->send_msgs_lock, NULL);
 	pthread_mutex_init(&conn->counters_lock, NULL);
@@ -445,11 +443,12 @@ static void conn_kill(struct mrpc_connection *conn,
 	try_close_fd(conn);
 }
 
-static int _mrpc_conn_close(struct mrpc_connection *conn, int wait)
+exported int mrpc_conn_close(struct mrpc_connection *conn)
 {
-	refserial_t serial;
 	int ret=0;
 
+	if (conn == NULL)
+		return EINVAL;
 	conn_get(conn);
 	pthread_mutex_lock(&conn->sequence_lock);
 	conn_start_shutdown(conn, MRPC_DISC_USER);
@@ -471,20 +470,9 @@ static int _mrpc_conn_close(struct mrpc_connection *conn, int wait)
 					POLLSET_READABLE | POLLSET_WRITABLE);
 	}
 	pthread_mutex_unlock(&conn->sequence_lock);
-	if (wait) {
-		serial=ref_update(conn->running_event_ref);
-		ref_wait(conn->running_event_ref, serial);
-	}
 out:
 	conn_put(conn);
 	return ret;
-}
-
-exported int mrpc_conn_close(struct mrpc_connection *conn)
-{
-	if (conn == NULL)
-		return EINVAL;
-	return _mrpc_conn_close(conn, 1);
 }
 
 static void mrpc_conn_free(struct mrpc_connection *conn)
@@ -496,8 +484,6 @@ static void mrpc_conn_free(struct mrpc_connection *conn)
 	pthread_mutex_unlock(&conn->set->conns_lock);
 	destroy_events(conn);
 	g_queue_free(conn->events);
-	ref_free(conn->running_event_ref);
-	ref_free(conn->operations_ref);
 	g_hash_table_destroy(conn->pending_replies);
 	if (conn->send_msg)
 		mrpc_free_message(conn->send_msg);
@@ -797,13 +783,9 @@ exported int mrpc_bind_fd(struct mrpc_connection *conn, int fd)
 exported int mrpc_conn_set_operations(struct mrpc_connection *conn,
 			const struct mrpc_protocol *protocol, const void *ops)
 {
-	refserial_t serial;
-
 	if (conn == NULL || conn->set->protocol != protocol)
 		return EINVAL;
 	g_atomic_pointer_set(&conn->operations, ops);
-	serial=ref_update(conn->operations_ref);
-	ref_wait(conn->operations_ref, serial);
 	return 0;
 }
 
@@ -897,7 +879,7 @@ bad:
 
 static void close_elem(void *elem, void *data)
 {
-	_mrpc_conn_close(elem, 0);
+	mrpc_conn_close(elem);
 }
 
 exported void mrpc_conn_set_destroy(struct mrpc_conn_set *set)
