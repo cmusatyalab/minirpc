@@ -112,6 +112,7 @@ static gboolean _pending_kill(void *key, void *value, void *data)
 	struct mrpc_message *msg;
 
 	msg=mrpc_alloc_message(conn);
+	msg->hdr.cmd=pending->cmd;
 	msg->hdr.status=MINIRPC_NETWORK_FAILURE;
 	pending_dispatch(pending, msg);
 	return TRUE;
