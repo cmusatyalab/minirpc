@@ -19,7 +19,7 @@ BUILT_SOURCES = minirpc_xdr.h
 lib_LTLIBRARIES = libminirpc.la
 libminirpc_la_SOURCES = config.c connection.c message.c event.c serialize.c
 libminirpc_la_SOURCES += xdr_len.c selfpipe.c pollset.c pollset_poll.c util.c
-libminirpc_la_SOURCES += reftrack.c internal.h minirpc.x pollset_impl.h
+libminirpc_la_SOURCES += internal.h minirpc.x pollset_impl.h
 if HAVE_EPOLL
 libminirpc_la_SOURCES += pollset_epoll.c
 endif
