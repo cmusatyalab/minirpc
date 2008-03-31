@@ -43,6 +43,7 @@ check_PROGRAMS += test_simultaneous_clients
 check_PROGRAMS += test_bind_fd
 check_PROGRAMS += test_plug
 check_PROGRAMS += test_dispatch
+check_PROGRAMS += test_shutdown
 check_PROGRAMS += test_errors
 check_PROGRAMS += test_max_buf
 check_PROGRAMS += test_protocol_err
