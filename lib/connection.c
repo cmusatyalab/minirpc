@@ -479,9 +479,6 @@ static void mrpc_conn_free(struct mrpc_connection *conn)
 {
 	struct mrpc_message *msg;
 
-	pthread_mutex_lock(&conn->set->conns_lock);
-	g_queue_delete_link(conn->set->conns, conn->lh_conns);
-	pthread_mutex_unlock(&conn->set->conns_lock);
 	destroy_events(conn);
 	g_queue_free(conn->events);
 	g_hash_table_destroy(conn->pending_replies);
@@ -506,8 +503,15 @@ void conn_get(struct mrpc_connection *conn)
 
 void conn_put(struct mrpc_connection *conn)
 {
-	if (g_atomic_int_dec_and_test(&conn->refs))
+	pthread_mutex_lock(&conn->set->conns_lock);
+	if (g_atomic_int_dec_and_test(&conn->refs)) {
+		if (conn->lh_conns)
+			g_queue_delete_link(conn->set->conns, conn->lh_conns);
+		pthread_mutex_unlock(&conn->set->conns_lock);
 		mrpc_conn_free(conn);
+	} else {
+		pthread_mutex_unlock(&conn->set->conns_lock);
+	}
 }
 
 static void restart_accept(void *data)
@@ -877,18 +881,20 @@ bad:
 	return ret;
 }
 
-static void close_elem(void *elem, void *data)
-{
-	mrpc_conn_close(elem);
-}
-
 exported void mrpc_conn_set_destroy(struct mrpc_conn_set *set)
 {
+	struct mrpc_connection *conn;
+
 	if (set == NULL)
 		return;
 	mrpc_listen_close(set);
 	pthread_mutex_lock(&set->conns_lock);
-	g_queue_foreach(set->conns, close_elem, NULL);
+	while ((conn=g_queue_pop_head(set->conns)) != NULL) {
+		conn->lh_conns=NULL;
+		pthread_mutex_unlock(&set->conns_lock);
+		mrpc_conn_close(conn);
+		pthread_mutex_lock(&set->conns_lock);
+	}
 	set->refs--;
 	while (set->refs)
 		pthread_cond_wait(&set->refs_cond, &set->conns_lock);
