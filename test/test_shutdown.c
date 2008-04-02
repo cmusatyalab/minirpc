@@ -112,8 +112,9 @@ int main(int argc, char **argv)
 	for (i=0; i<2; i++)
 		sem_wait(&complete);
 	sem_post(&can_free);
-	mrpc_conn_set_destroy(cset);
-	mrpc_conn_set_destroy(sset);
+	mrpc_conn_set_unref(cset);
+	mrpc_listen_close(sset);
+	mrpc_conn_set_unref(sset);
 	expect_disconnects(1, 1, 0);
 	return 0;
 }

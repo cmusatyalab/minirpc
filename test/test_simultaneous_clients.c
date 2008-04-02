@@ -89,8 +89,9 @@ int main(int argc, char **argv)
 		pthread_cond_wait(&cond, &lock);
 	pthread_mutex_unlock(&lock);
 
-	mrpc_conn_set_destroy(cset);
-	mrpc_conn_set_destroy(sset);
+	mrpc_conn_set_unref(cset);
+	mrpc_listen_close(sset);
+	mrpc_conn_set_unref(sset);
 	expect_disconnects(THREADS * ITERS, THREADS * ITERS, 0);
 	return 0;
 }

@@ -43,8 +43,10 @@ int main(int argc, char **argv)
 	expect(proto_ping(conn), 0);
 	msg_buffer_sync(conn);
 	expect(proto_ping(conn), 0);
-	mrpc_conn_set_destroy(cset);
-	mrpc_conn_set_destroy(sset);
+	mrpc_conn_close(conn);
+	mrpc_conn_set_unref(cset);
+	mrpc_listen_close(sset);
+	mrpc_conn_set_unref(sset);
 	expect_disconnects(1, 1, 0);
 	expect_ioerrs(3);
 	return 0;

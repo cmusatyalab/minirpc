@@ -42,11 +42,11 @@ int main(int argc, char **argv)
 		sync_client_run(conn);
 		mrpc_conn_close(conn);
 	}
-	mrpc_conn_set_destroy(cset);
+	mrpc_conn_set_unref(cset);
 	expect_disconnects(500, -1, 0);
 
 	/* Try repeated connections from different conn sets */
-	for (i=0; i<500; i++) {
+	for (i=0; i<100; i++) {
 		if (mrpc_conn_set_create(&cset, proto_client, NULL))
 			die("Couldn't create conn set");
 		mrpc_set_disconnect_func(cset, disconnect_user);
@@ -62,10 +62,12 @@ int main(int argc, char **argv)
 						strerror(ret), i);
 		sync_client_set_ops(conn);
 		sync_client_run(conn);
-		mrpc_conn_set_destroy(cset);
+		mrpc_conn_close(conn);
+		mrpc_conn_set_unref(cset);
 	}
 
-	mrpc_conn_set_destroy(sset);
-	expect_disconnects(1000, 1000, 0);
+	mrpc_listen_close(sset);
+	mrpc_conn_set_unref(sset);
+	expect_disconnects(600, 600, 0);
 	return 0;
 }

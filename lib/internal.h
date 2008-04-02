@@ -58,11 +58,10 @@ struct mrpc_conn_set {
 	struct selfpipe *events_notify_pipe;
 	pthread_mutex_t events_lock;
 
-	int refs;
-	pthread_cond_t refs_cond;
-	GQueue *conns;
-	GQueue *listeners;
-	pthread_mutex_t conns_lock;
+	int refs;  /* atomic ops only */
+	int user_refs;  /* atomic ops only */
+
+	GAsyncQueue *listeners;
 
 	struct pollset *pollset;
 	struct selfpipe *shutdown_pipe;
@@ -125,7 +124,6 @@ enum sequence_flags {
 
 struct mrpc_connection {
 	struct mrpc_conn_set *set;
-	GList *lh_conns;
 	int fd;
 	int is_tcp;
 	void *private;

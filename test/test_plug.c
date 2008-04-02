@@ -175,8 +175,10 @@ int main(int argc, char **argv)
 		for (j=0; j<2; j++)
 			do_round(i, j);
 
-	mrpc_conn_set_destroy(cset);
-	mrpc_conn_set_destroy(sset);
+	mrpc_conn_close(conn);
+	mrpc_conn_set_unref(cset);
+	mrpc_listen_close(sset);
+	mrpc_conn_set_unref(sset);
 	sem_destroy(&complete);
 	expect_disconnects(1, 1, 0);
 	return 0;

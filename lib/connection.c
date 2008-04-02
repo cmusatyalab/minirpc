@@ -23,6 +23,11 @@
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
+static void conn_set_free(struct mrpc_conn_set *set);
+static void conn_kill(struct mrpc_connection *conn,
+			enum mrpc_disc_reason reason);
+static int try_close_fd(struct mrpc_connection *conn);
+
 static int setsockoptval(int fd, int level, int optname, int value)
 {
 	if (setsockopt(fd, level, optname, &value, sizeof(value)))
@@ -32,24 +37,17 @@ static int setsockoptval(int fd, int level, int optname, int value)
 
 static void conn_set_get(struct mrpc_conn_set *set)
 {
-	pthread_mutex_lock(&set->conns_lock);
-	assert(set->refs > 0);
-	set->refs++;
-	pthread_mutex_unlock(&set->conns_lock);
+	gint old;
+
+	old=g_atomic_int_exchange_and_add(&set->refs, 1);
+	assert(old > 0);
 }
 
 static void conn_set_put(struct mrpc_conn_set *set)
 {
-	pthread_mutex_lock(&set->conns_lock);
-	set->refs--;
-	if (!set->refs)
-		pthread_cond_broadcast(&set->refs_cond);
-	pthread_mutex_unlock(&set->conns_lock);
+	if (g_atomic_int_dec_and_test(&set->refs))
+		conn_set_free(set);
 }
-
-static void conn_kill(struct mrpc_connection *conn,
-			enum mrpc_disc_reason reason);
-static int try_close_fd(struct mrpc_connection *conn);
 
 /* Returns error code if the connection should be killed */
 static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
@@ -335,7 +333,6 @@ exported int mrpc_conn_create(struct mrpc_connection **new_conn,
 	conn->msgs=g_queue_new();
 	conn->send_msgs=g_queue_new();
 	conn->events=g_queue_new();
-	conn->lh_conns=g_list_append(NULL, conn);
 	pthread_mutex_init(&conn->msgs_lock, NULL);
 	pthread_mutex_init(&conn->send_msgs_lock, NULL);
 	pthread_mutex_init(&conn->counters_lock, NULL);
@@ -347,9 +344,6 @@ exported int mrpc_conn_create(struct mrpc_connection **new_conn,
 	conn->private = (data != NULL) ? data : conn;
 	conn->pending_replies=g_hash_table_new_full(g_int_hash, g_int_equal,
 				NULL, (GDestroyNotify)pending_free);
-	pthread_mutex_lock(&set->conns_lock);
-	g_queue_push_tail_link(set->conns, conn->lh_conns);
-	pthread_mutex_unlock(&set->conns_lock);
 	*new_conn=conn;
 	return 0;
 }
@@ -510,15 +504,8 @@ void conn_get(struct mrpc_connection *conn)
 
 void conn_put(struct mrpc_connection *conn)
 {
-	pthread_mutex_lock(&conn->set->conns_lock);
-	if (g_atomic_int_dec_and_test(&conn->refs)) {
-		if (conn->lh_conns)
-			g_queue_delete_link(conn->set->conns, conn->lh_conns);
-		pthread_mutex_unlock(&conn->set->conns_lock);
+	if (g_atomic_int_dec_and_test(&conn->refs))
 		mrpc_conn_free(conn);
-	} else {
-		pthread_mutex_unlock(&conn->set->conns_lock);
-	}
 }
 
 static void restart_accept(void *data)
@@ -671,9 +658,10 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 	if (set == NULL || port == NULL || !set->protocol->is_server ||
 				get_config(set, accept) == NULL)
 		return EINVAL;
+	conn_set_get(set);
 	ret=lookup_addr(&ai, listenaddr, *port, 1);
 	if (ret)
-		return ret;
+		goto out;
 	for (cur=ai; cur != NULL; cur=cur->ai_next) {
 		if (cur->ai_family != AF_INET && cur->ai_family != AF_INET6) {
 			ret=EPROTONOSUPPORT;
@@ -723,9 +711,8 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 			g_slice_free(struct mrpc_listener, lnr);
 			continue;
 		}
-		pthread_mutex_lock(&set->conns_lock);
-		g_queue_push_tail(set->listeners, lnr);
-		pthread_mutex_unlock(&set->conns_lock);
+		conn_set_get(set);
+		g_async_queue_push(set->listeners, lnr);
 		count++;
 		if (!*port) {
 			if (cur->ai_family == AF_INET)
@@ -739,8 +726,10 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 		}
 	}
 	freeaddrinfo(ai);
+	conn_set_put(set);
 	if (count)
 		return 0;
+out:
 	return ret;
 }
 
@@ -751,15 +740,12 @@ exported void mrpc_listen_close(struct mrpc_conn_set *set)
 	if (set == NULL)
 		return;
 	conn_set_get(set);
-	pthread_mutex_lock(&set->conns_lock);
-	while ((lnr=g_queue_pop_head(set->listeners)) != NULL) {
-		pthread_mutex_unlock(&set->conns_lock);
+	while ((lnr=g_async_queue_try_pop(set->listeners)) != NULL) {
 		pollset_del(set->pollset, lnr->fd);
 		close(lnr->fd);
 		g_slice_free(struct mrpc_listener, lnr);
-		pthread_mutex_lock(&set->conns_lock);
+		conn_set_put(set);
 	}
-	pthread_mutex_unlock(&set->conns_lock);
 	conn_set_put(set);
 }
 
@@ -846,15 +832,13 @@ exported int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
 	mrpc_init();
 	set=g_slice_new0(struct mrpc_conn_set);
 	pthread_mutex_init(&set->config_lock, NULL);
-	pthread_mutex_init(&set->conns_lock, NULL);
 	pthread_mutex_init(&set->events_lock, NULL);
-	pthread_cond_init(&set->refs_cond, NULL);
 	pthread_cond_init(&set->events_threads_cond, NULL);
 	set->config=default_config;
 	set->protocol=protocol;
-	set->refs=1;
-	set->conns=g_queue_new();
-	set->listeners=g_queue_new();
+	g_atomic_int_set(&set->refs, 1);
+	g_atomic_int_set(&set->user_refs, 1);
+	set->listeners=g_async_queue_new();
 	set->event_conns=g_queue_new();
 	set->private = (set_data != NULL) ? set_data : set;
 	ret=selfpipe_create(&set->shutdown_pipe);
@@ -888,24 +872,8 @@ bad:
 	return ret;
 }
 
-exported void mrpc_conn_set_destroy(struct mrpc_conn_set *set)
+static void conn_set_free(struct mrpc_conn_set *set)
 {
-	struct mrpc_connection *conn;
-
-	if (set == NULL)
-		return;
-	mrpc_listen_close(set);
-	pthread_mutex_lock(&set->conns_lock);
-	while ((conn=g_queue_pop_head(set->conns)) != NULL) {
-		conn->lh_conns=NULL;
-		pthread_mutex_unlock(&set->conns_lock);
-		mrpc_conn_close(conn);
-		pthread_mutex_lock(&set->conns_lock);
-	}
-	set->refs--;
-	while (set->refs)
-		pthread_cond_wait(&set->refs_cond, &set->conns_lock);
-	pthread_mutex_unlock(&set->conns_lock);
 	selfpipe_set(set->shutdown_pipe);
 	selfpipe_set(set->events_notify_pipe);
 	pthread_mutex_lock(&set->events_lock);
@@ -916,9 +884,28 @@ exported void mrpc_conn_set_destroy(struct mrpc_conn_set *set)
 	pollset_free(set->pollset);
 	selfpipe_destroy(set->events_notify_pipe);
 	selfpipe_destroy(set->shutdown_pipe);
-	g_queue_free(set->conns);
-	g_queue_free(set->listeners);
+	g_async_queue_unref(set->listeners);
 	g_queue_free(set->event_conns);
 	g_free(set->trashbuf);
 	g_slice_free(struct mrpc_conn_set, set);
+}
+
+exported void mrpc_conn_set_ref(struct mrpc_conn_set *set)
+{
+	gint old;
+
+	if (set == NULL)
+		return;
+	old=g_atomic_int_exchange_and_add(&set->user_refs, 1);
+	/* There's no point in returning an error if the refcount was zero,
+	   because we've already corrupted memory. */
+	assert(old > 0);
+}
+
+exported void mrpc_conn_set_unref(struct mrpc_conn_set *set)
+{
+	if (set == NULL)
+		return;
+	if (g_atomic_int_dec_and_test(&set->user_refs))
+		conn_set_put(set);
 }

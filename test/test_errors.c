@@ -59,7 +59,8 @@ int main(int argc, char **argv)
 	sset=(void*)1;
 	expect(mrpc_conn_set_create(&sset, NULL, NULL), EINVAL);
 	expect(sset == NULL, 1);
-	mrpc_conn_set_destroy(NULL);
+	mrpc_conn_set_ref(NULL);
+	mrpc_conn_set_unref(NULL);
 	expect(mrpc_start_dispatch_thread(NULL), EINVAL);
 	mrpc_dispatcher_add(NULL);
 	mrpc_dispatcher_remove(NULL);
@@ -169,8 +170,10 @@ int main(int argc, char **argv)
 
 	expect(mrpc_conn_create(&conn, cset, NULL), 0);
 	expect(proto_ping(conn), MINIRPC_INVALID_ARGUMENT);
-	mrpc_conn_set_destroy(cset);
-	mrpc_conn_set_destroy(sset);
+	expect(mrpc_conn_close(conn), 0);
+	mrpc_conn_set_unref(cset);
+	mrpc_listen_close(sset);
+	mrpc_conn_set_unref(sset);
 
 	sset=spawn_server(&port, proto_server, probe_server_accept, NULL, 1);
 	if (mrpc_set_disconnect_func(sset, disconnect_normal))
@@ -184,8 +187,10 @@ int main(int argc, char **argv)
 	expect(mrpc_conn_create(&conn, cset, NULL), 0);
 	expect(mrpc_connect(conn, NULL, port), 0);
 	expect(proto_ping(conn), 0);
-	mrpc_conn_set_destroy(cset);
-	mrpc_conn_set_destroy(sset);
+	expect(mrpc_conn_close(conn), 0);
+	mrpc_conn_set_unref(cset);
+	mrpc_listen_close(sset);
+	mrpc_conn_set_unref(sset);
 
 	return 0;
 }

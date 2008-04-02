@@ -92,14 +92,14 @@ int main(int argc, char **argv)
 
 	if (mrpc_conn_set_create(&cset, proto_client, NULL))
 		die("Couldn't allocate conn set");
-	mrpc_set_disconnect_func(cset, disconnect_normal);
+	mrpc_set_disconnect_func(cset, disconnect_user);
 	mrpc_start_dispatch_thread(cset);
 
 	for (i=0; i<2; i++) {
 		if (mrpc_conn_set_create(&sset, proto_server, NULL))
 			die("Couldn't create conn set");
 		mrpc_set_accept_func(sset, sync_server_accept);
-		mrpc_set_disconnect_func(sset, disconnect_user);
+		mrpc_set_disconnect_func(sset, disconnect_normal);
 		port=0;
 		if (mrpc_listen(sset, NULL, &port))
 			die("Couldn't listen on socket");
@@ -129,9 +129,11 @@ int main(int argc, char **argv)
 		sync_client_run(conn);
 		trigger_callback_sync(conn);
 		invalidate_sync(conn);
-		mrpc_conn_set_destroy(sset);
+		mrpc_conn_close(conn);
+		mrpc_listen_close(sset);
+		mrpc_conn_set_unref(sset);
 	}
-	mrpc_conn_set_destroy(cset);
+	mrpc_conn_set_unref(cset);
 	expect_disconnects(i, i, 0);
 	return 0;
 }

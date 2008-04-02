@@ -269,8 +269,8 @@ int main(int argc, char **argv)
 
 	close(cfd);
 	close(sfd);
-	mrpc_conn_set_destroy(sset);
-	mrpc_conn_set_destroy(cset);
+	mrpc_conn_set_unref(sset);
+	mrpc_conn_set_unref(cset);
 	expect_disconnects(0, 2, 0);
 	expect_ioerrs(expected_ioerrs);
 	sem_destroy(&cb_complete);

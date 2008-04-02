@@ -104,7 +104,7 @@ void client(int files, unsigned port)
 	g_async_queue_push(queue, &sentinel);
 	pthread_join(thr, NULL);
 	g_async_queue_unref(queue);
-	mrpc_conn_set_destroy(cset);
+	mrpc_conn_set_unref(cset);
 	expect_disconnects(files - BUFFER, 0, 0);
 	exit(0);
 }
@@ -156,7 +156,8 @@ int main(int argc, char **argv)
 			ret=1;
 		}
 	}
-	mrpc_conn_set_destroy(sset);
+	mrpc_listen_close(sset);
+	mrpc_conn_set_unref(sset);
 	expect_disconnects(0, MULTIPLE * (files - BUFFER), 0);
 	sem_destroy(&shared->ready);
 	sem_destroy(&shared->start);

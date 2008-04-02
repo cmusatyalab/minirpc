@@ -202,46 +202,51 @@ typedef void (mrpc_ioerr_fn)(void *conn_data, char *message);
  *	An application-specific cookie for this connection set
  * @stdreturn
  *
- * Create a connection set, associate it with the specified protocol role
- * and application-specific pointer, start its background thread, and return
- * a handle to the connection set.  If @c set_data is NULL, set the
- * application-specific pointer to the connection set handle returned in
- * @c new_set.
+ * Create a connection set with a refcount of 1, associate it with the
+ * specified protocol role and application-specific pointer, start its
+ * background thread, and return a handle to the connection set.  If
+ * @c set_data is NULL, set the application-specific pointer to the
+ * connection set handle returned in @c new_set.
  */
 int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
 			const struct mrpc_protocol *protocol, void *set_data);
 
 /**
- * @brief Destroy a connection set
+ * @brief Increment the refcount of a connection set
  * @param	set
- *	The set to destroy
+ *	The connection set
  *
- * Destroy the specified connection set.  This takes the following steps:
+ * Get an additional reference to the specified connection set.
  *
- * -# Close all listening sockets
- * -# Close all active connections and wait for their disconnect functions
- * to be fired
+ * @note Dispatcher threads should not hold their own persistent references
+ * to the set for which they are dispatching.
+ */
+void mrpc_conn_set_ref(struct mrpc_conn_set *set);
+
+/**
+ * @brief Decrement the refcount of a connection set
+ * @param	set
+ *	The connection set
+ *
+ * Put a reference to the specified connection set.  When the refcount
+ * reaches zero @em and there are no connections or listening sockets
+ * associated with the set, the set will be destroyed.  Destruction of a
+ * connection set involves the following steps:
+ *
  * -# Shut down all threads started with mrpc_start_dispatch_thread(), and
  * cause all other dispatch functions to return ENXIO
  * -# Wait for dispatching threads to call mrpc_dispatcher_remove()
  * -# Shut down the background thread associated with the connection set
  * -# Free the set's data structures
  *
- * The application must ensure that it does not start any dispatchers,
- * create any connections, or initiate RPCs on existing connections
- * during or after the execution of this function.  However, the
- * application should continue to dispatch events against the connection
- * set (if it is doing its own dispatching) until the dispatcher functions
- * return ENXIO.  Note that the accept function may still be called after
- * the call to mrpc_conn_set_destroy(); any connections arriving in this
- * window will be automatically closed along with the others.
- *
- * Once this function returns, the connection set is invalid and should
- * not be used in further API calls.
- *
- * This function must not be called from an event handler.
+ * After the set's refcount reaches zero, the application must not start
+ * any additional dispatchers or create any connections against the set.
+ * However, if the set still has listening sockets, new connections may
+ * continue to arrive.  In addition, the application should continue to
+ * dispatch events against the set (if it is doing its own dispatching)
+ * until the dispatcher functions return ENXIO.
  */
-void mrpc_conn_set_destroy(struct mrpc_conn_set *set);
+void mrpc_conn_set_unref(struct mrpc_conn_set *set);
 
 /**
  * @brief Set the function to be called when a new connection arrives on a
