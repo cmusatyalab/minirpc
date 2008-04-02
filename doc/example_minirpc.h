@@ -17,49 +17,49 @@
  * @cond SHOW_PROCEDURE_ENUM
  */
 enum example_server_procedures {
-	nr_example_ChooseColor = 1,
-	nr_example_GetNumColors = 2,
-	nr_example_CrayonSelected = -1,
+	nr_example_choose_color = 1,
+	nr_example_get_num_colors = 2,
+	nr_example_crayon_selected = -1,
 };
 /**
  * @endcond
  */
 
 /**
- * @brief Free a Color
+ * @brief Free an example_color
  * @param	in
- *	The Color to free
+ *	The example_color to free
  * @param	container
  *	Whether to free the container, or just the contents
  *
  * Free all memory pointed to by members of @c in.  If @c container is nonzero,
  * also free @c in.
  */
-void free_Color(Color *in, int container);
+void free_example_color(example_color *in, int container);
 
 /**
- * @brief Free a ColorChoice
+ * @brief Free an example_color_choice
  * @param	in
- *	The ColorChoice to free
+ *	The example_color_choice to free
  * @param	container
  *	Whether to free the container, or just the contents
  *
  * Free all memory pointed to by members of @c in.  If @c container is nonzero,
  * also free @c in.
  */
-void free_ColorChoice(ColorChoice *in, int container);
+void free_example_color_choice(example_color_choice *in, int container);
 
 /**
- * @brief Free a Count
+ * @brief Free an example_count
  * @param	in
- *	The Count to free
+ *	The example_count to free
  * @param	container
  *	Whether to free the container, or just the contents
  *
  * Free all memory pointed to by members of @c in.  If @c container is nonzero,
  * also free @c in.
  */
-void free_Count(Count *in, int container);
+void free_example_count(example_count *in, int container);
 
 /**
  * @}

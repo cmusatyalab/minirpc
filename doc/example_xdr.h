@@ -23,9 +23,9 @@ extern "C" {
 #endif
 
 /**
- * @brief Generated enum corresponding to Color XDR type
+ * @brief Generated enum corresponding to example_color XDR type
  */
-enum Color {
+enum example_color {
 	RED = 0,
 	ORANGE = 1,
 	YELLOW = 2,
@@ -35,14 +35,14 @@ enum Color {
 	VIOLET = 6,
 };
 /**
- * @brief Generated typedef for Color XDR type
+ * @brief Generated typedef for example_color XDR type
  */
-typedef enum Color Color;
+typedef enum example_color example_color;
 
 /**
- * @brief Generated struct corresponding to ColorChoice XDR type
+ * @brief Generated struct corresponding to example_color_choice XDR type
  */
-struct ColorChoice {
+struct example_color_choice {
 	/**
 	 * @brief The @c acceptable variable-length array
 	 */
@@ -53,17 +53,17 @@ struct ColorChoice {
 	/**
 	 * @brief The @c preferred enum
 	 */
-	enum Color preferred;
+	enum example_color preferred;
 };
 /**
- * @brief Generated typedef for ColorChoice XDR type
+ * @brief Generated typedef for example_color_choice XDR type
  */
-typedef struct ColorChoice ColorChoice;
+typedef struct example_color_choice example_color_choice;
 
 /**
- * @brief Generated typedef corresponding to Count XDR typedef
+ * @brief Generated typedef corresponding to example_count XDR typedef
  */
-typedef int Count;
+typedef int example_count;
 
 
 /* The xdr functions.  The application should never need to call these
@@ -72,14 +72,14 @@ typedef int Count;
  * @cond SHOW_XDR_PROCS
  */
 #if defined(__STDC__) || defined(__cplusplus)
-extern  bool_t xdr_Color (XDR *, Color*);
-extern  bool_t xdr_ColorChoice (XDR *, ColorChoice*);
-extern  bool_t xdr_Count (XDR *, Count*);
+extern  bool_t xdr_example_color (XDR *, Color*);
+extern  bool_t xdr_example_color_choice (XDR *, ColorChoice*);
+extern  bool_t xdr_example_count (XDR *, Count*);
 
 #else /* K&R C */
-extern bool_t xdr_Color ();
-extern bool_t xdr_ColorChoice ();
-extern bool_t xdr_Count ();
+extern bool_t xdr_example_color ();
+extern bool_t xdr_example_color_choice ();
+extern bool_t xdr_example_count ();
 
 #endif /* K&R C */
 /**

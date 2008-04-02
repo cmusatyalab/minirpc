@@ -7,7 +7,7 @@ SRCPATHS  = $(foreach file,$(DOCFILES),$(srcdir)/$(file)) $(DOCHEADERS)
 EXTRA_DIST = $(DOCFILES) $(EXAMPLES)
 
 if HAVE_DOXYGEN
-doxygen.stamp: $(srcdir)/Doxyfile $(SRCPATHS)
+doxygen.stamp: $(srcdir)/Doxyfile $(SRCPATHS) $(EXAMPLES)
 	rm -rf html
 	SRCFILES="$(SRCPATHS)" DOCPATH=$(srcdir) $(DOXYGEN) $< >/dev/null
 	touch doxygen.stamp

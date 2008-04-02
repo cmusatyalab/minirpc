@@ -1,4 +1,4 @@
-enum Color {
+enum example_color {
 	RED = 0,
 	ORANGE = 1,
 	YELLOW = 2,
@@ -8,18 +8,18 @@ enum Color {
 	VIOLET = 6
 };
 
-struct ColorChoice {
-	enum Color acceptable<>;
-	enum Color preferred;
+struct example_color_choice {
+	enum example_color acceptable<>;
+	enum example_color preferred;
 };
 
-typedef int Count;
+typedef int example_count;
 
 serverprocs {
-	ChooseColor(ColorChoice) = 1;
-	GetNumColors(void, Count) = 2;
+	choose_color(example_color_choice) = 1;
+	get_num_colors(void, example_count) = 2;
 }
 
 servermsgs {
-	CrayonSelected(Color) = 1;
+	crayon_selected(example_color) = 1;
 }
