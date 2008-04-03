@@ -92,9 +92,9 @@ int main(int argc, char **argv)
 	dispatcher_barrier();
 	client=g_atomic_int_get(&client_user_disc);
 	server=g_atomic_int_get(&server_user_disc);
-	if (client == 0 || client >= ITERS)
+	if (client == 0 || client > ITERS)
 		die("Client close count = %d, expected 0-%d", client, ITERS);
-	if (server == 0 || server >= ITERS)
+	if (server == 0 || server > ITERS)
 		die("Server close count = %d, expected 0-%d", server, ITERS);
 	return 0;
 }
