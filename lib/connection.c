@@ -24,6 +24,7 @@
 #include "internal.h"
 
 static void conn_set_free(struct mrpc_conn_set *set);
+static void conn_free(struct mrpc_connection *conn);
 static void conn_kill(struct mrpc_connection *conn,
 			enum mrpc_disc_reason reason);
 static int try_close_fd(struct mrpc_connection *conn);
@@ -35,24 +36,49 @@ static int setsockoptval(int fd, int level, int optname, int value)
 	return 0;
 }
 
-static void conn_set_get(struct mrpc_conn_set *set)
+static void conn_set_start_shutdown(struct mrpc_conn_set *set)
 {
-	gint old;
-
-	old=g_atomic_int_exchange_and_add(&set->refs, 1);
-	assert(old > 0);
+	/* We can't call conn_set_free() directly from conn_set_put():
+	   if we were called from an event thread, that would deadlock.
+	   Have the listener thread clean up the set. */
+	selfpipe_set(set->shutdown_pipe);
+	selfpipe_set(set->events_notify_pipe);
 }
 
-static void conn_set_put(struct mrpc_conn_set *set)
-{
-	if (g_atomic_int_dec_and_test(&set->refs)) {
-		/* We can't call conn_set_free() directly: if we were called
-		   from an event thread, that would deadlock.  Have the
-		   listener thread clean up the set. */
-		selfpipe_set(set->shutdown_pipe);
-		selfpipe_set(set->events_notify_pipe);
+#define REFCOUNT_GET_FUNC(modifier, name, type, member)			\
+	modifier void name(type *item)					\
+	{								\
+		gint old;						\
+									\
+		if (item == NULL)					\
+			return;						\
+		old=g_atomic_int_exchange_and_add(&item->member, 1);	\
+		assert(old > 0);					\
 	}
-}
+#define REFCOUNT_PUT_FUNC(modifier, name, type, member, cleanup_action)	\
+	modifier void name(type *item)					\
+	{								\
+		if (item == NULL)					\
+			return;						\
+		if (g_atomic_int_dec_and_test(&item->member)) {		\
+			cleanup_action;					\
+		}							\
+	}
+REFCOUNT_GET_FUNC(static, conn_set_get, struct mrpc_conn_set, refs)
+REFCOUNT_PUT_FUNC(static, conn_set_put, struct mrpc_conn_set, refs,
+			conn_set_start_shutdown(item))
+REFCOUNT_GET_FUNC(exported, mrpc_conn_set_ref, struct mrpc_conn_set,
+			user_refs)
+REFCOUNT_PUT_FUNC(exported, mrpc_conn_set_unref, struct mrpc_conn_set,
+			user_refs, conn_set_put(item))
+REFCOUNT_GET_FUNC(, conn_get, struct mrpc_connection, refs)
+REFCOUNT_PUT_FUNC(, conn_put, struct mrpc_connection, refs,
+			conn_free(item))
+REFCOUNT_GET_FUNC(exported, mrpc_conn_ref, struct mrpc_connection, user_refs)
+REFCOUNT_PUT_FUNC(exported, mrpc_conn_unref, struct mrpc_connection, user_refs,
+			conn_put(item))
+#undef REFCOUNT_GET_FUNC
+#undef REFCOUNT_PUT_FUNC
 
 /* Returns error code if the connection should be killed */
 static mrpc_status_t process_incoming_header(struct mrpc_connection *conn)
@@ -475,7 +501,7 @@ out:
 	return ret;
 }
 
-static void mrpc_conn_free(struct mrpc_connection *conn)
+static void conn_free(struct mrpc_connection *conn)
 {
 	struct mrpc_message *msg;
 
@@ -496,38 +522,6 @@ static void mrpc_conn_free(struct mrpc_connection *conn)
 	g_queue_free(conn->msgs);
 	conn_set_put(conn->set);
 	g_slice_free(struct mrpc_connection, conn);
-}
-
-void conn_get(struct mrpc_connection *conn)
-{
-	gint old;
-
-	old=g_atomic_int_exchange_and_add(&conn->refs, 1);
-	assert(old > 0);
-}
-
-void conn_put(struct mrpc_connection *conn)
-{
-	if (g_atomic_int_dec_and_test(&conn->refs))
-		mrpc_conn_free(conn);
-}
-
-exported void mrpc_conn_ref(struct mrpc_connection *conn)
-{
-	gint old;
-
-	if (conn == NULL)
-		return;
-	old=g_atomic_int_exchange_and_add(&conn->user_refs, 1);
-	assert(old > 0);
-}
-
-exported void mrpc_conn_unref(struct mrpc_connection *conn)
-{
-	if (conn == NULL)
-		return;
-	if (g_atomic_int_dec_and_test(&conn->user_refs))
-		conn_put(conn);
 }
 
 static void restart_accept(void *data)
@@ -917,24 +911,4 @@ static void conn_set_free(struct mrpc_conn_set *set)
 	g_queue_free(set->event_conns);
 	g_free(set->trashbuf);
 	g_slice_free(struct mrpc_conn_set, set);
-}
-
-exported void mrpc_conn_set_ref(struct mrpc_conn_set *set)
-{
-	gint old;
-
-	if (set == NULL)
-		return;
-	old=g_atomic_int_exchange_and_add(&set->user_refs, 1);
-	/* There's no point in returning an error if the refcount was zero,
-	   because we've already corrupted memory. */
-	assert(old > 0);
-}
-
-exported void mrpc_conn_set_unref(struct mrpc_conn_set *set)
-{
-	if (set == NULL)
-		return;
-	if (g_atomic_int_dec_and_test(&set->user_refs))
-		conn_set_put(set);
 }
