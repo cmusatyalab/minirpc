@@ -31,7 +31,6 @@ int main(int argc, char **argv)
 
 	if (mrpc_conn_set_create(&cset, proto_client, NULL))
 		die("Couldn't allocate conn set");
-	mrpc_set_disconnect_func(cset, disconnect_normal_no_unref);
 	start_monitored_dispatcher(cset);
 
 	ret=mrpc_conn_create(&conn, cset, NULL);
@@ -48,6 +47,6 @@ int main(int argc, char **argv)
 	mrpc_conn_set_unref(cset);
 	mrpc_listen_close(sset);
 	mrpc_conn_set_unref(sset);
-	expect_disconnects(1, 1, 0);
+	expect_disconnects(1, 0, 0);
 	return 0;
 }
