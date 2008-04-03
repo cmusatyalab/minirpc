@@ -58,9 +58,13 @@ static void conn_set_start_shutdown(struct mrpc_conn_set *set)
 #define REFCOUNT_PUT_FUNC(modifier, name, type, member, cleanup_action)	\
 	modifier void name(type *item)					\
 	{								\
+		gint old;						\
+									\
 		if (item == NULL)					\
 			return;						\
-		if (g_atomic_int_dec_and_test(&item->member)) {		\
+		old=g_atomic_int_exchange_and_add(&item->member, -1);	\
+		assert(old > 0);					\
+		if (old == 1) {						\
 			cleanup_action;					\
 		}							\
 	}
