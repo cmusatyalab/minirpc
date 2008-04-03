@@ -147,7 +147,7 @@ enum mrpc_conn_counter {
  *	The length of the @c from structure
  * @return The application-specific cookie to be associated with this
  *		connection
- * @sa mrpc_set_accept_func
+ * @sa mrpc_set_accept_func()
  *
  * This function is called when a new connection arrives on a listening socket
  * created with mrpc_listen().  At minimum, the function must set the
@@ -166,13 +166,15 @@ typedef void *(mrpc_accept_fn)(void *set_data, struct mrpc_connection *conn,
  *	The cookie associated with the connection
  * @param	reason
  *	The reason the connection was closed
- * @sa mrpc_set_disconnect_func
+ * @sa mrpc_set_disconnect_func(), mrpc_conn_unref()
  *
  * If supplied, this callback is fired when a connection is closed for any
  * reason, including when explicitly requested by the application (with
  * mrpc_conn_close()).  Once the callback returns, the application will not
  * receive further events on this connection and should make no further
- * miniRPC calls against it.
+ * miniRPC calls against it.  If the connection's refcount is greater than
+ * zero after the disconnection function returns, the connection handle will
+ * persist until all references are released.
  */
 typedef void (mrpc_disconnect_fn)(void *conn_data,
 			enum mrpc_disc_reason reason);
@@ -183,7 +185,7 @@ typedef void (mrpc_disconnect_fn)(void *conn_data,
  *	The cookie associated with the connection
  * @param	message
  *	A string describing the error
- * @sa mrpc_set_ioerr_func
+ * @sa mrpc_set_ioerr_func()
  *
  * If supplied, this callback is fired whenever miniRPC encounters an I/O or
  * XDR error it wishes to report to the application.  @c message is in a
@@ -397,20 +399,49 @@ int mrpc_set_keepalive_parameters(struct mrpc_conn_set *set, unsigned idletime,
  *	An application-specific cookie for this connection
  * @stdreturn
  *
- * Allocate a new connection handle and associate it with the given connection
- * set and application-specific pointer.  This handle can then be used to make
- * an outgoing connection with mrpc_connect(), or can be bound to an existing
- * socket with mrpc_bind_fd().  Before the connection is completed using one of
- * these functions, the only valid operations on the connection handle are:
+ * Allocate a new connection handle with a refcount of 1, and associate it
+ * with the given connection set and application-specific pointer.  This
+ * handle can then be used to make an outgoing connection with mrpc_connect(),
+ * or can be bound to an existing socket with mrpc_bind_fd().  Before the
+ * connection is completed using one of these functions, the only valid
+ * operations on the connection handle are:
  * - Set the operations structure using the set_operations function for this
  * protocol role
- * - Plug it with mrpc_plug_conn()
- * - Destroy it with mrpc_conn_close()
+ * - Prevent connection events from being processed with mrpc_stop_events()
+ * - Update its refcount with mrpc_conn_ref()/mrpc_conn_unref().  If the last
+ * reference is removed with mrpc_conn_unref(), the handle is freed.
  *
  * If @c data is NULL, the application-specific pointer is set to the
- * connection handle returned in @c new_conn.   */
+ * connection handle returned in @c new_conn.
+ *
+ * While the connection handle exists, it holds a reference on the associated
+ * connection set.
+ */
 int mrpc_conn_create(struct mrpc_connection **new_conn,
 			struct mrpc_conn_set *set, void *data);
+
+/**
+ * @brief Increment the refcount of a connection
+ * @param	conn
+ *	The connection
+ *
+ * Get an additional reference to the specified connection.
+ */
+void mrpc_conn_ref(struct mrpc_connection *conn);
+
+/**
+ * @brief Decrement the refcount of a connection
+ * @param	conn
+ *	The connection
+ *
+ * Put a reference to the specified connection.  When the refcount reaches
+ * zero @em and the connection is no longer active, the connection will be
+ * destroyed.  Connections become active when they are connected using
+ * mrpc_connect() or mrpc_bind_fd(), or when miniRPC passes them to the
+ * connection set's accept function.  Active connections become inactive
+ * after they are closed @em and the disconnect function returns.
+ */
+void mrpc_conn_unref(struct mrpc_connection *conn);
 
 /**
  * @brief Make a new outgoing connection
@@ -504,8 +535,9 @@ int mrpc_conn_get_counter(struct mrpc_connection *conn,
  * @brief Close an existing connection
  * @param	conn
  *	The connection to close
- * @return 0 on success, or EALREADY if mrpc_conn_close() has already been
- *	called on this connection
+ * @return 0 on success, EALREADY if mrpc_conn_close() has already been called
+ *	on this connection, or ENOTCONN if the connection handle has never
+ *	been connected
  *
  * Close the connection specified by @c conn.  Protocol messages already
  * queued for transmission will be sent before the socket is closed.
@@ -528,11 +560,6 @@ int mrpc_conn_get_counter(struct mrpc_connection *conn,
  * assume that the disconnect function's @c reason argument will be
  * ::MRPC_DISC_USER, since the connection may have been terminated for
  * another reason before mrpc_conn_close() was called.
- *
- * If the specified connection handle was allocated with mrpc_conn_create()
- * but has never been successfully connected with mrpc_connect() or
- * mrpc_bind_fd(), mrpc_conn_close() will immediately free the connection
- * handle.
  *
  * This function may be called from an event handler, including an event
  * handler for the connection being closed.

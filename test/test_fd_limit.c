@@ -63,6 +63,7 @@ void *closer(void *arg)
 						errno == EINTR);
 		}
 		mrpc_conn_close(oconn->conn);
+		mrpc_conn_unref(oconn->conn);
 		g_slice_free(struct open_conn, oconn);
 	}
 	g_async_queue_unref(queue);

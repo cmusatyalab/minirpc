@@ -104,6 +104,7 @@ void disconnect_normal(void *conn_data, enum mrpc_disc_reason reason)
 	pthread_mutex_lock(&stats.lock);
 	stats.disc_normal++;
 	pthread_mutex_unlock(&stats.lock);
+	mrpc_conn_unref(conn_data);
 }
 
 void disconnect_ioerr(void *conn_data, enum mrpc_disc_reason reason)
@@ -113,6 +114,7 @@ void disconnect_ioerr(void *conn_data, enum mrpc_disc_reason reason)
 	pthread_mutex_lock(&stats.lock);
 	stats.disc_ioerr++;
 	pthread_mutex_unlock(&stats.lock);
+	mrpc_conn_unref(conn_data);
 }
 
 void disconnect_user(void *conn_data, enum mrpc_disc_reason reason)

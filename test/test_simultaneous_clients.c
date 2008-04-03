@@ -48,6 +48,7 @@ void *worker(void *arg)
 		trigger_callback_sync(conn);
 		invalidate_sync(conn);
 		mrpc_conn_close(conn);
+		mrpc_conn_unref(conn);
 	}
 	pthread_mutex_lock(&lock);
 	running--;

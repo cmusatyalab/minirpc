@@ -52,6 +52,7 @@ int main(int argc, char **argv)
 	sync_client_run(conn);
 	trigger_callback_sync(conn);
 	mrpc_conn_close(conn);
+	mrpc_conn_unref(conn);
 	mrpc_conn_set_unref(cset);
 	mrpc_listen_close(sset);
 	mrpc_conn_set_unref(sset);

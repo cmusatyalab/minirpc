@@ -41,6 +41,7 @@ int main(int argc, char **argv)
 		sync_client_set_ops(conn);
 		sync_client_run(conn);
 		mrpc_conn_close(conn);
+		mrpc_conn_unref(conn);
 	}
 	mrpc_conn_set_unref(cset);
 
@@ -62,6 +63,7 @@ int main(int argc, char **argv)
 		sync_client_set_ops(conn);
 		sync_client_run(conn);
 		mrpc_conn_close(conn);
+		mrpc_conn_unref(conn);
 		mrpc_conn_set_unref(cset);
 	}
 

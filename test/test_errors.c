@@ -61,6 +61,8 @@ int main(int argc, char **argv)
 	expect(sset == NULL, 1);
 	mrpc_conn_set_ref(NULL);
 	mrpc_conn_set_unref(NULL);
+	mrpc_conn_ref(NULL);
+	mrpc_conn_unref(NULL);
 	expect(mrpc_start_dispatch_thread(NULL), EINVAL);
 	mrpc_dispatcher_add(NULL);
 	mrpc_dispatcher_remove(NULL);
@@ -98,11 +100,13 @@ int main(int argc, char **argv)
 	expect(mrpc_connect(conn, NULL, port), 0);
 	mrpc_listen_close(NULL);
 	mrpc_listen_close(sset);
+	mrpc_conn_unref(conn);
 	expect(mrpc_conn_close(conn), 0);
 	expect(mrpc_conn_close(NULL), EINVAL);
 	expect(mrpc_conn_create(&conn, cset, NULL), 0);
 	expect(mrpc_connect(conn, NULL, port), ECONNREFUSED);
-	expect(mrpc_conn_close(conn), 0);
+	expect(mrpc_conn_close(conn), ENOTCONN);
+	mrpc_conn_unref(conn);
 
 	port=0;
 	expect(mrpc_listen(sset, "localhost", &port), 0);
@@ -126,6 +130,7 @@ int main(int argc, char **argv)
 	expect(mrpc_connect(conn, NULL, port), EINVAL);
 	expect(mrpc_bind_fd(conn, fd), EINVAL);
 	expect(mrpc_conn_close(conn), 0);
+	mrpc_conn_unref(conn);
 	expect(mrpc_conn_create(&conn, cset, NULL), 0);
 	fd=socket(PF_INET, SOCK_STREAM, 0);
 	if (fd == -1)
@@ -165,10 +170,12 @@ int main(int argc, char **argv)
 	expect(mrpc_conn_get_counter(conn, MRPC_CONNCTR_NR, &counter), EINVAL);
 	expect(mrpc_conn_get_counter(conn, 0, &counter), 0);
 	expect(mrpc_conn_close(conn), 0);
+	mrpc_conn_unref(conn);
 
 	expect(mrpc_conn_create(&conn, cset, NULL), 0);
 	expect(proto_ping(conn), MINIRPC_INVALID_ARGUMENT);
-	expect(mrpc_conn_close(conn), 0);
+	expect(mrpc_conn_close(conn), ENOTCONN);
+	mrpc_conn_unref(conn);
 	mrpc_conn_set_unref(cset);
 	mrpc_listen_close(sset);
 	mrpc_conn_set_unref(sset);
@@ -185,6 +192,7 @@ int main(int argc, char **argv)
 	expect(mrpc_connect(conn, NULL, port), 0);
 	expect(proto_ping(conn), 0);
 	expect(mrpc_conn_close(conn), 0);
+	mrpc_conn_unref(conn);
 	mrpc_conn_set_unref(cset);
 	mrpc_listen_close(sset);
 	mrpc_conn_set_unref(sset);

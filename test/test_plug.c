@@ -176,6 +176,7 @@ int main(int argc, char **argv)
 			do_round(i, j);
 
 	mrpc_conn_close(conn);
+	mrpc_conn_unref(conn);
 	mrpc_conn_set_unref(cset);
 	mrpc_listen_close(sset);
 	mrpc_conn_set_unref(sset);

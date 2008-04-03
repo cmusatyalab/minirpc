@@ -78,6 +78,7 @@ int main(int argc, char **argv)
 		die("Couldn't bind client fd: %d", ret);
 	sync_client_run(cconn);
 	mrpc_conn_close(sconn);
+	mrpc_conn_unref(sconn);
 	mrpc_conn_set_unref(sset);
 	mrpc_conn_set_unref(cset);
 	expect_disconnects(1, 1, 0);

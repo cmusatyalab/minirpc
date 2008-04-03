@@ -127,6 +127,7 @@ struct mrpc_connection {
 	int is_tcp;
 	void *private;
 	gint refs;  /* atomic operations only */
+	gint user_refs;  /* atomic ops only */
 
 	pthread_mutex_t sequence_lock;
 	unsigned sequence_flags;

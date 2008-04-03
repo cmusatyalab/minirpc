@@ -335,6 +335,7 @@ exported int mrpc_conn_create(struct mrpc_connection **new_conn,
 	conn_set_get(set);
 	conn=g_slice_new0(struct mrpc_connection);
 	g_atomic_int_set(&conn->refs, 1);
+	g_atomic_int_set(&conn->user_refs, 1);
 	conn->msgs=g_queue_new();
 	conn->send_msgs=g_queue_new();
 	conn->events=g_queue_new();
@@ -391,8 +392,10 @@ static int _mrpc_bind_fd(struct mrpc_connection *conn, int addr_family, int fd)
 	ret=pollset_add(conn->set->pollset, fd, POLLSET_READABLE, conn,
 				try_read_conn, try_write_conn, conn_hangup,
 				conn_error, NULL);
-	if (!ret)
+	if (!ret) {
 		conn->sequence_flags |= SEQ_HAVE_FD;
+		conn_get(conn);
+	}
 out:
 	pthread_mutex_unlock(&conn->sequence_lock);
 	return ret;
@@ -452,26 +455,22 @@ exported int mrpc_conn_close(struct mrpc_connection *conn)
 		return EINVAL;
 	conn_get(conn);
 	pthread_mutex_lock(&conn->sequence_lock);
+	if (!(conn->sequence_flags & SEQ_HAVE_FD)) {
+		ret=ENOTCONN;
+		goto out;
+	}
 	conn_start_shutdown(conn, MRPC_DISC_USER);
 	/* Squash event queue */
 	if (conn->sequence_flags & SEQ_SQUASH_EVENTS) {
-		pthread_mutex_unlock(&conn->sequence_lock);
 		ret=EALREADY;
 		goto out;
 	}
 	conn->sequence_flags |= SEQ_SQUASH_EVENTS;
-	if (!(conn->sequence_flags & SEQ_FD_CLOSED)) {
-		if (!(conn->sequence_flags & SEQ_HAVE_FD)) {
-			conn->sequence_flags |= SEQ_FD_CLOSED;
-			pthread_mutex_unlock(&conn->sequence_lock);
-			kick_event_shutdown_sequence(conn);
-			goto out;
-		}
+	if (!(conn->sequence_flags & SEQ_FD_CLOSED))
 		pollset_modify(conn->set->pollset, conn->fd,
 					POLLSET_READABLE | POLLSET_WRITABLE);
-	}
-	pthread_mutex_unlock(&conn->sequence_lock);
 out:
+	pthread_mutex_unlock(&conn->sequence_lock);
 	conn_put(conn);
 	return ret;
 }
@@ -513,6 +512,24 @@ void conn_put(struct mrpc_connection *conn)
 		mrpc_conn_free(conn);
 }
 
+exported void mrpc_conn_ref(struct mrpc_connection *conn)
+{
+	gint old;
+
+	if (conn == NULL)
+		return;
+	old=g_atomic_int_exchange_and_add(&conn->user_refs, 1);
+	assert(old > 0);
+}
+
+exported void mrpc_conn_unref(struct mrpc_connection *conn)
+{
+	if (conn == NULL)
+		return;
+	if (g_atomic_int_dec_and_test(&conn->user_refs))
+		conn_put(conn);
+}
+
 static void restart_accept(void *data)
 {
 	struct mrpc_listener *lnr=data;
@@ -548,7 +565,7 @@ static void try_accept(void *data)
 			continue;
 		}
 		if (_mrpc_bind_fd(conn, sa.ss_family, fd)) {
-			mrpc_conn_close(conn);
+			mrpc_conn_unref(conn);
 			close(fd);
 			continue;
 		}
