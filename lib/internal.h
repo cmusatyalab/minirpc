@@ -65,7 +65,6 @@ struct mrpc_conn_set {
 
 	struct pollset *pollset;
 	struct selfpipe *shutdown_pipe;
-	pthread_t thread;
 	unsigned events_threads;		/* protected by events_lock */
 	pthread_cond_t events_threads_cond;
 };

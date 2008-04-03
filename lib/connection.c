@@ -45,8 +45,13 @@ static void conn_set_get(struct mrpc_conn_set *set)
 
 static void conn_set_put(struct mrpc_conn_set *set)
 {
-	if (g_atomic_int_dec_and_test(&set->refs))
-		conn_set_free(set);
+	if (g_atomic_int_dec_and_test(&set->refs)) {
+		/* We can't call conn_set_free() directly: if we were called
+		   from an event thread, that would deadlock.  Have the
+		   listener thread clean up the set. */
+		selfpipe_set(set->shutdown_pipe);
+		selfpipe_set(set->events_notify_pipe);
+	}
 }
 
 /* Returns error code if the connection should be killed */
@@ -805,6 +810,7 @@ static void *listener(void *data)
 	block_signals();
 	while (!selfpipe_is_set(set->shutdown_pipe))
 		pollset_poll(set->pollset);
+	conn_set_free(set);
 	return NULL;
 }
 
@@ -822,6 +828,8 @@ exported int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
 			const struct mrpc_protocol *protocol, void *set_data)
 {
 	struct mrpc_conn_set *set;
+	pthread_attr_t attr;
+	pthread_t thr;
 	int ret;
 
 	if (new_set == NULL)
@@ -855,9 +863,16 @@ exported int mrpc_conn_set_create(struct mrpc_conn_set **new_set,
 				assert_callback_func, NULL);
 	if (ret)
 		goto bad;
-	ret=pthread_create(&set->thread, NULL, listener, set);
+	ret=pthread_attr_init(&attr);
 	if (ret)
 		goto bad;
+	ret=pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
+	if (ret)
+		goto bad;
+	ret=pthread_create(&thr, &attr, listener, set);
+	if (ret)
+		goto bad;
+	pthread_attr_destroy(&attr);
 	*new_set=set;
 	return 0;
 
@@ -874,13 +889,10 @@ bad:
 
 static void conn_set_free(struct mrpc_conn_set *set)
 {
-	selfpipe_set(set->shutdown_pipe);
-	selfpipe_set(set->events_notify_pipe);
 	pthread_mutex_lock(&set->events_lock);
 	while (set->events_threads)
 		pthread_cond_wait(&set->events_threads_cond, &set->events_lock);
 	pthread_mutex_unlock(&set->events_lock);
-	pthread_join(set->thread, NULL);
 	pollset_free(set->pollset);
 	selfpipe_destroy(set->events_notify_pipe);
 	selfpipe_destroy(set->shutdown_pipe);
