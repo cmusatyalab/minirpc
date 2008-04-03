@@ -47,11 +47,12 @@ check_PROGRAMS += test_plug
 check_PROGRAMS += test_dispatch
 check_PROGRAMS += test_refcount
 check_PROGRAMS += test_shutdown
+check_PROGRAMS += test_accept_close
+check_PROGRAMS += test_simultaneous_close
 check_PROGRAMS += test_errors
 check_PROGRAMS += test_max_buf
 check_PROGRAMS += test_protocol_err
 check_PROGRAMS += test_fd_limit
-check_PROGRAMS += test_accept_close
 
 TESTS_ENVIRONMENT = $(builddir)/runtest.sh
 TESTS = $(check_PROGRAMS)

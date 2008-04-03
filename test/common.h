@@ -34,6 +34,7 @@ void disconnect_normal_no_unref(void *conn_data, enum mrpc_disc_reason reason);
 void disconnect_ioerr(void *conn_data, enum mrpc_disc_reason reason);
 void disconnect_user(void *conn_data, enum mrpc_disc_reason reason);
 void disconnect_user_unref(void *conn_data, enum mrpc_disc_reason reason);
+void dispatcher_barrier(void);
 void handle_ioerr(void *conn_private, char *msg);
 void expect_disconnects(int user, int normal, int ioerr);
 void expect_ioerrs(int count);

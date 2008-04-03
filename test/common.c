@@ -144,7 +144,7 @@ void handle_ioerr(void *conn_private, char *msg)
 	pthread_mutex_unlock(&stats.lock);
 }
 
-static void dispatcher_barrier(void)
+void dispatcher_barrier(void)
 {
 	struct timespec timeout = {0};
 
