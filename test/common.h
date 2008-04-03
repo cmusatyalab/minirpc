@@ -30,8 +30,10 @@ struct mrpc_conn_set *spawn_server(unsigned *listen_port,
 			mrpc_accept_fn accept, void *set_data, int threads);
 void disconnect_fatal(void *conn_data, enum mrpc_disc_reason reason);
 void disconnect_normal(void *conn_data, enum mrpc_disc_reason reason);
+void disconnect_normal_no_unref(void *conn_data, enum mrpc_disc_reason reason);
 void disconnect_ioerr(void *conn_data, enum mrpc_disc_reason reason);
 void disconnect_user(void *conn_data, enum mrpc_disc_reason reason);
+void disconnect_user_unref(void *conn_data, enum mrpc_disc_reason reason);
 void handle_ioerr(void *conn_private, char *msg);
 void expect_disconnects(int user, int normal, int ioerr);
 void expect_ioerrs(int count);

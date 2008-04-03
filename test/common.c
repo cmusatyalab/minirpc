@@ -97,13 +97,18 @@ void disconnect_fatal(void *conn_data, enum mrpc_disc_reason reason)
 	die("Unexpected disconnect: reason %d", reason);
 }
 
-void disconnect_normal(void *conn_data, enum mrpc_disc_reason reason)
+void disconnect_normal_no_unref(void *conn_data, enum mrpc_disc_reason reason)
 {
 	if (reason != MRPC_DISC_CLOSED)
 		die("Unexpected disconnect: reason %d", reason);
 	pthread_mutex_lock(&stats.lock);
 	stats.disc_normal++;
 	pthread_mutex_unlock(&stats.lock);
+}
+
+void disconnect_normal(void *conn_data, enum mrpc_disc_reason reason)
+{
+	disconnect_normal_no_unref(conn_data, reason);
 	mrpc_conn_unref(conn_data);
 }
 
@@ -124,6 +129,12 @@ void disconnect_user(void *conn_data, enum mrpc_disc_reason reason)
 	pthread_mutex_lock(&stats.lock);
 	stats.disc_user++;
 	pthread_mutex_unlock(&stats.lock);
+}
+
+void disconnect_user_unref(void *conn_data, enum mrpc_disc_reason reason)
+{
+	disconnect_user(conn_data, reason);
+	mrpc_conn_unref(conn_data);
 }
 
 void handle_ioerr(void *conn_private, char *msg)

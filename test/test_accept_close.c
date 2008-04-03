@@ -18,11 +18,6 @@ void *do_accept(void *set_data, struct mrpc_connection *conn,
 	return conn;
 }
 
-void do_disconnect(void *conn_data, enum mrpc_disc_reason reason)
-{
-	mrpc_conn_unref(conn_data);
-}
-
 int main(int argc, char **argv)
 {
 	struct mrpc_conn_set *sset;
@@ -32,10 +27,11 @@ int main(int argc, char **argv)
 	int ret;
 
 	sset=spawn_server(&port, proto_server, do_accept, NULL, 1);
-	mrpc_set_disconnect_func(sset, do_disconnect);
+	mrpc_set_disconnect_func(sset, disconnect_user_unref);
 
 	if (mrpc_conn_set_create(&cset, proto_client, NULL))
 		die("Couldn't allocate conn set");
+	mrpc_set_disconnect_func(cset, disconnect_normal_no_unref);
 	start_monitored_dispatcher(cset);
 
 	ret=mrpc_conn_create(&conn, cset, NULL);
@@ -50,6 +46,8 @@ int main(int argc, char **argv)
 	expect(mrpc_conn_close(conn), 0);
 	mrpc_conn_unref(conn);
 	mrpc_conn_set_unref(cset);
+	mrpc_listen_close(sset);
 	mrpc_conn_set_unref(sset);
+	expect_disconnects(1, 1, 0);
 	return 0;
 }
