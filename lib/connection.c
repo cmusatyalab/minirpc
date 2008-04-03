@@ -449,6 +449,7 @@ static int try_close_fd(struct mrpc_connection *conn)
 {
 	int do_event=0;
 
+	conn_get(conn);
 	pthread_mutex_lock(&conn->sequence_lock);
 	if ((conn->sequence_flags & SEQ_SHUT_STARTED) &&
 				!(conn->sequence_flags & SEQ_FD_CLOSED)) {
@@ -463,6 +464,7 @@ static int try_close_fd(struct mrpc_connection *conn)
 	pthread_mutex_unlock(&conn->sequence_lock);
 	if (do_event)
 		kick_event_shutdown_sequence(conn);
+	conn_put(conn);
 	return do_event;
 }
 
