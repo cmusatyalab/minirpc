@@ -29,6 +29,7 @@
 static struct {
 	sem_t ready;
 	sem_t start;
+	int port;
 } *shared;
 
 struct open_conn {
@@ -70,7 +71,7 @@ void *closer(void *arg)
 	return NULL;
 }
 
-void client(int files, unsigned port)
+void client(int files)
 {
 	struct mrpc_conn_set *cset;
 	struct mrpc_connection *conn;
@@ -79,6 +80,7 @@ void client(int files, unsigned port)
 	pthread_t thr;
 	int i;
 	int ret;
+	unsigned port;
 
 	if (mrpc_conn_set_create(&cset, proto_client, NULL))
 		die("Couldn't allocate conn set");
@@ -89,6 +91,7 @@ void client(int files, unsigned port)
 
 	sem_post(&shared->ready);
 	sem_wait(&shared->start);
+	port=g_atomic_int_get(&shared->port);
 	for (i=0; i < files - BUFFER; i++) {
 		ret=mrpc_conn_create(&conn, cset, NULL);
 		if (ret)
@@ -133,14 +136,14 @@ int main(int argc, char **argv)
 	if (sem_init(&shared->start, 1, 0))
 		die("Couldn't initialize semaphore: %s", strerror(errno));
 
-	sset=spawn_server(&port, proto_server, sync_server_accept, NULL, 1);
-	mrpc_set_disconnect_func(sset, disconnect_normal);
-
 	for (i=0; i<MULTIPLE; i++)
 		if (!fork())
-			client(files, port);
+			client(files);
 	for (i=0; i<MULTIPLE; i++)
 		sem_wait(&shared->ready);
+	sset=spawn_server(&port, proto_server, sync_server_accept, NULL, 1);
+	mrpc_set_disconnect_func(sset, disconnect_normal);
+	g_atomic_int_set(&shared->port, port);
 	for (i=0; i<MULTIPLE; i++)
 		sem_post(&shared->start);
 	while (1) {
