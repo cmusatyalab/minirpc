@@ -59,7 +59,7 @@ int main(int argc, char **argv)
 	if (mrpc_conn_set_create(&cset, proto_client, NULL))
 		die("Couldn't allocate conn set");
 	mrpc_set_disconnect_func(cset, disconnect_user);
-	mrpc_start_dispatch_thread(cset);
+	start_monitored_dispatcher(cset);
 
 	ret=mrpc_conn_create(&conn, cset, NULL);
 	if (ret)

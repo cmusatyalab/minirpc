@@ -86,10 +86,8 @@ int main(int argc, char **argv)
 		die("Couldn't set disconnect func");
 	if (mrpc_set_disconnect_func(cset, disconnect_user))
 		die("Couldn't set disconnect func");
-	if (mrpc_start_dispatch_thread(sset))
-		die("Couldn't start server dispatcher");
-	if (mrpc_start_dispatch_thread(cset))
-		die("Couldn't start client dispatcher");
+	start_monitored_dispatcher(sset);
+	start_monitored_dispatcher(cset);
 
 	port=0;
 	expect(mrpc_listen(NULL, "localhost", &port), EINVAL);
@@ -182,8 +180,7 @@ int main(int argc, char **argv)
 		die("Couldn't allocate conn set");
 	if (mrpc_set_disconnect_func(cset, disconnect_user))
 		die("Couldn't set disconnect func");
-	if (mrpc_start_dispatch_thread(cset))
-		die("Couldn't start client dispatcher");
+	start_monitored_dispatcher(cset);
 	expect(mrpc_conn_create(&conn, cset, NULL), 0);
 	expect(mrpc_connect(conn, NULL, port), 0);
 	expect(proto_ping(conn), 0);

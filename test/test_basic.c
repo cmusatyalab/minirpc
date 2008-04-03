@@ -33,7 +33,7 @@ int main(int argc, char **argv)
 	if (ret)
 		die("%s", strerror(ret));
 
-	mrpc_start_dispatch_thread(cset);
+	start_monitored_dispatcher(cset);
 	sync_client_set_ops(conn);
 	sync_client_run(conn);
 	trigger_callback_sync(conn);

@@ -32,8 +32,8 @@ int main(int argc, char **argv)
 	mrpc_set_accept_func(sset, sync_server_accept);
 	mrpc_set_disconnect_func(sset, disconnect_user);
 	mrpc_set_disconnect_func(cset, disconnect_normal);
-	mrpc_start_dispatch_thread(sset);
-	mrpc_start_dispatch_thread(cset);
+	start_monitored_dispatcher(sset);
+	start_monitored_dispatcher(cset);
 
 	listener=socket(PF_INET, SOCK_STREAM, 0);
 	if (listener == -1)

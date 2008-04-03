@@ -26,7 +26,7 @@ int main(int argc, char **argv)
 	if (mrpc_conn_set_create(&cset, proto_client, NULL))
 		die("Couldn't create conn set");
 	mrpc_set_disconnect_func(cset, disconnect_user);
-	mrpc_start_dispatch_thread(cset);
+	start_monitored_dispatcher(cset);
 
 	/* Try repeated connections from the same conn set */
 	for (i=0; i<500; i++) {
@@ -43,14 +43,13 @@ int main(int argc, char **argv)
 		mrpc_conn_close(conn);
 	}
 	mrpc_conn_set_unref(cset);
-	expect_disconnects(500, -1, 0);
 
 	/* Try repeated connections from different conn sets */
 	for (i=0; i<100; i++) {
 		if (mrpc_conn_set_create(&cset, proto_client, NULL))
 			die("Couldn't create conn set");
 		mrpc_set_disconnect_func(cset, disconnect_user);
-		mrpc_start_dispatch_thread(cset);
+		start_monitored_dispatcher(cset);
 
 		ret=mrpc_conn_create(&conn, cset, NULL);
 		if (ret)

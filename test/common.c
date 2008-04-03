@@ -18,14 +18,15 @@
 
 static struct {
 	pthread_mutex_t lock;
-	pthread_cond_t cond;
 	int disc_normal;
 	int disc_ioerr;
 	int disc_user;
 	int ioerrs;
+	int running_dispatchers;
+	pthread_cond_t dispatcher_cond;
 } stats = {
 	.lock = PTHREAD_MUTEX_INITIALIZER,
-	.cond = PTHREAD_COND_INITIALIZER
+	.dispatcher_cond = PTHREAD_COND_INITIALIZER
 };
 
 void _message(const char *file, int line, const char *func, const char *fmt,
@@ -38,6 +39,34 @@ void _message(const char *file, int line, const char *func, const char *fmt,
 	vfprintf(stderr, fmt, ap);
 	fprintf(stderr, "\n");
 	va_end(ap);
+}
+
+static void *monitored_dispatcher(void *data)
+{
+	struct mrpc_conn_set *set=data;
+
+	mrpc_dispatcher_add(set);
+	expect(mrpc_dispatch_loop(set), ENXIO);
+	mrpc_dispatcher_remove(set);
+	pthread_mutex_lock(&stats.lock);
+	stats.running_dispatchers--;
+	pthread_mutex_unlock(&stats.lock);
+	pthread_cond_broadcast(&stats.dispatcher_cond);
+	return NULL;
+}
+
+void start_monitored_dispatcher(struct mrpc_conn_set *set)
+{
+	pthread_t thr;
+	pthread_attr_t attr;
+
+	pthread_mutex_lock(&stats.lock);
+	stats.running_dispatchers++;
+	pthread_mutex_unlock(&stats.lock);
+	expect(pthread_attr_init(&attr), 0);
+	expect(pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED), 0);
+	expect(pthread_create(&thr, &attr, monitored_dispatcher, set), 0);
+	expect(pthread_attr_destroy(&attr), 0);
 }
 
 struct mrpc_conn_set *spawn_server(unsigned *listen_port,
@@ -57,7 +86,7 @@ struct mrpc_conn_set *spawn_server(unsigned *listen_port,
 	if (ret)
 		die("%s", strerror(ret));
 	for (i=0; i<threads; i++)
-		mrpc_start_dispatch_thread(set);
+		start_monitored_dispatcher(set);
 	if (listen_port)
 		*listen_port=port;
 	return set;
@@ -75,7 +104,6 @@ void disconnect_normal(void *conn_data, enum mrpc_disc_reason reason)
 	pthread_mutex_lock(&stats.lock);
 	stats.disc_normal++;
 	pthread_mutex_unlock(&stats.lock);
-	pthread_cond_broadcast(&stats.cond);
 }
 
 void disconnect_ioerr(void *conn_data, enum mrpc_disc_reason reason)
@@ -85,7 +113,6 @@ void disconnect_ioerr(void *conn_data, enum mrpc_disc_reason reason)
 	pthread_mutex_lock(&stats.lock);
 	stats.disc_ioerr++;
 	pthread_mutex_unlock(&stats.lock);
-	pthread_cond_broadcast(&stats.cond);
 }
 
 void disconnect_user(void *conn_data, enum mrpc_disc_reason reason)
@@ -95,7 +122,6 @@ void disconnect_user(void *conn_data, enum mrpc_disc_reason reason)
 	pthread_mutex_lock(&stats.lock);
 	stats.disc_user++;
 	pthread_mutex_unlock(&stats.lock);
-	pthread_cond_broadcast(&stats.cond);
 }
 
 void handle_ioerr(void *conn_private, char *msg)
@@ -103,21 +129,27 @@ void handle_ioerr(void *conn_private, char *msg)
 	pthread_mutex_lock(&stats.lock);
 	stats.ioerrs++;
 	pthread_mutex_unlock(&stats.lock);
-	pthread_cond_broadcast(&stats.cond);
 }
 
-void expect_disconnects(int user, int normal, int ioerr)
+static void dispatcher_barrier(void)
 {
 	struct timespec timeout = {0};
 
 	timeout.tv_sec=time(NULL) + TIMEOUT;
 	pthread_mutex_lock(&stats.lock);
-	while ((user != -1 && stats.disc_user < user) ||
-				(normal != -1 && stats.disc_normal < normal) ||
-				(ioerr != -1 && stats.disc_ioerr < ioerr))
-		if (pthread_cond_timedwait(&stats.cond, &stats.lock,
+	while (stats.running_dispatchers)
+		if (pthread_cond_timedwait(&stats.dispatcher_cond, &stats.lock,
 					&timeout) == ETIMEDOUT)
-			break;
+			die("Timed out waiting for dispatchers to exit "
+						"(remaining: %d)",
+						stats.running_dispatchers);
+	pthread_mutex_unlock(&stats.lock);
+}
+
+void expect_disconnects(int user, int normal, int ioerr)
+{
+	dispatcher_barrier();
+	pthread_mutex_lock(&stats.lock);
 	if (user != -1 && stats.disc_user != user)
 		die("Expected %d user disconnects, got %d", user,
 					stats.disc_user);
@@ -132,14 +164,8 @@ void expect_disconnects(int user, int normal, int ioerr)
 
 void expect_ioerrs(int count)
 {
-	struct timespec timeout = {0};
-
-	timeout.tv_sec=time(NULL) + TIMEOUT;
+	dispatcher_barrier();
 	pthread_mutex_lock(&stats.lock);
-	while (stats.ioerrs < count)
-		if (pthread_cond_timedwait(&stats.cond, &stats.lock,
-					&timeout) == ETIMEDOUT)
-			break;
 	if (stats.ioerrs != count)
 		die("Expected %d I/O errors, got %d", count, stats.ioerrs);
 	pthread_mutex_unlock(&stats.lock);

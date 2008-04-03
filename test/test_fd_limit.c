@@ -82,7 +82,7 @@ void client(int files, unsigned port)
 	if (mrpc_conn_set_create(&cset, proto_client, NULL))
 		die("Couldn't allocate conn set");
 	mrpc_set_disconnect_func(cset, disconnect_user);
-	mrpc_start_dispatch_thread(cset);
+	start_monitored_dispatcher(cset);
 	queue=g_async_queue_new();
 	pthread_create(&thr, NULL, closer, queue);
 

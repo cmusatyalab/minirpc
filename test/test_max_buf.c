@@ -36,7 +36,7 @@ int main(int argc, char **argv)
 	if (ret)
 		die("%s", strerror(ret));
 
-	mrpc_start_dispatch_thread(cset);
+	start_monitored_dispatcher(cset);
 	expect(send_buffer_sync(conn), MINIRPC_ENCODING_ERR);
 	expect(proto_ping(conn), 0);
 	expect(recv_buffer_sync(conn), MINIRPC_ENCODING_ERR);

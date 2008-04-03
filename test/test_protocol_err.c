@@ -124,7 +124,7 @@ int main(int argc, char **argv)
 		die("Couldn't create client conn set");
 	mrpc_set_disconnect_func(cset, disconnect_normal);
 	mrpc_set_ioerr_func(cset, handle_ioerr);
-	mrpc_start_dispatch_thread(cset);
+	start_monitored_dispatcher(cset);
 
 	cfd=socket(PF_INET, SOCK_STREAM, 0);
 	if (cfd == -1)
@@ -269,6 +269,7 @@ int main(int argc, char **argv)
 
 	close(cfd);
 	close(sfd);
+	mrpc_listen_close(sset);
 	mrpc_conn_set_unref(sset);
 	mrpc_conn_set_unref(cset);
 	expect_disconnects(0, 2, 0);

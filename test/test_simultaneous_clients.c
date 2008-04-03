@@ -70,7 +70,7 @@ int main(int argc, char **argv)
 		die("Couldn't create conn set");
 	mrpc_set_disconnect_func(cset, disconnect_user);
 	for (i=0; i<DISPATCHERS; i++)
-		mrpc_start_dispatch_thread(cset);
+		start_monitored_dispatcher(cset);
 	pthread_mutex_init(&lock, NULL);
 	pthread_cond_init(&cond, NULL);
 
