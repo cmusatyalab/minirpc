@@ -9,11 +9,15 @@
  * ACCEPTANCE OF THIS AGREEMENT
  */
 
+#include <semaphore.h>
 #include "common.h"
+
+sem_t accepted;
 
 void *do_accept(void *set_data, struct mrpc_connection *conn,
 			struct sockaddr *from, socklen_t from_len)
 {
+	sem_post(&accepted);
 	mrpc_conn_unref(conn);
 	sync_server_set_ops(conn);
 	return conn;
@@ -27,6 +31,7 @@ int main(int argc, char **argv)
 	unsigned port;
 	int ret;
 
+	sem_init(&accepted, 0, 0);
 	sset=spawn_server(&port, proto_server, do_accept, NULL, 1);
 	mrpc_set_disconnect_func(sset, disconnect_normal_no_unref);
 	mrpc_conn_set_ref(sset);
@@ -48,6 +53,7 @@ int main(int argc, char **argv)
 	mrpc_conn_set_unref(cset);
 	mrpc_conn_set_unref(sset);
 	mrpc_conn_set_unref(sset);
+	sem_wait(&accepted);
 	mrpc_listen_close(sset);
 	mrpc_conn_unref(conn);
 	mrpc_conn_unref(conn);
@@ -58,5 +64,6 @@ int main(int argc, char **argv)
 	invalidate_sync(conn);
 	mrpc_conn_close(conn);
 	expect_disconnects(1, 1, 0);
+	sem_destroy(&accepted);
 	return 0;
 }
