@@ -23,7 +23,7 @@
 void _message(const char *file, int line, const char *func, const char *fmt,
 			...);
 #define message(args...) _message(__FILE__, __LINE__, __func__, args)
-#define die(args...) do {message(args); exit(1);} while (0)
+#define die(args...) do {message(args); abort();} while (0)
 void start_monitored_dispatcher(struct mrpc_conn_set *set);
 struct mrpc_conn_set *spawn_server(unsigned *listen_port,
 			const struct mrpc_protocol *protocol,
