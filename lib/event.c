@@ -15,6 +15,8 @@
 #include <assert.h>
 #include <errno.h>
 #include <pthread.h>
+#include <semaphore.h>
+#include <errno.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
@@ -22,9 +24,7 @@ static __thread struct mrpc_event *active_event;
 
 struct dispatch_thread_data {
 	struct mrpc_conn_set *set;
-	pthread_mutex_t lock;
-	pthread_cond_t cond;
-	int started;
+	sem_t started;
 };
 
 struct mrpc_event *mrpc_alloc_event(struct mrpc_connection *conn,
@@ -527,10 +527,7 @@ static void *dispatch_thread(void *arg)
 
 	block_signals();
 	mrpc_dispatcher_add(set);
-	pthread_mutex_lock(&data->lock);
-	data->started=1;
-	pthread_cond_broadcast(&data->cond);
-	pthread_mutex_unlock(&data->lock);
+	sem_post(&data->started);
 	mrpc_dispatch_loop(set);
 	mrpc_dispatcher_remove(set);
 	return NULL;
@@ -546,20 +543,22 @@ exported int mrpc_start_dispatch_thread(struct mrpc_conn_set *set)
 	if (set == NULL)
 		return EINVAL;
 	data.set=set;
-	pthread_mutex_init(&data.lock, NULL);
-	pthread_cond_init(&data.cond, NULL);
-	ret=pthread_attr_init(&attr);
+	ret=sem_init(&data.started, 0, 0);
 	if (ret)
 		return ret;
+	ret=pthread_attr_init(&attr);
+	if (ret)
+		goto out_sem;
 	ret=pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED);
 	if (ret)
-		goto out;
+		goto out_attr;
 	ret=pthread_create(&thr, &attr, dispatch_thread, &data);
-	pthread_mutex_lock(&data.lock);
-	while (!data.started)
-		pthread_cond_wait(&data.cond, &data.lock);
-	pthread_mutex_unlock(&data.lock);
-out:
+	if (ret)
+		goto out_attr;
+	while (sem_wait(&data.started) && errno == EINTR);
+out_attr:
 	pthread_attr_destroy(&attr);
+out_sem:
+	sem_destroy(&data.started);
 	return ret;
 }

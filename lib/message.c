@@ -12,6 +12,7 @@
 #include <semaphore.h>
 #include <pthread.h>
 #include <assert.h>
+#include <errno.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
@@ -171,7 +172,7 @@ exported mrpc_status_t mrpc_send_request(const struct mrpc_protocol *protocol,
 		return ret;
 	}
 
-	sem_wait(&sem);
+	while (sem_wait(&sem) && errno == EINTR);
 	sem_destroy(&sem);
 	reply=g_atomic_pointer_get(&reply);
 	pthread_mutex_lock(&conn->sequence_lock);
