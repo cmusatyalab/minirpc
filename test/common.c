@@ -14,6 +14,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <pthread.h>
+#include <semaphore.h>
 #include "common.h"
 
 static struct {
@@ -27,6 +28,11 @@ static struct {
 } stats = {
 	.lock = PTHREAD_MUTEX_INITIALIZER,
 	.dispatcher_cond = PTHREAD_COND_INITIALIZER
+};
+
+struct dispatcher_data {
+	struct mrpc_conn_set *set;
+	sem_t ready;
 };
 
 void _message(const char *file, int line, const char *func, const char *fmt,
@@ -43,9 +49,11 @@ void _message(const char *file, int line, const char *func, const char *fmt,
 
 static void *monitored_dispatcher(void *data)
 {
-	struct mrpc_conn_set *set=data;
+	struct dispatcher_data *ddata=data;
+	struct mrpc_conn_set *set=ddata->set;
 
 	mrpc_dispatcher_add(set);
+	sem_post(&ddata->ready);
 	expect(mrpc_dispatch_loop(set), ENXIO);
 	mrpc_dispatcher_remove(set);
 	pthread_mutex_lock(&stats.lock);
@@ -57,16 +65,21 @@ static void *monitored_dispatcher(void *data)
 
 void start_monitored_dispatcher(struct mrpc_conn_set *set)
 {
+	struct dispatcher_data ddata;
 	pthread_t thr;
 	pthread_attr_t attr;
 
+	ddata.set=set;
+	sem_init(&ddata.ready, 0, 0);
 	pthread_mutex_lock(&stats.lock);
 	stats.running_dispatchers++;
 	pthread_mutex_unlock(&stats.lock);
 	expect(pthread_attr_init(&attr), 0);
 	expect(pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_DETACHED), 0);
-	expect(pthread_create(&thr, &attr, monitored_dispatcher, set), 0);
+	expect(pthread_create(&thr, &attr, monitored_dispatcher, &ddata), 0);
 	expect(pthread_attr_destroy(&attr), 0);
+	sem_wait(&ddata.ready);
+	sem_destroy(&ddata.ready);
 }
 
 struct mrpc_conn_set *spawn_server(unsigned *listen_port,
