@@ -36,15 +36,6 @@ static int setsockoptval(int fd, int level, int optname, int value)
 	return 0;
 }
 
-static void conn_set_start_shutdown(struct mrpc_conn_set *set)
-{
-	/* We can't call conn_set_free() directly from conn_set_put():
-	   if we were called from an event thread, that would deadlock.
-	   Have the listener thread clean up the set. */
-	selfpipe_set(set->shutdown_pipe);
-	selfpipe_set(set->events_notify_pipe);
-}
-
 #define REFCOUNT_GET_FUNC(modifier, name, type, member)			\
 	modifier void name(type *item)					\
 	{								\
@@ -69,8 +60,11 @@ static void conn_set_start_shutdown(struct mrpc_conn_set *set)
 		}							\
 	}
 REFCOUNT_GET_FUNC(static, conn_set_get, struct mrpc_conn_set, refs)
+/* We can't call conn_set_free() directly from conn_set_put(): if we were
+   called from an event thread, that would deadlock.  Have the listener
+   thread clean up the set. */
 REFCOUNT_PUT_FUNC(static, conn_set_put, struct mrpc_conn_set, refs,
-			conn_set_start_shutdown(item))
+			selfpipe_set(item->shutdown_pipe))
 REFCOUNT_GET_FUNC(exported, mrpc_conn_set_ref, struct mrpc_conn_set,
 			user_refs)
 REFCOUNT_PUT_FUNC(exported, mrpc_conn_set_unref, struct mrpc_conn_set,
@@ -906,6 +900,7 @@ bad:
 
 static void conn_set_free(struct mrpc_conn_set *set)
 {
+	selfpipe_set(set->events_notify_pipe);
 	pthread_mutex_lock(&set->events_lock);
 	while (set->events_threads)
 		pthread_cond_wait(&set->events_threads_cond, &set->events_lock);
