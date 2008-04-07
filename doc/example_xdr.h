@@ -3,8 +3,10 @@
 /**
  * @file
  * @brief Data structures for the example protocol
- * @addtogroup example_common
- * @{
+ *
+ * This header file contains the C equivalents of the data structures defined
+ * in the @c .mx protocol definition file.  See the source code of
+ * example_xdr.h for details.
  */
 
 /*
@@ -23,7 +25,7 @@ extern "C" {
 #endif
 
 /**
- * @brief Generated enum corresponding to example_color XDR type
+ * @cond DISABLED
  */
 enum example_color {
 	RED = 0,
@@ -34,37 +36,22 @@ enum example_color {
 	INDIGO = 5,
 	VIOLET = 6,
 };
-/**
- * @brief Generated typedef for example_color XDR type
- */
 typedef enum example_color example_color;
 
-/**
- * @brief Generated struct corresponding to example_color_choice XDR type
- */
 struct example_color_choice {
 	struct {
 		u_int acceptable_len;
 		enum example_color *acceptable_val;
-	} acceptable;  /**< The @c acceptable variable-length array */
-	enum example_color preferred;  /**< The @c preferred enum */
+	} acceptable;
+	enum example_color preferred;
 };
-/**
- * @brief Generated typedef for example_color_choice XDR type
- */
 typedef struct example_color_choice example_color_choice;
 
-/**
- * @brief Generated typedef corresponding to example_count XDR typedef
- */
 typedef int example_count;
 
 
 /* The xdr functions.  The application should never need to call these
    directly. */
-/**
- * @cond SHOW_XDR_PROCS
- */
 #if defined(__STDC__) || defined(__cplusplus)
 extern  bool_t xdr_example_color (XDR *, Color*);
 extern  bool_t xdr_example_color_choice (XDR *, ColorChoice*);

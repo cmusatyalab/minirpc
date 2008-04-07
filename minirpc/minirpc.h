@@ -21,36 +21,10 @@
 #include <sys/socket.h>
 #include <stdint.h>
 
-#ifdef DOXYGEN
-/**
- * @brief An opaque handle to a protocol role definition
- * @ingroup setup
- */
-struct mrpc_protocol {};
-
-/**
- * @brief An opaque handle to a connection set
- * @ingroup setup
- */
-struct mrpc_conn_set {};
-
-/**
- * @brief An opaque handle to a connection
- * @ingroup conn
- */
-struct mrpc_connection {};
-
-/**
- * @brief An opaque handle to a protocol message
- * @ingroup event
- */
-struct mrpc_message {};
-#else  /* DOXYGEN */
 struct mrpc_protocol;
 struct mrpc_conn_set;
 struct mrpc_connection;
 struct mrpc_message;
-#endif /* DOXYGEN */
 
 /**
  * @brief Error codes used by the miniRPC protocol
