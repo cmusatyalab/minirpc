@@ -93,7 +93,7 @@ int main(int argc, char **argv)
 	unsigned port;
 	int ret;
 	int i;
-	void *(*dispatch_func)(void *);
+	void *(*dispatch_func)(void *)=NULL;  /* avoid compiler warning */
 	pthread_t thr;
 
 	sem_init(&done, 0, 0);
