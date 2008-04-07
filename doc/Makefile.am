@@ -6,26 +6,42 @@ EXAMPLES   = example.mx
 SRCPATHS  = $(foreach file,$(DOCFILES),$(srcdir)/$(file)) $(DOCHEADERS)
 EXTRA_DIST = $(DOCFILES) $(EXAMPLES)
 
+DOXYCMD = SRCFILES="$(SRCPATHS)" DOCPATH=$(srcdir) $(DOXYGEN) $< >/dev/null
+
 if HAVE_DOXYGEN
-doxygen.stamp: $(srcdir)/Doxyfile $(SRCPATHS) $(EXAMPLES)
+html.stamp: $(srcdir)/Doxyfile $(SRCPATHS) $(EXAMPLES)
 	rm -rf html
-	SRCFILES="$(SRCPATHS)" DOCPATH=$(srcdir) $(DOXYGEN) $< >/dev/null
-	touch doxygen.stamp
+	GENERATE_HTML=YES GENERATE_LATEX=NO $(DOXYCMD)
+	touch html.stamp
+
+pdf.stamp: $(srcdir)/Doxyfile $(SRCPATHS) $(EXAMPLES)
+	rm -rf latex
+	GENERATE_HTML=NO GENERATE_LATEX=YES $(DOXYCMD)
+	$(MAKE) $(AM_MAKEFLAGS) -C latex pdf
+	touch pdf.stamp
 else
-doxygen.stamp:
+html.stamp:
+	@echo "doxygen command not found.  Documentation will not be built."
+
+pdf.stamp:
 	@echo "doxygen command not found.  Documentation will not be built."
 endif
 
-html-local: doxygen.stamp
+html-local: html.stamp
+pdf-local: pdf.stamp
 
 installdirs-local:
-	$(MKDIR_P) $(DESTDIR)$(htmldir)
+	$(MKDIR_P) $(DESTDIR)$(htmldir) $(DESTDIR)$(pdfdir)
 
 install-html-local: html-local installdirs-local
 	-[ -d html ] && $(INSTALL_DATA) html/* $(DESTDIR)$(htmldir)
 
+install-pdf-local: pdf-local installdirs-local
+	-[ -d latex ] && $(INSTALL_DATA) latex/refman.pdf \
+				$(DESTDIR)$(pdfdir)/manual.pdf
+
 uninstall-local:
-	rm -f $(DESTDIR)$(htmldir)/*
+	rm -f $(DESTDIR)$(htmldir)/* $(DESTDIR)$(pdfdir)/manual.pdf
 
 clean-local:
-	rm -rf doxygen.stamp html
+	rm -rf html html.stamp latex pdf.stamp

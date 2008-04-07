@@ -27,6 +27,7 @@ You will need the following utility programs:
 
 - rpcgen (to build stub code)
 - doxygen (to build documentation)
+- pdflatex (to build PDF documentation)
 
 To install the library and minirpcgen:
 
@@ -39,6 +40,11 @@ To build and install HTML documentation:
 
 make html
 make install-html
+
+To build and install PDF documentation:
+
+make pdf
+make install-pdf
 
 LICENSE
 -------

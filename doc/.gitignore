@@ -1,2 +1,4 @@
 html
-doxygen.stamp
+latex
+html.stamp
+pdf.stamp
