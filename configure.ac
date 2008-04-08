@@ -77,7 +77,7 @@ CHECK_LINK([for epoll], [AC_LANG_PROGRAM([#include <sys/epoll.h>],
 VERSION_CODE=`echo $PACKAGE_VERSION | tr . ' ' | {
 	read maj min rev
 	test -z "$rev" && rev=0
-	echo $((($maj << 16) + ($min << 8) + $rev))
+	echo $((($maj << 24) + ($min << 16) + ($rev << 8)))
 }`
 AC_SUBST([VERSION_CODE])
 

@@ -159,11 +159,11 @@ enum mrpc_conn_counter {
 #define MRPC_VERSION_REVISION(code)
 #else  /* DOXYGEN */
 #define MRPC_MAKE_VERSION_CODE(major, minor, revision) \
-			(((major) << 16) + ((minor) << 8) + (revision))
-#define MRPC_VERSION_MAJOR(code)	((code) >> 16)
-#define MRPC_VERSION_MINOR(code)	(((code) >> 8) & 255)
-#define MRPC_VERSION_REVISION(code)	((code) & 255)
-#define MRPC_VERSION_CODE()		(!!VERSION_CODE!!)
+			(((major) << 24) + ((minor) << 16) + ((revision) << 8))
+#define MRPC_VERSION_MAJOR(code)	((code) >> 24)
+#define MRPC_VERSION_MINOR(code)	(((code) >> 16) & 255)
+#define MRPC_VERSION_REVISION(code)	(((code) >> 8) & 255)
+#define MRPC_VERSION_CODE()		!!VERSION_CODE!!
 #endif  /* DOXYGEN */
 
 /**
