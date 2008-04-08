@@ -42,8 +42,6 @@ static mrpc_status_t serialize_common(enum xdr_op direction, xdrproc_t xdr_proc,
 	XDR xdrs;
 	mrpc_status_t ret=MINIRPC_OK;
 
-	if (buflen && data == NULL)
-		return MINIRPC_ENCODING_ERR;
 	xdrmem_create(&xdrs, buf, buflen, direction);
 	if (!xdr_proc(&xdrs, data) || xdr_getpos(&xdrs) != buflen)
 		ret=MINIRPC_ENCODING_ERR;
@@ -79,6 +77,8 @@ static mrpc_status_t format_message(struct mrpc_connection *conn,
 	XDR xdrs;
 	mrpc_status_t ret;
 
+	if (xdr_proc != (xdrproc_t) xdr_void && data == NULL)
+		return MINIRPC_ENCODING_ERR;
 	msg=mrpc_alloc_message(conn);
 	xdrlen_create(&xdrs);
 	if (!xdr_proc(&xdrs, data)) {
