@@ -109,6 +109,73 @@ enum mrpc_conn_counter {
  * @{
  */
 
+#ifdef DOXYGEN
+/**
+ * @brief The version code for the miniRPC headers the application was
+ *	compiled against
+ * @return The version code
+ *
+ * Version codes for higher versions are numerically greater than version
+ * codes for lower versions.
+ */
+#define MRPC_VERSION_CODE()
+
+/**
+ * @brief Make a version code from the specified components
+ * @param	major
+ *	The major release number
+ * @param	minor
+ *	The minor release number
+ * @param	revision
+ *	The revision number
+ *
+ * Version codes for higher versions are numerically greater than version
+ * codes for lower versions.
+ */
+#define MRPC_MAKE_VERSION_CODE(major, minor, revision)
+
+/**
+ * @brief Extract a major version number from a version code
+ * @param	code
+ *	The version code
+ * @return The major version number
+ */
+#define MRPC_VERSION_MAJOR(code)
+
+/**
+ * @brief Extract a minor version number from a version code
+ * @param	code
+ *	The version code
+ * @return The minor version number
+ */
+#define MRPC_VERSION_MINOR(code)
+
+/**
+ * @brief Extract a revision number from a version code
+ * @param	code
+ *	The version code
+ * @return The revision number
+ */
+#define MRPC_VERSION_REVISION(code)
+#else  /* DOXYGEN */
+#define MRPC_MAKE_VERSION_CODE(major, minor, revision) \
+			(((major) << 16) + ((minor) << 8) + (revision))
+#define MRPC_VERSION_MAJOR(code)	((code) >> 16)
+#define MRPC_VERSION_MINOR(code)	(((code) >> 8) & 255)
+#define MRPC_VERSION_REVISION(code)	((code) & 255)
+#define MRPC_VERSION_CODE()		(!!VERSION_CODE!!)
+#endif  /* DOXYGEN */
+
+/**
+ * @brief The version code for the miniRPC library the application is
+ *	running against
+ * @return The version code
+ *
+ * Version codes for higher versions are numerically greater than version
+ * codes for lower versions.
+ */
+int mrpc_version_code(void);
+
 /**
  * @brief Event callback fired on arrival of a new connection
  * @param	set_data

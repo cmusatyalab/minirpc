@@ -73,6 +73,14 @@ CHECK_LINK([for epoll], [AC_LANG_PROGRAM([#include <sys/epoll.h>],
 			[int fd=epoll_create(8)])], HAVE_EPOLL,
 			[Define if the C library supports the epoll system calls.])
 
+# Generate the library version code.
+VERSION_CODE=`echo $PACKAGE_VERSION | tr . ' ' | {
+	read maj min rev
+	test -z "$rev" && rev=0
+	echo $((($maj << 16) + ($min << 8) + $rev))
+}`
+AC_SUBST([VERSION_CODE])
+
 AC_CONFIG_FILES([minirpc.pc
 		Makefile
 		doc/Makefile
