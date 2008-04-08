@@ -111,7 +111,7 @@ enum mrpc_conn_counter {
 
 #ifdef DOXYGEN
 /**
- * @brief The version code for the miniRPC headers the application was
+ * @brief Get the version code for the miniRPC headers the application was
  *	compiled against
  * @return The version code
  *
@@ -167,7 +167,7 @@ enum mrpc_conn_counter {
 #endif  /* DOXYGEN */
 
 /**
- * @brief The version code for the miniRPC library the application is
+ * @brief Get the version code for the miniRPC library the application is
  *	running against
  * @return The version code
  *

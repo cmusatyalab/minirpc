@@ -12,6 +12,22 @@
 
 #include "example_xdr.h"
 
+#ifdef DOXYGEN
+/**
+ * @brief Get the version code of the @c minirpcgen which generated these
+ *	stubs
+ * @return The version code
+ *
+ * Version codes for higher versions are numerically greater than version codes
+ * for lower versions.
+ */
+/* This is a hack to work around the fact that Doxygen insists on showing the
+   macro's definition in its synopsis. */
+#define EXAMPLE_MRPC_VERSION_CODE()
+#else
+#define EXAMPLE_MRPC_VERSION_CODE() 131072
+#endif
+
 /* The application should never need to use these directly. */
 /**
  * @cond SHOW_PROCEDURE_ENUM
