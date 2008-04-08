@@ -1,3 +1,5 @@
+LIBTOOL_VERSION = 0:0:0
+
 AM_CPPFLAGS = -I$(top_srcdir) -D_GNU_SOURCE
 CFLAGS_WARNINGS = -W -Wall -Wstrict-prototypes -Wmissing-prototypes
 CFLAGS_WARNINGS += -Wno-unused-parameter -Wno-missing-field-initializers
@@ -24,6 +26,7 @@ if HAVE_EPOLL
 libminirpc_la_SOURCES += pollset_epoll.c
 endif
 libminirpc_la_LIBADD = libminirpcxdr.la
+libminirpc_la_LDFLAGS = $(AM_LDFLAGS) -version-info $(LIBTOOL_VERSION)
 CLEANFILES = version.h
 BUILT_SOURCES += version.h
 
