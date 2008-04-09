@@ -13,21 +13,22 @@ AM_LDFLAGS = -lpthread
 # Build generated XDR sources as a separate convenience library with warnings
 # disabled, since rpcgen-produced code generates warnings
 noinst_LTLIBRARIES = libminirpcxdr.la
-libminirpcxdr_la_SOURCES = minirpc_xdr.c minirpc_xdr.h
+libminirpcxdr_la_SOURCES = minirpc.x
+nodist_libminirpcxdr_la_SOURCES = minirpc_xdr.c minirpc_xdr.h
 libminirpcxdr_la_CFLAGS = $(CFLAGS_OTHER)
-MAINTAINERCLEANFILES = minirpc_xdr.c minirpc_xdr.h
+CLEANFILES = minirpc_xdr.c minirpc_xdr.h
 BUILT_SOURCES = minirpc_xdr.h
 
 lib_LTLIBRARIES = libminirpc.la
 libminirpc_la_SOURCES = config.c connection.c message.c event.c serialize.c
 libminirpc_la_SOURCES += xdr_len.c selfpipe.c pollset.c pollset_poll.c util.c
-libminirpc_la_SOURCES += internal.h minirpc.x pollset_impl.h version.h
+libminirpc_la_SOURCES += internal.h pollset_impl.h version.h
 if HAVE_EPOLL
 libminirpc_la_SOURCES += pollset_epoll.c
 endif
 libminirpc_la_LIBADD = libminirpcxdr.la
 libminirpc_la_LDFLAGS = $(AM_LDFLAGS) -version-info $(LIBTOOL_VERSION)
-CLEANFILES = version.h
+CLEANFILES += version.h
 BUILT_SOURCES += version.h
 
 %_xdr.c: %.x
