@@ -47,7 +47,7 @@ mrpc_status_t example_choose_color(struct mrpc_connection *conn,
  * @return ::MINIRPC_OK or an error code
  * @sa free_example_count()
  *
- * @c out is allocated by miniRPC but must be freed by the application.
+ * @c *out is allocated by miniRPC but must be freed by the application.
  *
  * A return code of MINIRPC_OK indicates that the server completed the
  * procedure call and returned an example_count structure in @c *out.
@@ -129,7 +129,7 @@ mrpc_status_t example_choose_color_async(struct mrpc_connection *conn,
  *	An application-specific cookie to be passed to the callback function
  * @return MINIRPC_OK or an error code
  *
- * Initiates a get_num_colors remote procedure call and returns immediately.
+ * Initiates a @c get_num_colors remote procedure call and returns immediately.
  * If the return code is not MINIRPC_OK, miniRPC was unable to transmit
  * the procedure call to the remote system.
  *

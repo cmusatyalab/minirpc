@@ -5,6 +5,7 @@ miniRPC is a remote procedure call library which works on top of TCP.
 It has the following design goals:
 
 - Simple on-the-wire protocol
+- Scalability to large numbers of connections
 - Automatic stub generation
 - No use of a portmapper: clients connect directly to the well-known port for
   a service

@@ -69,14 +69,14 @@ struct example_server_operations {
 	 * If it returns ::MINIRPC_PENDING, no immediate reply will be made.
 	 * At its convenience, the application can then call
 	 * example_get_num_colors_send_async_reply() to return ::MINIRPC_OK
-	 * and an example_count structure, or
+	 * and an @c example_count structure, or
 	 * example_get_num_colors_send_async_reply_error() to return an error
 	 * code.
 	 *
 	 * @c out is pre-allocated and should be filled in by the handler.
 	 * It will be freed once the handler returns, even if the handler
 	 * returns ::MINIRPC_PENDING; the application will need to allocate
-	 * its own example_count if it later wants to send an asynchronous
+	 * its own @c example_count if it later wants to send an asynchronous
 	 * reply.
 	 */
 	mrpc_status_t (*get_num_colors)(void *conn_data,
@@ -105,10 +105,11 @@ struct example_server_operations {
  *	The connection
  * @param	ops
  *	The operations structure to associate with the connection
+ * @sa	example_server_operations
  *
  * This function can be used to change the handlers which will be called when
- * a message arrives on the given connection.  It @em must be called from the
- * accept function, to set an initial set of handlers for an incoming
+ * a procedure call arrives on the given connection.  It @em must be called
+ * from the accept function, to set an initial set of handlers for an incoming
  * connection.  It can also be called at any point thereafter, including from
  * an event handler.
  *

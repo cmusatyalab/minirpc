@@ -212,10 +212,9 @@ typedef void *(mrpc_accept_fn)(void *set_data, struct mrpc_connection *conn,
  * If supplied, this callback is fired when a connection is closed for any
  * reason, including when explicitly requested by the application (with
  * mrpc_conn_close()).  Once the callback returns, the application will not
- * receive further events on this connection and should make no further
- * miniRPC calls against it.  If the connection's refcount is greater than
- * zero after the disconnection function returns, the connection handle will
- * persist until all references are released.
+ * receive further events on this connection.  If the connection's refcount
+ * is greater than zero after the disconnection function returns, the
+ * connection handle will persist until all references are released.
  */
 typedef void (mrpc_disconnect_fn)(void *conn_data,
 			enum mrpc_disc_reason reason);
@@ -350,9 +349,9 @@ int mrpc_set_ioerr_func(struct mrpc_conn_set *set, mrpc_ioerr_fn *func);
  * remote system returned ::MINIRPC_ENCODING_ERR.  Unidirectional messages
  * exceeding the threshold will be dropped.
  *
- * This is intended only as a DoS prevention measure, and should be
- * set to a value larger than any legitimate message possible in your
- * protocol.
+ * This is intended only as a denial-of-service prevention measure, and
+ * should be set to a value larger than any legitimate message possible
+ * in your protocol.
  */
 int mrpc_set_max_buf_len(struct mrpc_conn_set *set, unsigned len);
 
@@ -449,7 +448,7 @@ int mrpc_set_keepalive_parameters(struct mrpc_conn_set *set, unsigned idletime,
  * - Set the operations structure using the set_operations function for this
  * protocol role
  * - Prevent connection events from being processed with mrpc_stop_events()
- * - Update its refcount with mrpc_conn_ref()/mrpc_conn_unref().  If the last
+ * - Update its refcount with mrpc_conn_ref() / mrpc_conn_unref().  If the last
  * reference is removed with mrpc_conn_unref(), the handle is freed.
  *
  * If @c data is NULL, the application-specific pointer is set to the
@@ -594,7 +593,6 @@ int mrpc_conn_get_counter(struct mrpc_connection *conn,
  * called mrpc_release_event(), then the application is guaranteed that no
  * more non-error events will occur on the connection once the call returns.
  *
- * The application should not make further API calls against the connection.
  * The application must not free any supporting data structures until the
  * connection set's disconnect function is called for the connection, since
  * further events may be pending.  In addition, the application should not
