@@ -24,7 +24,7 @@ using a simple example protocol.
 A protocol definition file describes the data structures and procedure calls
 to be supported by the protocol.  The data structures are defined using
 XDRL, the External Data Representation Language, defined in
-<a href="http://www.ietf.org/rfc/rfc1832.txt">RFC 1832</a>.  The procedure
+<a href="http://www.ietf.org/rfc/rfc4506.txt">RFC 4506</a>.  The procedure
 calls are defined using a syntax specific to miniRPC.
 
 First, we examine the protocol definition for our example protocol.

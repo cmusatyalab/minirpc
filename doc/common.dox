@@ -15,6 +15,8 @@
 @brief The protocol-independent parts of the miniRPC library
 @{
 
+You must include @c <minirpc/minirpc.h> in order to use the
+protocol-independent API.
 
 @defgroup setup Initialization and Teardown
 miniRPC maintains the notion of a <em>connection set</em>, which is a group
@@ -51,6 +53,7 @@ miniRPC provides the mrpc_bind_fd() function.  This function arranges for an
 existing socket to be serviced by miniRPC, and can be used if the application
 wishes to handle connection setup itself.  This can be used, for example, to
 service Unix domain sockets with miniRPC.
+
 
 @defgroup event Event Processing
 miniRPC handles application callbacks by means of @em events.  When miniRPC
@@ -89,6 +92,24 @@ the dispatch functions.
 - Any thread which expects to dispatch events must register its intent with
 mrpc_dispatcher_add().  When the thread is no longer dispatching events,
 it must so indicate with mrpc_dispatcher_remove().
+
+The application may dispatch using one or more of the following mechanisms:
+
+- Start one or more dispatcher threads with mrpc_start_dispatch_thread().
+This is the simplest method.
+
+- Start its own threads, which do nothing except dispatch for a given
+connection set.  The application may choose this method if it needs to do
+extra initialization or teardown from the context of its dispatcher threads.
+The dispatcher threads will call mrpc_dispatcher_add(), mrpc_dispatch_loop(),
+and mrpc_dispatcher_remove().
+
+- Custom dispatching.  This model is the most flexible but requires slightly
+more code.  One or more application threads can each dispatch for one or
+more connection sets, while also handling non-miniRPC events (such as UI
+updates) originating elsewhere in the application.  The relevant API calls
+are mrpc_get_event_fd(), mrpc_dispatcher_add(), mrpc_dispatch(),
+and mrpc_dispatcher_remove().
 
 @addtogroup common
 @}

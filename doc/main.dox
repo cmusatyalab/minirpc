@@ -49,7 +49,7 @@ and (if applicable) sends a reply.
 - A @em protocol is an application-specific set of remote procedures and data
 structures which define communication on the wire.  miniRPC is a framework
 for implementing these protocols.  The
-<a href="http://www.ietf.org/rfc/rfc1832.txt">XDR</a> serialization format
+<a href="http://www.ietf.org/rfc/rfc4506.txt">XDR</a> serialization format
 used by miniRPC is not self-describing, so both parties to a miniRPC connection
 need to know the protocol being used.
 
