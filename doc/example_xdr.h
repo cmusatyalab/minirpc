@@ -53,9 +53,9 @@ typedef int example_count;
 /* The xdr functions.  The application should never need to call these
    directly. */
 #if defined(__STDC__) || defined(__cplusplus)
-extern  bool_t xdr_example_color (XDR *, Color*);
-extern  bool_t xdr_example_color_choice (XDR *, ColorChoice*);
-extern  bool_t xdr_example_count (XDR *, Count*);
+extern  bool_t xdr_example_color (XDR *, example_color*);
+extern  bool_t xdr_example_color_choice (XDR *, example_color_choice*);
+extern  bool_t xdr_example_count (XDR *, example_count*);
 
 #else /* K&R C */
 extern bool_t xdr_example_color ();
