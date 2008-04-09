@@ -15,7 +15,7 @@ GEN_XDR_H = proto_xdr.h
 GEN_XDR = $(GEN_XDR_C) $(GEN_XDR_H)
 GEN = $(GEN_NOXDR) $(GEN_XDR)
 MAINTAINERCLEANFILES = $(GEN)
-BUILT_SOURCES = $(GEN_H) $(GEN_XDR_H)
+BUILT_SOURCES = $(GEN_NOXDR_H) $(GEN_XDR_H)
 
 check_LIBRARIES = libcommon.a libxdr.a
 libxdr_a_SOURCES = $(GEN_XDR)
