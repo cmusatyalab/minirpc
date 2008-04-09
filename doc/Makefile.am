@@ -1,20 +1,22 @@
-DOCHEADERS = $(top_srcdir)/minirpc/minirpc.h.in
-DOCFILES   = main.dox common.dox example.dox
-DOCFILES  += example_minirpc.h example_client.h example_server.h example_xdr.h
-EXAMPLES   = example.mx
+DOCHEADERS   = $(top_srcdir)/minirpc/minirpc.h.in
+DOCFILES     = main.dox common.dox example.dox
+DOCFILES    += example_minirpc.h example_client.h example_server.h example_xdr.h
+EXAMPLES     = example.mx
+EXAMPLEPATHS = $(foreach file,$(EXAMPLES),$(top_srcdir)/example/$(file))
 
 SRCPATHS  = $(foreach file,$(DOCFILES),$(srcdir)/$(file)) $(DOCHEADERS)
-EXTRA_DIST = $(DOCFILES) $(EXAMPLES)
+EXTRA_DIST = $(DOCFILES)
 
-DOXYCMD = SRCFILES="$(SRCPATHS)" DOCPATH=$(srcdir) $(DOXYGEN) $< >/dev/null
+DOXYCMD = SRCFILES="$(SRCPATHS)" EXAMPLE_PATH=$(top_srcdir)/example \
+			$(DOXYGEN) $< >/dev/null
 
 if HAVE_DOXYGEN
-html.stamp: $(srcdir)/Doxyfile $(SRCPATHS) $(EXAMPLES)
+html.stamp: $(srcdir)/Doxyfile $(SRCPATHS) $(EXAMPLEPATHS)
 	rm -rf html
 	GENERATE_HTML=YES GENERATE_LATEX=NO $(DOXYCMD)
 	touch html.stamp
 
-pdf.stamp: $(srcdir)/Doxyfile $(SRCPATHS) $(EXAMPLES)
+pdf.stamp: $(srcdir)/Doxyfile $(SRCPATHS) $(EXAMPLEPATHS)
 	rm -rf latex
 	GENERATE_HTML=NO GENERATE_LATEX=YES $(DOXYCMD)
 	$(MAKE) $(AM_MAKEFLAGS) -C latex pdf

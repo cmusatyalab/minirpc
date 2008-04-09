@@ -84,6 +84,7 @@ AC_SUBST([VERSION_CODE])
 AC_CONFIG_FILES([minirpc.pc
 		Makefile
 		doc/Makefile
+		example/Makefile
 		minirpc/Makefile
 		lib/Makefile
 		test/Makefile])
