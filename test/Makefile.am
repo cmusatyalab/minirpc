@@ -14,18 +14,20 @@ GEN_XDR_C = proto_xdr.c
 GEN_XDR_H = proto_xdr.h
 GEN_XDR = $(GEN_XDR_C) $(GEN_XDR_H)
 GEN = $(GEN_NOXDR) $(GEN_XDR)
-MAINTAINERCLEANFILES = $(GEN)
+CLEANFILES = $(GEN)
 BUILT_SOURCES = $(GEN_NOXDR_H) $(GEN_XDR_H)
 
 check_LIBRARIES = libcommon.a libxdr.a
-libxdr_a_SOURCES = $(GEN_XDR)
+libxdr_a_SOURCES = proto.mx
+nodist_libxdr_a_SOURCES = $(GEN_XDR)
 libxdr_a_CFLAGS = $(CFLAGS_OTHER)
 libcommon_a_SOURCES  = common.c common.h client_sync.c client_async.c
-libcommon_a_SOURCES += server_sync.c server_async.c $(GEN_NOXDR)
+libcommon_a_SOURCES += server_sync.c server_async.c proto.mx
+nodist_libcommon_a_SOURCES = $(GEN_NOXDR)
 LDADD = libcommon.a libxdr.a
 
 check_SCRIPTS = runtest.sh
-CLEANFILES = $(check_SCRIPTS)
+CLEANFILES += $(check_SCRIPTS)
 EXTRA_DIST = $(check_SCRIPTS:=.in)
 $(check_SCRIPTS): %: %.in Makefile
 	@echo "Generating $@ from $<"
