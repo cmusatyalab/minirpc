@@ -1,7 +1,7 @@
 DOCHEADERS   = $(top_srcdir)/minirpc/minirpc.h.in
 DOCFILES     = main.dox common.dox example.dox
 DOCFILES    += example_minirpc.h example_client.h example_server.h example_xdr.h
-EXAMPLES     = example.mx
+EXAMPLES     = example.mx example_client.c example_server.c
 EXAMPLEPATHS = $(foreach file,$(EXAMPLES),$(top_srcdir)/example/$(file))
 
 SRCPATHS  = $(foreach file,$(DOCFILES),$(srcdir)/$(file)) $(DOCHEADERS)
