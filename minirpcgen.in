@@ -803,8 +803,8 @@ sub parseFile {
 			if (/^\s*(struct|enum)\s+$sym_re\s+{/o) {
 				$types{$2} = 1;
 			}
-			if (/^\s*typedef\s+$sym_re\s+$type_re[<\[]?/o) {
-				$types{$2} = 1;
+			if (/^\s*typedef\s+$type_re\s+$sym_re[<\[]?/o) {
+				$types{$3} = 1;
 			}
 		} else {
 			if (/}/) {
