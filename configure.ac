@@ -60,7 +60,7 @@ fi
 AC_SUBST([enable_valgrind])
 
 # Checks for libraries.
-PKG_CHECK_MODULES([GLIB], [glib-2.0])
+PKG_CHECK_MODULES([GLIB], [glib-2.0 >= 2.10])
 PKG_CHECK_MODULES([GTHREAD], [gthread-2.0])
 CFLAGS="$CFLAGS $GLIB_CFLAGS $GTHREAD_CFLAGS"
 LIBS="$LIBS $GLIB_LIBS $GTHREAD_LIBS"
