@@ -581,12 +581,11 @@ static int lookup_addr(struct addrinfo **res, const char *host, unsigned port,
 		.ai_flags = AI_NUMERICSERV
 	};
 
-	if (asprintf(&portstr, "%u", port) == -1)
-		return ENOMEM;
+	portstr=g_strdup_printf("%u", port);
 	if (passive)
 		hints.ai_flags |= AI_PASSIVE;
 	ret=getaddrinfo(host, portstr, &hints, res);
-	free(portstr);
+	g_free(portstr);
 
 	switch (ret) {
 	case 0:

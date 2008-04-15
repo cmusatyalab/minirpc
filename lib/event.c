@@ -55,7 +55,7 @@ static void destroy_event(struct mrpc_event *event)
 	if (event->msg)
 		mrpc_free_message(event->msg);
 	if (event->errstring)
-		free(event->errstring);
+		g_free(event->errstring);
 	g_slice_free(struct mrpc_event, event);
 }
 
@@ -115,8 +115,7 @@ void queue_ioerr_event(struct mrpc_connection *conn, char *fmt, ...)
 
 	event=mrpc_alloc_event(conn, EVENT_IOERR);
 	va_start(ap, fmt);
-	if (vasprintf(&event->errstring, fmt, ap) == -1)
-		event->errstring=NULL;
+	event->errstring=g_strdup_vprintf(fmt, ap);
 	va_end(ap);
 	queue_event(event);
 }
@@ -432,7 +431,7 @@ static void dispatch_event(struct mrpc_event *event)
 		ioerr=get_config(conn->set, ioerr);
 		if (ioerr)
 			ioerr(conn->private, event->errstring);
-		free(event->errstring);
+		g_free(event->errstring);
 		break;
 	default:
 		assert(0);
