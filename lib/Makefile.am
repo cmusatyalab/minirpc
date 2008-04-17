@@ -34,8 +34,8 @@ BUILT_SOURCES += version.h
 %_xdr.c: %.x
 	rm -f $@
 	$(RPCGEN) -c $^ | \
-		sed -e 's/"$(^:%.x=%\.h)"/"$(^:%.x=%_xdr.h)"/g' > $@ || \
-		(rm $@ && false)
+		sed -e 's:"$(^:%.x=%\.h)":"$(notdir $(^:%.x=%_xdr.h))":g' \
+		> $@ || (rm $@ && false)
 
 %_xdr.h: %.x
 	rm -f $@
