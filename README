@@ -50,5 +50,6 @@ make install-pdf
 LICENSE
 -------
 
-miniRPC is distributed under the terms of the Eclipse Public License, version
-1.0, which can be found in the file named LICENSE.
+This code is distributed "AS IS" without warranty of any kind under the terms
+of the GNU Lesser General Public License version 2.1, as shown in the file
+COPYING.
