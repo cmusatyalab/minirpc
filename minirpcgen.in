@@ -800,7 +800,7 @@ sub parseFile {
 			$line = $1 - 1;
 		}
 		if (!$curDefs) {
-			if (/^\s*(client|server)(procs|msgs)\s+{/) {
+			if (/^\s*(client|server)(procs|msgs)\s*{/) {
 				$curDefs = $1;
 				$noreply = ($2 eq "msgs");
 				$procSets{$curDefs} = {}
@@ -818,7 +818,8 @@ sub parseFile {
 				undef $curDefs;
 				next;
 			}
-			if (/^\s*$sym_re\(($type_re(,\s+$type_re)?)?\)\s*=
+			if (/^\s*$sym_re\s*\(\s*($type_re\s*
+						(,\s*$type_re\s*)?)?\)\s*=
 						\s*([1-9][0-9]*)\s*;/ox) {
 				$func = $1;
 				$num = $8;
@@ -852,7 +853,7 @@ sub genRpclFile {
 	open(FH, "<", $infile) || die "Can't open $infile";
 	while (<FH>) {
 		if (!$inDefs) {
-			if (/^\s*(client|server)(procs|msgs)\s+{/) {
+			if (/^\s*(client|server)(procs|msgs)\s*{/) {
 				$inDefs = 1;
 				print XF "\n";
 			} else {
