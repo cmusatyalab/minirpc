@@ -101,6 +101,81 @@ enum mrpc_conn_counter {
 };
 
 /**
+ * @addtogroup event
+ * @{
+ */
+
+/**
+ * @brief Event callback fired on arrival of a new connection
+ * @param	set_data
+ *	The cookie associated with the connection set
+ * @param	conn
+ *	The handle to the newly-created connection
+ * @param	from
+ *	The address of the remote end of the connection
+ * @param	from_len
+ *	The length of the @c from structure
+ * @return The application-specific cookie to be associated with this
+ *		connection
+ * @sa mrpc_set_accept_func()
+ *
+ * This function is called when a new connection arrives on a listening socket
+ * created with mrpc_listen().  At minimum, the function must set the
+ * connection's operations struct using the protocol-specific set_operations
+ * function; otherwise, no incoming messages for the connection will be
+ * processed.
+ *
+ * @c from is no longer valid after the callback returns.
+ */
+typedef void *(mrpc_accept_fn)(void *set_data, struct mrpc_connection *conn,
+			struct sockaddr *from, socklen_t from_len);
+
+/**
+ * @brief Event callback fired on connection close
+ * @param	conn_data
+ *	The cookie associated with the connection
+ * @param	reason
+ *	The reason the connection was closed
+ * @sa mrpc_set_disconnect_func(), mrpc_conn_unref()
+ *
+ * If supplied, this callback is fired when a connection is closed for any
+ * reason, including when explicitly requested by the application (with
+ * mrpc_conn_close()).  Once the callback returns, the application will not
+ * receive further events on this connection.  If the connection's refcount
+ * is greater than zero after the disconnection function returns, the
+ * connection handle will persist until all references are released.
+ */
+typedef void (mrpc_disconnect_fn)(void *conn_data,
+			enum mrpc_disc_reason reason);
+
+/**
+ * @brief Event callback fired on I/O error
+ * @param	conn_data
+ *	The cookie associated with the connection
+ * @param	message
+ *	A string describing the error
+ * @sa mrpc_set_ioerr_func()
+ *
+ * If supplied, this callback is fired whenever miniRPC encounters an I/O or
+ * XDR error it wishes to report to the application.  @c message is in a
+ * format suitable for logging.  @c message is no longer valid once the
+ * callback returns.
+ *
+ * This callback is fired only on unusual error conditions, generally
+ * caused by invalid data on the wire.  If miniRPC can recover from such an
+ * error, it will do so; if not, it will automatically close the connection
+ * (and report this via the disconnect callback).
+ *
+ * The application need not register an @c ioerr callback unless it wishes to
+ * log such events.  In most cases, the callback function will simply call
+ * the appropriate logging function and return.  If the application is
+ * paranoid about servicing connections which may be in a dubious state, it
+ * may wish to close the affected connection (with mrpc_conn_close()) as well.
+ */
+typedef void (mrpc_ioerr_fn)(void *conn_data, char *message);
+
+/**
+ * @}
  * @addtogroup setup
  * @{
  */
@@ -171,75 +246,6 @@ enum mrpc_conn_counter {
  * codes for lower versions.
  */
 int mrpc_version_code(void);
-
-/**
- * @brief Event callback fired on arrival of a new connection
- * @param	set_data
- *	The cookie associated with the connection set
- * @param	conn
- *	The handle to the newly-created connection
- * @param	from
- *	The address of the remote end of the connection
- * @param	from_len
- *	The length of the @c from structure
- * @return The application-specific cookie to be associated with this
- *		connection
- * @sa mrpc_set_accept_func()
- *
- * This function is called when a new connection arrives on a listening socket
- * created with mrpc_listen().  At minimum, the function must set the
- * connection's operations struct using the protocol-specific set_operations
- * function; otherwise, no incoming messages for the connection will be
- * processed.
- *
- * @c from is no longer valid after the callback returns.
- */
-typedef void *(mrpc_accept_fn)(void *set_data, struct mrpc_connection *conn,
-			struct sockaddr *from, socklen_t from_len);
-
-/**
- * @brief Event callback fired on connection close
- * @param	conn_data
- *	The cookie associated with the connection
- * @param	reason
- *	The reason the connection was closed
- * @sa mrpc_set_disconnect_func(), mrpc_conn_unref()
- *
- * If supplied, this callback is fired when a connection is closed for any
- * reason, including when explicitly requested by the application (with
- * mrpc_conn_close()).  Once the callback returns, the application will not
- * receive further events on this connection.  If the connection's refcount
- * is greater than zero after the disconnection function returns, the
- * connection handle will persist until all references are released.
- */
-typedef void (mrpc_disconnect_fn)(void *conn_data,
-			enum mrpc_disc_reason reason);
-
-/**
- * @brief Event callback fired on I/O error
- * @param	conn_data
- *	The cookie associated with the connection
- * @param	message
- *	A string describing the error
- * @sa mrpc_set_ioerr_func()
- *
- * If supplied, this callback is fired whenever miniRPC encounters an I/O or
- * XDR error it wishes to report to the application.  @c message is in a
- * format suitable for logging.  @c message is no longer valid once the
- * callback returns.
- *
- * This callback is fired only on unusual error conditions, generally
- * caused by invalid data on the wire.  If miniRPC can recover from such an
- * error, it will do so; if not, it will automatically close the connection
- * (and report this via the disconnect callback).
- *
- * The application need not register an @c ioerr callback unless it wishes to
- * log such events.  In most cases, the callback function will simply call
- * the appropriate logging function and return.  If the application is
- * paranoid about servicing connections which may be in a dubious state, it
- * may wish to close the affected connection (with mrpc_conn_close()) as well.
- */
-typedef void (mrpc_ioerr_fn)(void *conn_data, char *message);
 
 /**
  * @brief Create a connection set
