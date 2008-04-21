@@ -931,7 +931,8 @@ while (<IF>) {
 		if /#include/;
 	print XCF;
 }
-close(IF);
+close(IF)
+	or exit 1;
 
 # Generate xdr.h
 my $olddefine = uc "_$base.x_H_RPCGEN";
@@ -943,7 +944,8 @@ while (<IF>) {
 	s/$olddefine/$newdefine/;
 	print XHF;
 }
-close(IF);
+close(IF)
+	or exit 1;
 
 # Commit output
 closeFiles();
