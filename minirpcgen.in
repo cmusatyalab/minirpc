@@ -13,7 +13,7 @@
 use strict;
 use warnings;
 use File::Spec;
-use Getopt::Std;
+use Getopt::Long;
 use Text::Wrap;
 
 my $rpcgen = "!!RPCGEN!!";
@@ -23,6 +23,7 @@ my $version_code = "!!VERSION_CODE!!";
 our $infile;
 our $base;
 our $basepath;
+our $defines;
 our %outfiles;
 our %types;
 our %procSets;
@@ -787,7 +788,7 @@ sub parseFile {
 	my $func;
 	my $num;
 
-	$data=`cpp $infile`;
+	$data=`cpp -DMINIRPC=1 $defines $infile`;
 	die "Couldn't open $infile"
 		if $?;
 	$filename = $infile;
@@ -871,22 +872,32 @@ sub genRpclFile {
 }
 
 sub usage {
-	print "minirpcgen $version\n";
-	print "Usage: $0 [-o <output_file_base_name>] <input_file>\n";
+	print <<EOF;
+minirpcgen $version
+Usage: $0 [options] <input_file>
+Options:
+\t-D <name[=value]>
+\t-o <output_file_base_name>
+EOF
 	exit 1;
 }
 
-
-our $opt_o;
-getopts("o:");
+Getopt::Long::Configure('no_ignore_case');
+GetOptions(
+	'o=s' => \$basepath,
+	'D=s' => sub {
+		$defines .= " "
+			if $defines;
+		$defines .= "-D$_[1]";
+	}
+);
 usage()
 	if @ARGV != 1;
 $infile = $ARGV[0];
-if (defined $opt_o) {
-	$basepath = $opt_o;
-} else {
-	($basepath = $infile) =~ s/\.mx$//;
-}
+($basepath = $infile) =~ s/\.mx$//
+	if !defined $basepath;
+$defines = ""
+	if !defined $defines;
 $base = (File::Spec->splitpath($basepath))[2];
 usage()
 	if !$base;
@@ -912,7 +923,7 @@ genstubs;
 genRpclFile;
 
 # Generate xdr.c
-open(IF, "-|", "$rpcgen -c $basepath.x.$$") or
+open(IF, "-|", "$rpcgen $defines -c $basepath.x.$$") or
 	die "Couldn't generate ${basepath}_xdr.c";
 openFile(*XCF, "${basepath}_xdr.c");
 while (<IF>) {
@@ -925,7 +936,7 @@ close(IF);
 # Generate xdr.h
 my $olddefine = uc "_$base.x_H_RPCGEN";
 my $newdefine = uc "${base}_XDR_H";
-open(IF, "-|", "$rpcgen -h $basepath.x.$$") or
+open(IF, "-|", "$rpcgen $defines -h $basepath.x.$$") or
 	die "Couldn't generate ${basepath}_xdr.h";
 openFile(*XHF, "${basepath}_xdr.h");
 while (<IF>) {
