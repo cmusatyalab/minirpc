@@ -362,6 +362,10 @@ static mrpc_status_t ${base}_${role}_request(const void *p_ops, void *conn_data,
 {
 	const struct ${base}_${role}_operations *ops=p_ops;
 
+	/* Avoid possible compiler warning */
+	(void)in;
+	(void)out;
+
 	if (ops == NULL)
 		return MINIRPC_PROCEDURE_UNAVAIL;
 
@@ -416,6 +420,10 @@ sub gen_info_proc {
 
 static mrpc_status_t ${base}_${role}_${reply}_info(unsigned cmd, xdrproc_t *type, unsigned *size)
 {
+	/* Avoid possible compiler warning */
+	(void)type;
+	(void)size;
+
 	switch (cmd) {
 EOF
 
