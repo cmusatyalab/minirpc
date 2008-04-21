@@ -1,7 +1,10 @@
 prefix=@prefix@
 exec_prefix=@exec_prefix@
+bindir=@bindir@
 libdir=@libdir@
 includedir=@includedir@
+
+MINIRPCGEN=${bindir}/minirpcgen
 
 Name: miniRPC
 Description: TCP RPC library with asynchronous operations
