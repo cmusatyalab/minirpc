@@ -22,6 +22,8 @@ extern const struct mrpc_protocol * const example_server;
  *
  * If a message's handler is set to NULL, the message will be dropped and
  * (if possible) ::MINIRPC_PROCEDURE_UNAVAIL will be returned to the sender.
+ *
+ * @sa example_server_set_operations()
  */
 struct example_server_operations {
 	/**

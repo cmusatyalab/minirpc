@@ -116,6 +116,10 @@ protocol, see @ref example_client_prog and @ref example_server_prog.
 @defgroup example_common Common Definitions
 @defgroup example_client Client Stubs
 @defgroup example_server Server Stubs
+
+For prototypes and documentation for the server RPC handlers, see
+::example_server_operations.
+
 @addtogroup example
 @}
 
