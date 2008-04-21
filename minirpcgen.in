@@ -798,6 +798,7 @@ sub parseFile {
 			# cpp line marker
 			$filename = $2;
 			$line = $1 - 1;
+			next;
 		}
 		if (!$curDefs) {
 			if (/^\s*(client|server)(procs|msgs)\s*{/) {
