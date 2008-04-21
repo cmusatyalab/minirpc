@@ -60,3 +60,31 @@ exported int mrpc_version_code(void)
 {
 	return VERSION_CODE;
 }
+
+exported const char *mrpc_strerror(mrpc_status_t status)
+{
+	enum mrpc_status_codes code=status;
+
+	switch (code) {
+	case MINIRPC_OK:
+		return "Success";
+	case MINIRPC_PENDING:
+		/* Not really an error code, and the application should never
+		   receive this as a return value */
+		break;
+	case MINIRPC_ENCODING_ERR:
+		return "Serialization error";
+	case MINIRPC_PROCEDURE_UNAVAIL:
+		return "Procedure not available at this time";
+	case MINIRPC_INVALID_ARGUMENT:
+		return "Invalid argument";
+	case MINIRPC_INVALID_PROTOCOL:
+		return "Operation does not match connection role";
+	case MINIRPC_NETWORK_FAILURE:
+		return "Connection failure";
+	}
+	if (code < 0)
+		return "Unknown error";
+	else
+		return "Application-specific error";
+}

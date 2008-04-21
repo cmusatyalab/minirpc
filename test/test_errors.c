@@ -70,6 +70,9 @@ int main(int argc, char **argv)
 	expect(mrpc_stop_events(NULL), EINVAL);
 	expect(mrpc_start_events(NULL), EINVAL);
 	expect(mrpc_release_event(), EPERM);
+	expect(mrpc_strerror(MINIRPC_PENDING) != NULL, 1);
+	expect(strcmp(mrpc_strerror(-12), "Unknown error"), 0);
+	expect(strcmp(mrpc_strerror(12), "Application-specific error"), 0);
 
 	if (mrpc_conn_set_create(&sset, proto_server, NULL))
 		die("Couldn't allocate conn set");

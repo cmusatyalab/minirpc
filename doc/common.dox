@@ -110,6 +110,22 @@ updates) originating elsewhere in the application.  The relevant API calls
 are mrpc_get_event_fd(), mrpc_dispatcher_add(), mrpc_dispatch(),
 and mrpc_dispatcher_remove().
 
+
+@defgroup error Error Codes
+miniRPC functions return two distinct classes of error codes.  Most
+protocol-independent functions return an int: 0 for success, or a positive
+POSIX error code (e.g. EINVAL) on error.  Most protocol-dependent functions
+return an ::mrpc_status_t, which is defined as follows:
+
+-# Zero (or ::MINIRPC_OK) indicates success, while a nonzero value indicates
+an error.
+-# Negative error codes are errors produced by miniRPC; these might have been
+produced locally, or might have been received over the network from the
+remote host.  These error codes are defined in enum ::mrpc_status_codes, and
+may be mapped to an error message with mrpc_strerror().
+-# Positive error codes are defined by the particular protocol, and always
+originate from the remote host.
+
 @addtogroup common
 @}
 */

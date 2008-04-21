@@ -26,7 +26,8 @@ struct mrpc_connection;
 struct mrpc_message;
 
 /**
- * @brief Error codes used by the miniRPC protocol
+ * @brief Error codes defined by miniRPC
+ * @ingroup error
  * @param	MINIRPC_OK
  *	Success
  * @param	MINIRPC_PENDING
@@ -56,11 +57,7 @@ enum mrpc_status_codes {
 
 /**
  * @brief Error code returned by protocol operations
- *
- * Protocol-specific request and reply functions return error codes of this
- * type.  Negative error codes are defined by miniRPC (see
- * ::mrpc_status_codes), while positive error codes are defined by the
- * protocol.
+ * @ingroup error
  */
 typedef int mrpc_status_t;
 
@@ -786,6 +783,25 @@ int mrpc_start_events(struct mrpc_connection *conn);
  * and has no other effect.
  */
 int mrpc_release_event(void);
+
+/**
+ * @}
+ * @addtogroup error
+ * @{
+ */
+
+/**
+ * @brief Return a brief description of the specified miniRPC error code
+ * @param	status
+ *	The error code
+ * @return A description of the error
+ *
+ * The returned string must not be modified or freed by the application.
+ * This function only understands the error codes defined in
+ * enum ::mrpc_status_codes; application-specific error codes will be
+ * mapped to a generic description.
+ */
+const char *mrpc_strerror(mrpc_status_t status);
 
 /**
  * @}
