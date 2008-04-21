@@ -862,7 +862,7 @@ sub genRpclFile {
 
 sub usage {
 	print "minirpcgen $version\n";
-	print "Usage: $0 -o <output_file_base_name> <input_file>\n";
+	print "Usage: $0 [-o <output_file_base_name>] <input_file>\n";
 	exit 1;
 }
 
@@ -870,12 +870,16 @@ sub usage {
 our $opt_o;
 getopts("o:");
 usage()
-	if !defined($opt_o) || @ARGV != 1;
-$basepath = $opt_o;
+	if @ARGV != 1;
+$infile = $ARGV[0];
+if (defined $opt_o) {
+	$basepath = $opt_o;
+} else {
+	($basepath = $infile) =~ s/\.mx$//;
+}
 $base = (File::Spec->splitpath($basepath))[2];
 usage()
 	if !$base;
-$infile = $ARGV[0];
 
 # Initialize primitive types
 # These are the primitive types that can appear as procedure parameters.
