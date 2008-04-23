@@ -122,7 +122,6 @@ enum sequence_flags {
 struct mrpc_connection {
 	struct mrpc_conn_set *set;
 	int fd;
-	int is_tcp;
 	void *private;
 	gint refs;  /* atomic operations only */
 	gint user_refs;  /* atomic ops only */

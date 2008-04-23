@@ -390,9 +390,7 @@ static int _mrpc_bind_fd(struct mrpc_connection *conn, int addr_family, int fd)
 		ret=EINVAL;
 		goto out;
 	}
-	if (addr_family == AF_INET || addr_family == AF_INET6)
-		conn->is_tcp=1;
-	if (keepalive && conn->is_tcp) {
+	if (keepalive && (addr_family == AF_INET || addr_family == AF_INET6)) {
 		ret=setsockoptval(fd, IPPROTO_TCP, TCP_KEEPIDLE,
 					get_config(conn->set, keepalive_time));
 		if (ret)
