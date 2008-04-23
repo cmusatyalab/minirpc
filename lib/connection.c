@@ -221,6 +221,18 @@ again:
 	return MINIRPC_OK;
 }
 
+/* May give false positives due to races.  Should never give false
+   negatives. */
+static int send_queue_is_empty(struct mrpc_connection *conn)
+{
+	int ret;
+
+	pthread_mutex_lock(&conn->send_msgs_lock);
+	ret=g_queue_is_empty(conn->send_msgs);
+	pthread_mutex_unlock(&conn->send_msgs_lock);
+	return ret;
+}
+
 static void try_write_conn(void *data)
 {
 	struct mrpc_connection *conn=data;
@@ -228,40 +240,28 @@ static void try_write_conn(void *data)
 	ssize_t rcount;
 	char *buf;
 	unsigned len;
+	int more;
 
 	while (1) {
 		if (conn->send_msg == NULL) {
-			if (get_next_message(conn)) {
-				/* The fd has been closed, and the conn handle
-				   may already be invalid */
+			/* If get_next_message() returns true, the fd has
+			   been closed and the conn handle may already be
+			   invalid */
+			if (get_next_message(conn) || conn->send_msg == NULL)
 				break;
-			}
-			if (conn->send_msg == NULL) {
-				if (conn->send_state != STATE_IDLE) {
-					if (conn->is_tcp)
-						setsockoptval(conn->fd,
-								IPPROTO_TCP,
-								TCP_CORK, 0);
-					conn->send_state=STATE_IDLE;
-				}
-				break;
-			}
-			if (conn->send_state == STATE_IDLE) {
-				if (conn->is_tcp)
-					setsockoptval(conn->fd, IPPROTO_TCP,
-							TCP_CORK, 1);
-				conn->send_state=STATE_HEADER;
-			}
 		}
 
 		switch (conn->send_state) {
 		case STATE_HEADER:
 			buf=conn->send_hdr_buf;
 			len=MINIRPC_HEADER_LEN;
+			more = conn->send_msg->hdr.datalen > 0 ||
+						!send_queue_is_empty(conn);
 			break;
 		case STATE_DATA:
 			buf=conn->send_msg->data;
 			len=conn->send_msg->hdr.datalen;
+			more = !send_queue_is_empty(conn);
 			break;
 		default:
 			assert(0);
@@ -270,7 +270,8 @@ static void try_write_conn(void *data)
 		if (conn->send_offset < len) {
 			count = len - conn->send_offset;
 			assert(!(conn->sequence_flags & SEQ_FD_CLOSED));
-			rcount=write(conn->fd, buf + conn->send_offset, count);
+			rcount=send(conn->fd, buf + conn->send_offset, count,
+						more ? MSG_MORE : 0);
 			if (rcount <= 0) {
 				if (rcount == -1 && errno != EAGAIN
 							&& errno != EINTR) {
@@ -369,7 +370,7 @@ exported int mrpc_conn_create(struct mrpc_connection **new_conn,
 	pthread_mutex_init(&conn->counters_lock, NULL);
 	pthread_mutex_init(&conn->pending_replies_lock, NULL);
 	pthread_mutex_init(&conn->sequence_lock, NULL);
-	conn->send_state=STATE_IDLE;
+	conn->send_state=STATE_HEADER;
 	conn->recv_state=STATE_HEADER;
 	conn->set=set;
 	conn->private = (data != NULL) ? data : conn;
