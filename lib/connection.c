@@ -271,11 +271,13 @@ static void try_write_conn(void *data)
 			count = len - conn->send_offset;
 			assert(!(conn->sequence_flags & SEQ_FD_CLOSED));
 			rcount=write(conn->fd, buf + conn->send_offset, count);
-			if (rcount == -1 && errno != EAGAIN
-						&& errno != EINTR) {
-				queue_ioerr_event(conn, "Error %d on write",
-							errno);
-				conn_kill(conn, MRPC_DISC_IOERR);
+			if (rcount <= 0) {
+				if (rcount == -1 && errno != EAGAIN
+							&& errno != EINTR) {
+					queue_ioerr_event(conn, "Error %d "
+							"on write", errno);
+					conn_kill(conn, MRPC_DISC_IOERR);
+				}
 				return;
 			}
 			conn->send_offset += rcount;
