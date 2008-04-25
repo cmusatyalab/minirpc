@@ -406,6 +406,9 @@ static int _mrpc_bind_fd(struct mrpc_connection *conn, int addr_family, int fd)
 					keepalive_interval));
 		if (ret)
 			goto out;
+		ret=setsockoptval(fd, IPPROTO_TCP, TCP_NODELAY, 1);
+		if (ret)
+			goto out;
 	}
 	ret=setsockoptval(fd, SOL_SOCKET, SO_KEEPALIVE, keepalive);
 	if (ret)
