@@ -208,5 +208,8 @@ int main(int argc, char **argv)
 	mrpc_conn_set_unref(sset);
 	free(port);
 
+	free_IntArray(NULL, 0);
+	free_IntArray(NULL, 1);
+
 	return 0;
 }

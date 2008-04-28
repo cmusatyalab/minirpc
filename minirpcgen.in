@@ -329,6 +329,8 @@ sub gen_free_proc_c {
 
 void free_$type($type *in, int container)
 {
+	if (in == NULL)
+		return;
 	xdr_free((xdrproc_t)xdr_$type, (char *)in);
 	if (container)
 		free(in);
