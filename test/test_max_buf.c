@@ -15,7 +15,7 @@ int main(int argc, char **argv)
 	struct mrpc_conn_set *sset;
 	struct mrpc_conn_set *cset;
 	struct mrpc_connection *conn;
-	unsigned port;
+	char *port;
 	int ret;
 
 	sset=spawn_server(&port, proto_server, sync_server_accept, NULL, 1);
@@ -31,7 +31,7 @@ int main(int argc, char **argv)
 	ret=mrpc_conn_create(&conn, cset, NULL);
 	if (ret)
 		die("%s", strerror(ret));
-	ret=mrpc_connect(conn, "localhost", port);
+	ret=mrpc_connect(conn, AF_UNSPEC, "localhost", port);
 	if (ret)
 		die("%s", strerror(ret));
 
@@ -49,5 +49,6 @@ int main(int argc, char **argv)
 	mrpc_conn_set_unref(sset);
 	expect_disconnects(1, 1, 0);
 	expect_ioerrs(3);
+	free(port);
 	return 0;
 }

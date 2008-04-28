@@ -27,7 +27,7 @@ int main(int argc, char **argv)
 	struct mrpc_conn_set *sset;
 	struct mrpc_conn_set *cset;
 	struct mrpc_connection *conn;
-	unsigned port;
+	char *port;
 	int ret;
 
 	sem_init(&accepted, 0, 0);
@@ -44,7 +44,7 @@ int main(int argc, char **argv)
 	ret=mrpc_conn_create(&conn, cset, NULL);
 	if (ret)
 		die("%s", strerror(ret));
-	ret=mrpc_connect(conn, "localhost", port);
+	ret=mrpc_connect(conn, AF_UNSPEC, "localhost", port);
 	if (ret)
 		die("%s", strerror(ret));
 	mrpc_conn_ref(conn);
@@ -64,5 +64,6 @@ int main(int argc, char **argv)
 	mrpc_conn_close(conn);
 	expect_disconnects(1, 1, 0);
 	sem_destroy(&accepted);
+	free(port);
 	return 0;
 }

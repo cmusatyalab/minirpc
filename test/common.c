@@ -81,12 +81,12 @@ void start_monitored_dispatcher(struct mrpc_conn_set *set)
 	sem_destroy(&ddata.ready);
 }
 
-struct mrpc_conn_set *spawn_server(unsigned *listen_port,
+struct mrpc_conn_set *spawn_server(char **listen_port,
 			const struct mrpc_protocol *protocol,
 			mrpc_accept_fn accept, void *set_data, int threads)
 {
 	struct mrpc_conn_set *set;
-	unsigned port=0;
+	char *port=NULL;
 	int ret;
 	int i;
 
@@ -94,7 +94,7 @@ struct mrpc_conn_set *spawn_server(unsigned *listen_port,
 		die("Couldn't allocate connection set");
 	if (mrpc_set_accept_func(set, accept))
 		die("Couldn't set accept function");
-	ret=mrpc_listen(set, "localhost", &port);
+	ret=mrpc_listen(set, AF_INET, "localhost", &port);
 	if (ret)
 		die("%s", strerror(ret));
 	for (i=0; i<threads; i++)

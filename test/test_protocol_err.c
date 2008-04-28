@@ -104,8 +104,8 @@ int main(int argc, char **argv)
 	struct mrpc_connection *conn;
 	struct sockaddr_in addr;
 	socklen_t addrlen;
-	unsigned set_port;
-	unsigned skt_port;
+	char *set_port;
+	char skt_port[8];
 	int cfd;
 	int lfd;
 	int sfd;
@@ -129,10 +129,11 @@ int main(int argc, char **argv)
 	if (cfd == -1)
 		die("Couldn't create socket");
 	addr.sin_family=AF_INET;
-	addr.sin_port=htons(set_port);
+	addr.sin_port=htons(atoi(set_port));
 	addr.sin_addr.s_addr=htonl(INADDR_LOOPBACK);
 	if (connect(cfd, (struct sockaddr *)&addr, sizeof(addr)))
 		die("Couldn't connect socket");
+	free(set_port);
 	lfd=socket(PF_INET, SOCK_STREAM, 0);
 	if (lfd == -1)
 		die("Couldn't create socket");
@@ -144,10 +145,10 @@ int main(int argc, char **argv)
 	addrlen=sizeof(addr);
 	if (getsockname(lfd, (struct sockaddr *)&addr, &addrlen))
 		die("Couldn't get socket name");
-	skt_port=ntohs(addr.sin_port);
+	snprintf(skt_port, sizeof(skt_port), "%u", ntohs(addr.sin_port));
 	if (mrpc_conn_create(&conn, cset, NULL))
 		die("Couldn't create conn handle");
-	if (mrpc_connect(conn, NULL, skt_port))
+	if (mrpc_connect(conn, AF_INET, NULL, skt_port))
 		die("Couldn't connect to listening socket");
 	sfd=accept(lfd, NULL, NULL);
 	if (sfd == -1)

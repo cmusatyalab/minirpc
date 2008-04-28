@@ -89,7 +89,7 @@ int main(int argc, char **argv)
 	struct mrpc_conn_set *sset;
 	struct mrpc_conn_set *cset;
 	struct mrpc_connection *conn;
-	unsigned port;
+	char *port;
 	int ret;
 	int i;
 	void *(*dispatch_func)(void *)=NULL;  /* avoid compiler warning */
@@ -106,8 +106,8 @@ int main(int argc, char **argv)
 			die("Couldn't create conn set");
 		mrpc_set_accept_func(sset, sync_server_accept);
 		mrpc_set_disconnect_func(sset, disconnect_normal);
-		port=0;
-		if (mrpc_listen(sset, NULL, &port))
+		port=NULL;
+		if (mrpc_listen(sset, AF_INET, NULL, &port))
 			die("Couldn't listen on socket");
 
 		switch (i) {
@@ -135,7 +135,7 @@ int main(int argc, char **argv)
 		ret=mrpc_conn_create(&conn, cset, NULL);
 		if (ret)
 			die("%s", strerror(ret));
-		ret=mrpc_connect(conn, "localhost", port);
+		ret=mrpc_connect(conn, AF_UNSPEC, "localhost", port);
 		if (ret)
 			die("%s", strerror(ret));
 
@@ -149,6 +149,7 @@ int main(int argc, char **argv)
 		mrpc_conn_set_unref(sset);
 		if (dispatch_func)
 			sem_wait(&done);
+		free(port);
 	}
 	mrpc_conn_set_unref(cset);
 	expect_disconnects(i, i, 0);

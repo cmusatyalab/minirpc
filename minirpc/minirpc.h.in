@@ -500,20 +500,24 @@ void mrpc_conn_unref(struct mrpc_connection *conn);
  * @brief Make a new outgoing connection
  * @param	conn
  *	The connection handle to use
+ * @param	family
+ *	The address family to use, or AF_UNSPEC for any available family
  * @param	host
  *	The hostname or address of the remote listener
- * @param	port
- *	The TCP port number of the remote listener
+ * @param	service
+ *	The service name of the remote listener
+ *
  * @return 0 on success, or a POSIX error code, including:
  *	- @c ENOENT: could not look up the specified host
  *	- @c ECONNREFUSED: connection refused
  *	- @c ETIMEDOUT: connection timed out
  *	- @c EMFILE: too many open files
  *
- * Make a new outgoing connection to the specified remote host and port
+ * Make a new outgoing connection to the specified service on the remote host
  * and associate it with the given connection handle.  The specified
  * handle must not have been connected already.  If @c host is NULL, miniRPC
- * will connect to the loopback address.
+ * will connect to the loopback address.  @c service can be a name or a port
+ * number represented as a string, and cannot be NULL.
  *
  * This function can only be called against connections with a client
  * protocol role.
@@ -522,33 +526,38 @@ void mrpc_conn_unref(struct mrpc_connection *conn);
  * the application should ensure that the correct operations structure is set
  * on the connection handle before calling this function.
  */
-int mrpc_connect(struct mrpc_connection *conn, const char *host,
-			unsigned port);
+int mrpc_connect(struct mrpc_connection *conn, int family, const char *host,
+			const char *service);
 
 /**
  * @brief Start listening for incoming connections
  * @param	set
  *	The set to associate with this listener
+ * @param	family
+ *	The address family to use, or AF_UNSPEC for any available family
  * @param	listenaddr
  *	The hostname or address to listen on
- * @param[in,out] port
- *	The port number to listen on
+ * @param[in,out] service
+ *	The service identifier to listen on
  * @return 0 if at least one listening socket is created, or the POSIX error
  *	code associated with the last error encountered
  *
- * Start listening for incoming connections on the given address and port
- * number, and fire the connection set's accept function whenever one arrives.
- * If more than one address meets the specified criteria, more than one
- * listening socket may be bound.  If @c listenaddr is NULL, miniRPC will
- * listen on any local interface.  If the value pointed to by @c port is
- * zero, miniRPC will bind to a random unused port, and will return the
- * chosen port number in @c port.
+ * Start listening for incoming connections on the given address and service
+ * identifier, and fire the connection set's accept function whenever one
+ * arrives.  If more than one address meets the specified criteria, more than
+ * one listening socket may be bound.  If @c listenaddr is NULL, miniRPC will
+ * listen on any local interface.  @c *service can be a name or a port number
+ * represented as a string, or NULL.  If @c *service is NULL, @c family must
+ * be specified (i.e., cannot be AF_UNSPEC).  In this case, miniRPC will
+ * bind to a random unused port, and will return the chosen port number in
+ * @c *service as a numeric string.  The application should free this string
+ * with free() when no longer needed.
  *
  * This function will return EINVAL if @c set has a client protocol role
  * or if no accept function has been set with mrpc_set_accept_func().
  */
-int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
-			unsigned *port);
+int mrpc_listen(struct mrpc_conn_set *set, int family, const char *listenaddr,
+			char **service);
 
 /**
  * @brief Bind an existing file descriptor to a connection handle

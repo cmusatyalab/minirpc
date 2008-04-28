@@ -143,7 +143,7 @@ int main(int argc, char **argv)
 	struct mrpc_conn_set *sset;
 	struct mrpc_conn_set *cset;
 	struct mrpc_connection *conn;
-	unsigned port;
+	char *port;
 	int ret;
 	int i;
 	int j;
@@ -163,7 +163,7 @@ int main(int argc, char **argv)
 	ret=mrpc_conn_create(&conn, cset, NULL);
 	if (ret)
 		die("%s", strerror(ret));
-	ret=mrpc_connect(conn, "localhost", port);
+	ret=mrpc_connect(conn, AF_UNSPEC, "localhost", port);
 	if (ret)
 		die("%s", strerror(ret));
 	pthread_mutex_lock(&client.lock);
@@ -181,5 +181,6 @@ int main(int argc, char **argv)
 	mrpc_conn_set_unref(sset);
 	sem_destroy(&complete);
 	expect_disconnects(1, 1, 0);
+	free(port);
 	return 0;
 }

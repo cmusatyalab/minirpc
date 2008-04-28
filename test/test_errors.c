@@ -47,7 +47,7 @@ int main(int argc, char **argv)
 	struct mrpc_conn_set *cset;
 	struct mrpc_connection *conn;
 	struct sockaddr_in addr;
-	unsigned port;
+	char *port;
 	int fd;
 	int fdpair[2];
 	uint64_t counter;
@@ -93,43 +93,50 @@ int main(int argc, char **argv)
 	start_monitored_dispatcher(sset);
 	start_monitored_dispatcher(cset);
 
-	port=0;
-	expect(mrpc_listen(NULL, "localhost", &port), EINVAL);
-	expect(mrpc_listen(sset, "localhost", NULL), EINVAL);
-	port=0;
-	expect(mrpc_listen(sset, NULL, &port), 0);
+	port=NULL;
+	expect(mrpc_listen(NULL, AF_UNSPEC, "localhost", &port), EINVAL);
+	expect(mrpc_listen(sset, AF_UNSPEC, "localhost", NULL), EINVAL);
+	port=NULL;
+	expect(mrpc_listen(sset, AF_UNSPEC, "localhost", &port), EINVAL);
+	port="50234";
+	expect(mrpc_listen(sset, 90500, "localhost", &port), EAFNOSUPPORT);
+	port=NULL;
+	expect(mrpc_listen(sset, AF_INET, NULL, &port), 0);
 	expect(mrpc_conn_create(&conn, cset, NULL), 0);
-	expect(mrpc_connect(conn, NULL, port), 0);
+	expect(mrpc_connect(conn, AF_UNSPEC, NULL, port), 0);
 	mrpc_listen_close(NULL);
 	mrpc_listen_close(sset);
 	mrpc_conn_unref(conn);
 	expect(mrpc_conn_close(conn), 0);
 	expect(mrpc_conn_close(NULL), EINVAL);
 	expect(mrpc_conn_create(&conn, cset, NULL), 0);
-	expect(mrpc_connect(conn, NULL, port), ECONNREFUSED);
+	expect(mrpc_connect(conn, AF_UNSPEC, NULL, port), ECONNREFUSED);
 	expect(mrpc_conn_close(conn), ENOTCONN);
 	mrpc_conn_unref(conn);
+	free(port);
 
-	port=0;
-	expect(mrpc_listen(sset, "localhost", &port), 0);
+	port=NULL;
+	expect(mrpc_listen(sset, AF_INET, "localhost", &port), 0);
 	expect(mrpc_conn_create(NULL, cset, NULL), EINVAL);
 	conn=(void*)1;
 	expect(mrpc_conn_create(&conn, NULL, NULL), EINVAL);
 	expect(conn == NULL, 1);
 	expect(mrpc_conn_create(&conn, cset, NULL), 0);
-	expect(mrpc_connect(NULL, "localhost", port), EINVAL);
-	expect(mrpc_connect(conn, "localhost", 0), ECONNREFUSED);
+	expect(mrpc_connect(NULL, AF_INET, "localhost", port), EINVAL);
+	expect(mrpc_connect(conn, 90500, "localhost", port), EAFNOSUPPORT);
+	expect(mrpc_connect(conn, AF_INET, "localhost", NULL), EINVAL);
+	expect(mrpc_connect(conn, AF_INET, "localhost", "0"), ECONNREFUSED);
 
 	fd=socket(PF_INET, SOCK_STREAM, 0);
 	if (fd == -1)
 		die("Couldn't create socket");
 	addr.sin_family=AF_INET;
-	addr.sin_port=htons(port);
+	addr.sin_port=htons(atoi(port));
 	addr.sin_addr.s_addr=htonl(INADDR_LOOPBACK);
 	expect(connect(fd, (struct sockaddr *)&addr, sizeof(addr)), 0);
 	expect(mrpc_bind_fd(NULL, fd), EINVAL);
 	expect(mrpc_bind_fd(conn, fd), 0);
-	expect(mrpc_connect(conn, NULL, port), EINVAL);
+	expect(mrpc_connect(conn, AF_INET, NULL, port), EINVAL);
 	expect(mrpc_bind_fd(conn, fd), EINVAL);
 	expect(mrpc_conn_close(conn), 0);
 	mrpc_conn_unref(conn);
@@ -147,7 +154,7 @@ int main(int argc, char **argv)
 	close(fdpair[0]);
 	close(fdpair[1]);
 
-	expect(mrpc_connect(conn, NULL, port), 0);
+	expect(mrpc_connect(conn, AF_UNSPEC, NULL, port), 0);
 	expect(proto_client_set_operations(NULL, NULL), EINVAL);
 	expect(proto_ping(NULL), MINIRPC_INVALID_ARGUMENT);
 	expect(proto_ping_async(conn, NULL, NULL), MINIRPC_INVALID_ARGUMENT);
@@ -181,6 +188,7 @@ int main(int argc, char **argv)
 	mrpc_conn_set_unref(cset);
 	mrpc_listen_close(sset);
 	mrpc_conn_set_unref(sset);
+	free(port);
 
 	sset=spawn_server(&port, proto_server, probe_server_accept, NULL, 1);
 	if (mrpc_set_disconnect_func(sset, disconnect_normal))
@@ -191,13 +199,14 @@ int main(int argc, char **argv)
 		die("Couldn't set disconnect func");
 	start_monitored_dispatcher(cset);
 	expect(mrpc_conn_create(&conn, cset, NULL), 0);
-	expect(mrpc_connect(conn, NULL, port), 0);
+	expect(mrpc_connect(conn, AF_INET, NULL, port), 0);
 	expect(proto_ping(conn), 0);
 	expect(mrpc_conn_close(conn), 0);
 	mrpc_conn_unref(conn);
 	mrpc_conn_set_unref(cset);
 	mrpc_listen_close(sset);
 	mrpc_conn_set_unref(sset);
+	free(port);
 
 	return 0;
 }

@@ -54,7 +54,7 @@ int main(int argc, char **argv)
 	struct mrpc_conn_set *sset;
 	struct mrpc_conn_set *cset;
 	struct mrpc_connection *conn;
-	unsigned port;
+	char *port;
 	int ret;
 	int i;
 	int j;
@@ -73,7 +73,7 @@ int main(int argc, char **argv)
 		ret=mrpc_conn_create(&conn, cset, NULL);
 		if (ret)
 			die("%s", strerror(ret));
-		ret=mrpc_connect(conn, "localhost", port);
+		ret=mrpc_connect(conn, AF_UNSPEC, "localhost", port);
 		if (ret)
 			die("%s", strerror(ret));
 
@@ -95,5 +95,6 @@ int main(int argc, char **argv)
 		die("Client close count = %d, expected 0-%d", client, ITERS);
 	if (server == 0 || server > ITERS)
 		die("Server close count = %d, expected 0-%d", server, ITERS);
+	free(port);
 	return 0;
 }

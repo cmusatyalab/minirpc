@@ -15,7 +15,7 @@ int main(int argc, char **argv)
 	struct mrpc_conn_set *sset;
 	struct mrpc_conn_set *cset;
 	struct mrpc_connection *conn;
-	unsigned port;
+	char *port;
 	int ret;
 	int i;
 
@@ -33,7 +33,7 @@ int main(int argc, char **argv)
 		if (ret)
 			die("%s in mrpc_conn_create() on iteration %d",
 						strerror(ret), i);
-		ret=mrpc_connect(conn, "localhost", port);
+		ret=mrpc_connect(conn, AF_UNSPEC, "localhost", port);
 		if (ret)
 			die("%s in mrpc_connect() on iteration %d",
 						strerror(ret), i);
@@ -55,7 +55,7 @@ int main(int argc, char **argv)
 		if (ret)
 			die("%s in mrpc_conn_create() on iteration %d",
 						strerror(ret), i);
-		ret=mrpc_connect(conn, "localhost", port);
+		ret=mrpc_connect(conn, AF_UNSPEC, "localhost", port);
 		if (ret)
 			die("%s in mrpc_connect() on iteration %d",
 						strerror(ret), i);
@@ -69,5 +69,6 @@ int main(int argc, char **argv)
 	mrpc_listen_close(sset);
 	mrpc_conn_set_unref(sset);
 	expect_disconnects(600, 600, 0);
+	free(port);
 	return 0;
 }

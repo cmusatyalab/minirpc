@@ -98,14 +98,14 @@ void do_disconnect(void *conn_data, enum mrpc_disc_reason reason)
 int main(int argc, char **argv)
 {
 	struct mrpc_conn_set *set;
-	unsigned port;
+	char *port;
 	int ret;
 
 	if (argc != 2) {
 		fprintf(stderr, "Usage: %s port\n", argv[0]);
 		exit(1);
 	}
-	port=atoi(argv[1]);
+	port=argv[1];
 
 	if (mrpc_conn_set_create(&set, example_server, NULL))
 		die("Couldn't create connection set");
@@ -113,7 +113,7 @@ int main(int argc, char **argv)
 		die("Couldn't set accept function");
 	if (mrpc_set_disconnect_func(set, do_disconnect))
 		die("Couldn't set disconnect function");
-	ret=mrpc_listen(set, NULL, &port);
+	ret=mrpc_listen(set, AF_UNSPEC, NULL, &port);
 	if (ret)
 		die("Couldn't create listening socket: %s", strerror(ret));
 

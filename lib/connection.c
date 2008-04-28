@@ -573,24 +573,9 @@ static void try_accept(void *data)
 	}
 }
 
-static int lookup_addr(struct addrinfo **res, const char *host, unsigned port,
-			int passive)
+static int eai_to_errno(int errcode)
 {
-	char *portstr;
-	int ret;
-	struct addrinfo hints = {
-		.ai_family = AF_UNSPEC,
-		.ai_socktype = SOCK_STREAM,
-		.ai_flags = AI_NUMERICSERV
-	};
-
-	portstr=g_strdup_printf("%u", port);
-	if (passive)
-		hints.ai_flags |= AI_PASSIVE;
-	ret=getaddrinfo(host, portstr, &hints, res);
-	g_free(portstr);
-
-	switch (ret) {
+	switch (errcode) {
 	case 0:
 		return 0;
 	case EAI_ADDRFAMILY:
@@ -609,6 +594,8 @@ static int lookup_addr(struct addrinfo **res, const char *host, unsigned port,
 		return ENOENT;
 	case EAI_NONAME:
 		return ENOENT;
+	case EAI_OVERFLOW:
+		return EIO;
 	case EAI_SERVICE:
 		return ENOENT;
 	case EAI_SOCKTYPE:
@@ -620,17 +607,32 @@ static int lookup_addr(struct addrinfo **res, const char *host, unsigned port,
 	}
 }
 
-exported int mrpc_connect(struct mrpc_connection *conn, const char *host,
-			unsigned port)
+static int lookup_addr(struct addrinfo **res, int family, const char *host,
+			const char *service, int passive)
+{
+	struct addrinfo hints = {
+		.ai_family = family,
+		.ai_socktype = SOCK_STREAM
+	};
+
+	if (passive)
+		hints.ai_flags |= AI_PASSIVE;
+	if (service == NULL)
+		service="0";
+	return eai_to_errno(getaddrinfo(host, service, &hints, res));
+}
+
+exported int mrpc_connect(struct mrpc_connection *conn, int family,
+			const char *host, const char *service)
 {
 	struct addrinfo *ai;
 	struct addrinfo *cur;
 	int fd;
 	int ret;
 
-	if (conn == NULL || conn->set->protocol->is_server)
+	if (conn == NULL || service == NULL || conn->set->protocol->is_server)
 		return EINVAL;
-	ret=lookup_addr(&ai, host, port, 0);
+	ret=lookup_addr(&ai, family, host, service, 0);
 	if (ret)
 		return ret;
 	if (ai == NULL)
@@ -659,12 +661,13 @@ exported int mrpc_connect(struct mrpc_connection *conn, const char *host,
 	return ret;
 }
 
-exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
-			unsigned *port)
+exported int mrpc_listen(struct mrpc_conn_set *set, int family,
+			const char *listenaddr, char **service)
 {
 	struct addrinfo *ai;
 	struct addrinfo *cur;
 	struct mrpc_listener *lnr;
+	char portbuf[32];
 	int fd;
 	int count=0;
 	int ret;
@@ -673,18 +676,15 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 	   connections will never have a non-NULL operations pointer and the
 	   application will never be aware that they exist, so connecting
 	   clients will be forever stuck in PROCEDURE_UNAVAIL limbo. */
-	if (set == NULL || port == NULL || !set->protocol->is_server ||
-				get_config(set, accept) == NULL)
+	if (set == NULL || service == NULL || !set->protocol->is_server ||
+				get_config(set, accept) == NULL ||
+				(family == AF_UNSPEC && *service == NULL))
 		return EINVAL;
 	conn_set_get(set);
-	ret=lookup_addr(&ai, listenaddr, *port, 1);
+	ret=lookup_addr(&ai, family, listenaddr, *service, 1);
 	if (ret)
 		goto out;
 	for (cur=ai; cur != NULL; cur=cur->ai_next) {
-		if (cur->ai_family != AF_INET && cur->ai_family != AF_INET6) {
-			ret=EPROTONOSUPPORT;
-			continue;
-		}
 		fd=socket(cur->ai_family, cur->ai_socktype, cur->ai_protocol);
 		if (fd == -1) {
 			/* Don't clobber a more important error with a
@@ -718,6 +718,13 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 			close(fd);
 			continue;
 		}
+		ret=eai_to_errno(getnameinfo(cur->ai_addr, cur->ai_addrlen,
+					NULL, 0, portbuf, sizeof(portbuf),
+					NI_NUMERICSERV));
+		if (ret) {
+			close(fd);
+			continue;
+		}
 		lnr=g_slice_new0(struct mrpc_listener);
 		lnr->set=set;
 		lnr->fd=fd;
@@ -732,13 +739,8 @@ exported int mrpc_listen(struct mrpc_conn_set *set, const char *listenaddr,
 		conn_set_get(set);
 		g_async_queue_push(set->listeners, lnr);
 		count++;
-		if (!*port) {
-			if (cur->ai_family == AF_INET)
-				*port=ntohs(((struct sockaddr_in *)
-						cur->ai_addr)->sin_port);
-			else
-				*port=ntohs(((struct sockaddr_in6 *)
-						cur->ai_addr)->sin6_port);
+		if (!*service) {
+			*service=strdup(portbuf);
 			/* Stop after binding to the first random port */
 			break;
 		}

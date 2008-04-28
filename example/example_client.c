@@ -9,7 +9,7 @@
 int main(int argc, char **argv)
 {
 	char *host;
-	unsigned port;
+	char *port;
 	struct mrpc_conn_set *set;
 	struct mrpc_connection *conn;
 	example_color_choice choice;
@@ -21,7 +21,7 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 	host=argv[1];
-	port=atoi(argv[2]);
+	port=argv[2];
 
 	if (mrpc_conn_set_create(&set, example_client, NULL))
 		die("Couldn't create connection set");
@@ -29,7 +29,7 @@ int main(int argc, char **argv)
 		die("Couldn't start dispatch thread");
 	if (mrpc_conn_create(&conn, set, NULL))
 		die("Couldn't create connection handle");
-	ret=mrpc_connect(conn, host, port);
+	ret=mrpc_connect(conn, AF_UNSPEC, host, port);
 	if (ret)
 		die("Couldn't connect to %s:%u: %s", host, port, strerror(ret));
 

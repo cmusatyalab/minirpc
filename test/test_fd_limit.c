@@ -79,7 +79,7 @@ void client(int files)
 	pthread_t thr;
 	int i;
 	int ret;
-	unsigned port;
+	char *port;
 
 	if (mrpc_conn_set_create(&cset, proto_client, NULL))
 		die("Couldn't allocate conn set");
@@ -90,12 +90,12 @@ void client(int files)
 
 	sem_post(&shared->ready);
 	sem_wait(&shared->start);
-	port=g_atomic_int_get(&shared->port);
+	port=g_strdup_printf("%u", g_atomic_int_get(&shared->port));
 	for (i=0; i < files - BUFFER; i++) {
 		ret=mrpc_conn_create(&conn, cset, NULL);
 		if (ret)
 			die("%s", strerror(ret));
-		ret=mrpc_connect(conn, NULL, port);
+		ret=mrpc_connect(conn, AF_UNSPEC, NULL, port);
 		if (ret)
 			die("%s", strerror(ret));
 		oconn=g_slice_new0(struct open_conn);
@@ -109,13 +109,14 @@ void client(int files)
 	g_async_queue_unref(queue);
 	mrpc_conn_set_unref(cset);
 	expect_disconnects(files - BUFFER, 0, 0);
+	g_free(port);
 	exit(0);
 }
 
 int main(int argc, char **argv)
 {
 	struct mrpc_conn_set *sset;
-	unsigned port;
+	char *port;
 	int stat;
 	int ret=0;
 	int files;
@@ -142,7 +143,7 @@ int main(int argc, char **argv)
 		sem_wait(&shared->ready);
 	sset=spawn_server(&port, proto_server, sync_server_accept, NULL, 1);
 	mrpc_set_disconnect_func(sset, disconnect_normal);
-	g_atomic_int_set(&shared->port, port);
+	g_atomic_int_set(&shared->port, atoi(port));
 	for (i=0; i<MULTIPLE; i++)
 		sem_post(&shared->start);
 	while (1) {
@@ -164,5 +165,6 @@ int main(int argc, char **argv)
 	expect_disconnects(0, MULTIPLE * (files - BUFFER), 0);
 	sem_destroy(&shared->ready);
 	sem_destroy(&shared->start);
+	free(port);
 	return ret;
 }

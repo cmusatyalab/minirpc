@@ -18,7 +18,7 @@ static pthread_mutex_t lock;
 static pthread_cond_t cond;
 static int running;
 static int go;
-static unsigned port;
+static char *port;
 
 void *worker(void *arg)
 {
@@ -38,7 +38,7 @@ void *worker(void *arg)
 		if (ret)
 			die("%s in mrpc_conn_create() on iteration %d",
 						strerror(ret), i);
-		ret=mrpc_connect(conn, NULL, port);
+		ret=mrpc_connect(conn, AF_UNSPEC, NULL, port);
 		if (ret)
 			die("%s in mrpc_connect() on iteration %d",
 						strerror(ret), i);
@@ -93,5 +93,6 @@ int main(int argc, char **argv)
 	mrpc_listen_close(sset);
 	mrpc_conn_set_unref(sset);
 	expect_disconnects(THREADS * ITERS, THREADS * ITERS, 0);
+	free(port);
 	return 0;
 }
