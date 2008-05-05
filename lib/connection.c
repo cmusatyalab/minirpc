@@ -390,21 +390,24 @@ static int _mrpc_bind_fd(struct mrpc_connection *conn, int addr_family, int fd)
 		ret=EINVAL;
 		goto out;
 	}
-	if (keepalive && (addr_family == AF_INET || addr_family == AF_INET6)) {
-		ret=setsockoptval(fd, IPPROTO_TCP, TCP_KEEPIDLE,
-					get_config(conn->set, keepalive_time));
-		if (ret)
-			goto out;
-		ret=setsockoptval(fd, IPPROTO_TCP, TCP_KEEPCNT,
-					get_config(conn->set,
-					keepalive_count));
-		if (ret)
-			goto out;
-		ret=setsockoptval(fd, IPPROTO_TCP, TCP_KEEPINTVL,
-					get_config(conn->set,
-					keepalive_interval));
-		if (ret)
-			goto out;
+	if (addr_family == AF_INET || addr_family == AF_INET6) {
+		if (keepalive) {
+			ret=setsockoptval(fd, IPPROTO_TCP, TCP_KEEPIDLE,
+						get_config(conn->set,
+						keepalive_time));
+			if (ret)
+				goto out;
+			ret=setsockoptval(fd, IPPROTO_TCP, TCP_KEEPCNT,
+						get_config(conn->set,
+						keepalive_count));
+			if (ret)
+				goto out;
+			ret=setsockoptval(fd, IPPROTO_TCP, TCP_KEEPINTVL,
+						get_config(conn->set,
+						keepalive_interval));
+			if (ret)
+				goto out;
+		}
 		ret=setsockoptval(fd, IPPROTO_TCP, TCP_NODELAY, 1);
 		if (ret)
 			goto out;
