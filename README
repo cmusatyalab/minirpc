@@ -47,6 +47,18 @@ To build and install PDF documentation:
 make pdf
 make install-pdf
 
+MORE INFORMATION
+----------------
+
+For new releases, bug reports, development repositories, and more, visit
+our website:
+
+<http://minirpc.cs.cmu.edu/>
+
+You can subscribe to the development mailing list by visiting:
+
+<https://lists.andrew.cmu.edu/mailman/listinfo/minirpc-devel>
+
 LICENSE
 -------
 
