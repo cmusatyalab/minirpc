@@ -5,7 +5,7 @@ pkgconfigdir = $(libdir)/pkgconfig
 pkgconfig_DATA = minirpc.pc
 
 SUBDIRS = . minirpc lib example doc test
-EXTRA_DIST = LICENSE CHANGES minirpcgen.in
+EXTRA_DIST = COPYING CHANGES minirpcgen.in
 
 minirpcgen: minirpcgen.in Makefile
 	@echo "Generating $@ from $<"
