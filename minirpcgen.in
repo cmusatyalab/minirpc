@@ -730,6 +730,7 @@ sub genstubs {
 	print MCF "#include \"${base}_server.h\"\n";
 	print MHF "#ifndef " . uc $base . "_MINIRPC_H\n";
 	print MHF "#define " . uc $base . "_MINIRPC_H\n\n";
+	print MHF "#include <minirpc/minirpc.h>\n";
 	print MHF "#include \"${base}_xdr.h\"\n\n";
 	print MHF "#define " . uc $base . "_MRPC_VERSION_CODE() " .
 				"$version_code\n";
