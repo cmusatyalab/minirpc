@@ -64,4 +64,5 @@ LICENSE
 
 This code is distributed "AS IS" without warranty of any kind under the terms
 of the GNU Lesser General Public License version 2.1, as shown in the file
-COPYING.
+COPYING.  The output of minirpcgen is not covered by this license, and may be
+distributed, with or without modification, under the terms of your choice.
