@@ -1,4 +1,4 @@
-LIBTOOL_VERSION = 0:0:0
+LIBTOOL_VERSION = 1:0:0
 
 AM_CPPFLAGS = -I$(top_srcdir) -D_GNU_SOURCE
 CFLAGS_WARNINGS = -W -Wall -Wstrict-prototypes -Wmissing-prototypes
