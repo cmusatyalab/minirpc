@@ -717,8 +717,10 @@ int mrpc_dispatch_loop(struct mrpc_conn_set *set);
  *	are pending, or EAGAIN if the event queue is empty
  *
  * Dispatch events until there are no more events to process or until
- * @c max events have been processed.  The calling thread must call
- * mrpc_dispatcher_add() before calling this function for the first time.
+ * @c max events have been processed, whichever comes first; if @c max is 0,
+ * dispatch until there are no more events to process.  The calling thread
+ * must call mrpc_dispatcher_add() before calling this function for the first
+ * time.
  *
  * If this function returns ENXIO, the connection set is being destroyed.
  * The application must stop calling this function, and must call
