@@ -32,6 +32,12 @@ static int epoll_create_set(struct pollset *pset)
 		g_slice_free(struct impl_data, pset->impl);
 		return err;
 	}
+	err=set_cloexec(pset->impl->fd);
+	if (err) {
+		close(pset->impl->fd);
+		g_slice_free(struct impl_data, pset->impl);
+		return err;
+	}
 	return 0;
 }
 

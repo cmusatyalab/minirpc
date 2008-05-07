@@ -51,6 +51,7 @@ check_PROGRAMS += test_refcount
 check_PROGRAMS += test_shutdown
 check_PROGRAMS += test_accept_close
 check_PROGRAMS += test_simultaneous_close
+check_PROGRAMS += test_exec_close
 check_PROGRAMS += test_errors
 check_PROGRAMS += test_max_buf
 check_PROGRAMS += test_protocol_err

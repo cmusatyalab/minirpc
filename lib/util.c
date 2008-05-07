@@ -42,6 +42,18 @@ int set_nonblock(int fd)
 	return 0;
 }
 
+int set_cloexec(int fd)
+{
+	int flags;
+
+	flags=fcntl(fd, F_GETFD);
+	if (flags == -1)
+		return errno;
+	if (fcntl(fd, F_SETFD, flags | FD_CLOEXEC))
+		return errno;
+	return 0;
+}
+
 int block_signals(void)
 {
 	sigset_t sigs;

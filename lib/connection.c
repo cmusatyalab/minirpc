@@ -418,6 +418,9 @@ static int _mrpc_bind_fd(struct mrpc_connection *conn, int addr_family, int fd)
 	ret=set_nonblock(fd);
 	if (ret)
 		goto out;
+	ret=set_cloexec(fd);
+	if (ret)
+		goto out;
 	conn->fd=fd;
 	ret=pollset_add(conn->set->pollset, fd, POLLSET_READABLE, conn,
 				try_read_conn, try_write_conn, conn_hangup,
@@ -702,6 +705,11 @@ exported int mrpc_listen(struct mrpc_conn_set *set, int family,
 			continue;
 		}
 		ret=set_nonblock(fd);
+		if (ret) {
+			close(fd);
+			continue;
+		}
+		ret=set_cloexec(fd);
 		if (ret) {
 			close(fd);
 			continue;

@@ -40,6 +40,9 @@ int selfpipe_create(struct selfpipe **new)
 		ret=set_nonblock(sp->pipe[i]);
 		if (ret)
 			goto bad_close;
+		ret=set_cloexec(sp->pipe[i]);
+		if (ret)
+			goto bad_close;
 	}
 	*new=sp;
 	return 0;
