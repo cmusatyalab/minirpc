@@ -117,8 +117,9 @@ int main(int argc, char **argv)
 	if (ret)
 		die("Couldn't create listening socket: %s", strerror(ret));
 
-	/* For this simple example, we don't ever destroy the connection set,
-	   so this will never return. */
+	mrpc_dispatcher_add(set);
 	mrpc_dispatch_loop(set);
+	/* For this simple example, we don't ever destroy the connection set,
+	   so mrpc_dispatch_loop() will never return. */
 	return 0;
 }
