@@ -911,11 +911,16 @@ GetOptions(
 usage()
 	if @ARGV != 1;
 $infile = $ARGV[0];
-($basepath = $infile) =~ s/\.mx$//
-	if !defined $basepath;
+if (defined $basepath) {
+	$base = (File::Spec->splitpath($basepath))[2];
+} else {
+	# If -o is not given, use a default basepath in the current directory
+	$basepath = (File::Spec->splitpath($infile))[2];
+	$basepath =~ s/\.mx$//;
+	$base = $basepath;
+}
 $defines = ""
 	if !defined $defines;
-$base = (File::Spec->splitpath($basepath))[2];
 usage()
 	if !$base;
 
