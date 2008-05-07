@@ -11,7 +11,7 @@
 ## Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_INIT([miniRPC], [0.2])
+AC_INIT([miniRPC], [0.2a])
 AM_INIT_AUTOMAKE([foreign])
 AC_COPYRIGHT([Copyright (C) 2007-2008 Carnegie Mellon University])
 AC_CONFIG_SRCDIR([lib/connection.c])
@@ -73,7 +73,7 @@ CHECK_LINK([for epoll], [AC_LANG_PROGRAM([#include <sys/epoll.h>],
 			[Define if the C library supports the epoll system calls.])
 
 # Generate the library version code.
-VERSION_CODE=`echo $PACKAGE_VERSION | tr . ' ' | {
+VERSION_CODE=`echo 0.2 | tr . ' ' | {
 	read maj min rev
 	test -z "$rev" && rev=0
 	echo $((($maj << 24) + ($min << 16) + ($rev << 8)))
