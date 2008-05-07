@@ -20,6 +20,7 @@
 #include "internal.h"
 
 static __thread struct mrpc_event *active_event;
+static __thread GList *dispatching_sets;
 
 struct dispatch_thread_data {
 	struct mrpc_conn_set *set;
@@ -462,24 +463,33 @@ exported void mrpc_dispatcher_add(struct mrpc_conn_set *set)
 	pthread_mutex_lock(&set->events_lock);
 	set->events_threads++;
 	pthread_mutex_unlock(&set->events_lock);
+	dispatching_sets=g_list_prepend(dispatching_sets, set);
 }
 
 exported void mrpc_dispatcher_remove(struct mrpc_conn_set *set)
 {
 	if (set == NULL)
 		return;
+	dispatching_sets=g_list_remove(dispatching_sets, set);
 	pthread_mutex_lock(&set->events_lock);
 	set->events_threads--;
 	pthread_cond_broadcast(&set->events_threads_cond);
 	pthread_mutex_unlock(&set->events_lock);
 }
 
+static int mrpc_dispatch_validate(struct mrpc_conn_set *set)
+{
+	if (set == NULL)
+		return EINVAL;
+	if (g_list_find(dispatching_sets, set) == NULL)
+		return EPERM;
+	return 0;
+}
+
 static int mrpc_dispatch_one(struct mrpc_conn_set *set)
 {
 	struct mrpc_event *event;
 
-	if (set == NULL)
-		return EINVAL;
 	event=unqueue_event(set);
 	if (event != NULL)
 		dispatch_event(event);
@@ -496,6 +506,9 @@ exported int mrpc_dispatch(struct mrpc_conn_set *set, int max)
 	int i;
 	int ret;
 
+	ret=mrpc_dispatch_validate(set);
+	if (ret)
+		return ret;
 	for (i=0; i < max || max == 0; i++) {
 		ret=mrpc_dispatch_one(set);
 		if (ret)
@@ -508,6 +521,9 @@ exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 {
 	int ret;
 
+	ret=mrpc_dispatch_validate(set);
+	if (ret)
+		return ret;
 	while (1) {
 		ret=mrpc_dispatch_one(set);
 		if (ret == EAGAIN)

@@ -93,6 +93,9 @@ int main(int argc, char **argv)
 	start_monitored_dispatcher(sset);
 	start_monitored_dispatcher(cset);
 
+	expect(mrpc_dispatch(cset, 1), EPERM);
+	expect(mrpc_dispatch_loop(cset), EPERM);
+
 	port=NULL;
 	expect(mrpc_listen(NULL, AF_UNSPEC, "localhost", &port), EINVAL);
 	expect(mrpc_listen(sset, AF_UNSPEC, "localhost", NULL), EINVAL);
