@@ -18,4 +18,4 @@ nodist_example_client_SOURCES = $(GEN)
 CLEANFILES += $(EXTRA_PROGRAMS)
 
 %_minirpc.c %_minirpc.h %_client.h %_server.h %_xdr.c %_xdr.h: %.mx $(top_builddir)/minirpcgen
-	$(top_builddir)/minirpcgen -o $(<:%.mx=%) $(filter-out %minirpcgen,$^)
+	$(top_builddir)/minirpcgen $(filter-out %minirpcgen,$^)
