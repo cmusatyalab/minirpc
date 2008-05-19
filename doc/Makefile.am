@@ -5,7 +5,7 @@ EXAMPLES     = example.mx example_client.c example_server.c
 EXAMPLEPATHS = $(foreach file,$(EXAMPLES),$(top_srcdir)/example/$(file))
 
 SRCPATHS  = $(foreach file,$(DOCFILES),$(srcdir)/$(file)) $(DOCHEADERS)
-EXTRA_DIST = $(DOCFILES)
+EXTRA_DIST = Doxyfile $(DOCFILES)
 
 DOXYCMD = SRCFILES="$(SRCPATHS)" EXAMPLE_PATH=$(top_srcdir)/example \
 			$(DOXYGEN) $< >/dev/null
