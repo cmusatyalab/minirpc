@@ -8,10 +8,12 @@
  * the file COPYING.
  */
 
-#define ITERS 1000
+#define ITERS 100
 #define THREADS 5
+#define YIELD_TIMEOUT_MS 5
 
-#include <sched.h>
+#include <sys/time.h>
+#include <time.h>
 #include <semaphore.h>
 #include <unistd.h>
 #include <pthread.h>
@@ -19,7 +21,9 @@
 
 struct data {
 	pthread_mutex_t lock;
+	pthread_cond_t yield;
 	struct mrpc_connection *conn;
+	int serial;
 	int current;
 	int highwater;
 	int parallel;
@@ -30,6 +34,30 @@ struct data server;
 struct data client;
 
 sem_t complete;
+
+const struct timeval tvd = {
+	.tv_sec = 0,
+	.tv_usec = 1000 * YIELD_TIMEOUT_MS
+};
+
+void yield(struct data *data)
+{
+	struct timeval tv;
+	struct timespec ts;
+	int serial;
+
+	gettimeofday(&tv, NULL);
+	timeradd(&tv, &tvd, &tv);
+	ts.tv_sec=tv.tv_sec;
+	ts.tv_nsec = 1000 * tv.tv_usec;
+	pthread_mutex_lock(&data->lock);
+	serial=++data->serial;
+	pthread_cond_broadcast(&data->yield);
+	while (data->serial == serial &&
+				pthread_cond_timedwait(&data->yield,
+				&data->lock, &ts) != ETIMEDOUT);
+	pthread_mutex_unlock(&data->lock);
+}
 
 void handler_wrapper(struct data *data)
 {
@@ -56,13 +84,13 @@ void handler_wrapper(struct data *data)
 		expect(mrpc_release_event(), 0);
 		expect(mrpc_release_event(), ENOENT);
 	}
-	sched_yield();
+	yield(data);
 	if (parallel) {
 		pthread_mutex_lock(&data->lock);
 		data->blocked=0;
 		pthread_mutex_unlock(&data->lock);
 		expect(mrpc_start_events(conn), 0);
-		sched_yield();
+		yield(data);
 	}
 
 	pthread_mutex_lock(&data->lock);
@@ -150,6 +178,8 @@ int main(int argc, char **argv)
 
 	pthread_mutex_init(&server.lock, NULL);
 	pthread_mutex_init(&client.lock, NULL);
+	pthread_cond_init(&server.yield, NULL);
+	pthread_cond_init(&client.yield, NULL);
 	expect(sem_init(&complete, 0, 0), 0);
 	sset=spawn_server(&port, proto_server, do_accept, NULL, THREADS);
 	mrpc_set_disconnect_func(sset, disconnect_normal);
