@@ -889,9 +889,12 @@ sub genRpclFile {
 }
 
 sub usage {
+	my $progname;
+
+	($progname = $0) =~ s:.*/::;
 	print <<EOF;
 minirpcgen $version
-Usage: $0 [options] <input_file>
+Usage: $progname [options] <input_file>
 Options:
 \t-D <name[=value]>
 \t-o <output_file_base_name>
