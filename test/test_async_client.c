@@ -8,7 +8,6 @@
  * the file COPYING.
  */
 
-#include <unistd.h>
 #include "common.h"
 
 int main(int argc, char **argv)
@@ -39,9 +38,6 @@ int main(int argc, char **argv)
 	async_client_run(conn);
 	trigger_callback_sync(conn);
 	async_client_finish();
-	/* Give the async client some additional time to notice if it receives
-	   more callbacks than it should */
-	sleep(1);
 	mrpc_conn_close(conn);
 	mrpc_conn_unref(conn);
 	mrpc_conn_set_unref(cset);

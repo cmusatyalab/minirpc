@@ -9,6 +9,7 @@
  */
 
 #include <time.h>
+#include <unistd.h>
 #include <glib.h>
 #include "common.h"
 
@@ -230,6 +231,9 @@ void async_client_finish(void)
 			die("Unable to wait on condition variable");
 	}
 	pthread_mutex_unlock(&pending_replies.lock);
+	/* Add some additional delay to notice if we receive more callbacks
+	   than we should */
+	usleep(50000);
 }
 
 void async_client_set_ops(struct mrpc_connection *conn)
