@@ -53,6 +53,8 @@ if test z$enable_valgrind = zyes ; then
 	if test z$VALGRIND = z ; then
 		AC_MSG_ERROR([could not locate valgrind])
 	fi
+	AC_DEFINE([ENABLE_VALGRIND], [1],
+				[Define if running tests with Valgrind.])
 else
 	AC_MSG_RESULT([no])
 fi

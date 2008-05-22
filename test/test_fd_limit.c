@@ -122,17 +122,22 @@ int main(int argc, char **argv)
 	int files;
 	int i;
 
+	/* Valgrind keeps a reserved FD range at the upper end of the FD
+	   space, but doesn't use all of the FDs in it.  If accept() returns
+	   an fd inside this space, Valgrind converts the return value into
+	   EMFILE and closes the fd (!!!).  This causes the client to receive
+	   unexpected connection closures and makes the test fail.  So we
+	   don't run this test under Valgrind.  (Also, some versions of
+	   Valgrind don't support process-shared semaphores.) */
+	exclude_valgrind();
+
 	files=get_max_files();
 	shared=mmap(NULL, sizeof(*shared), PROT_READ|PROT_WRITE,
 				MAP_SHARED|MAP_ANONYMOUS, 0, 0);
 	if (shared == MAP_FAILED)
 		die("Couldn't map shared segment: %s", strerror(errno));
-	if (sem_init(&shared->ready, 1, 0)) {
-		/* Valgrind apparently still uses LinuxThreads. */
-		if (errno == ENOSYS)
-			return 77;
+	if (sem_init(&shared->ready, 1, 0))
 		die("Couldn't initialize semaphore: %s", strerror(errno));
-	}
 	if (sem_init(&shared->start, 1, 0))
 		die("Couldn't initialize semaphore: %s", strerror(errno));
 

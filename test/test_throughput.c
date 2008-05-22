@@ -33,8 +33,7 @@ int main(int argc, char **argv)
 	struct sigaction act;
 
 	/* Don't run performance tests under Valgrind */
-	if (getenv("VALGRIND_OPTS"))
-		return 77;
+	exclude_valgrind();
 
 	memset(&act, 0, sizeof(act));
 	act.sa_handler=alarm_handler;
