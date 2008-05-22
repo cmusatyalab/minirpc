@@ -29,7 +29,7 @@
    fun:_dl_allocate_tls_storage
    fun:_dl_allocate_tls
    fun:__pthread_initialize_manager
-   fun:pthread_create@@GLIBC_2.1
+   fun:pthread_create*
 }
 
 {
@@ -39,5 +39,53 @@
    fun:_dl_allocate_tls_storage
    fun:_dl_allocate_tls
    fun:__pthread_initialize_manager
-   fun:pthread_create@@GLIBC_2.1
+   fun:pthread_create*
+}
+
+{
+   _dl_allocate_tls() possible leak
+   Memcheck:Leak
+   fun:*calloc
+   obj:*
+   fun:_dl_allocate_tls
+   fun:pthread_create*
+}
+
+{
+   _dl_allocate_tls() possible leak
+   Memcheck:Leak
+   fun:*calloc
+   fun:_dl_allocate_tls
+   fun:pthread_create*
+}
+
+{
+   dlopen: gethostbyname2_r cond jump
+   Memcheck:Cond
+   obj:/lib/ld*
+   obj:/lib/*libc*
+   obj:/lib/ld*
+   fun:_dl_open
+}
+
+{
+   dlopen: __nss_hosts_lookup cond jump
+   Memcheck:Cond
+   obj:/lib/ld*
+   obj:/lib/ld*
+   obj:/lib/ld*
+   obj:/lib/*libc*
+   obj:/lib/ld*
+   fun:_dl_open
+}
+
+{
+   dlopen: __nss_hosts_lookup invalid read
+   Memcheck:Addr4
+   obj:/lib/ld*
+   obj:/lib/ld*
+   obj:/lib/ld*
+   obj:/lib/*libc*
+   obj:/lib/ld*
+   fun:_dl_open
 }
