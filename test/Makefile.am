@@ -28,7 +28,7 @@ LDADD = libcommon.a libxdr.a
 
 check_SCRIPTS = runtest.sh
 CLEANFILES += $(check_SCRIPTS)
-EXTRA_DIST = $(check_SCRIPTS:=.in)
+EXTRA_DIST = $(check_SCRIPTS:=.in) valgrind.supp
 $(check_SCRIPTS): %: %.in Makefile
 	@echo "Generating $@ from $<"
 	@sed -e "s=!!ENABLE_VALGRIND!!=$(enable_valgrind)=g" \
