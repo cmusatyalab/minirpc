@@ -8,7 +8,29 @@
  * the file COPYING.
  */
 
+#include <semaphore.h>
 #include "common.h"
+
+sem_t ready;
+
+void ping_cb(void *conn_private, void *msg_private, mrpc_status_t status)
+{
+	if (status != MINIRPC_OK)
+		die("Ping reply was %d", status);
+	sem_post(&ready);
+}
+
+/* We use async ping because it synchronizes both the client and the server
+   event queues.  Otherwise we might call mrpc_conn_close() before all
+   client-side ioerr events have been processed. */
+void do_ping(struct mrpc_connection *conn)
+{
+	struct timespec ts = {0};
+
+	expect(proto_ping_async(conn, ping_cb, NULL), 0);
+	ts.tv_sec = time(NULL) + FAILURE_TIMEOUT;
+	expect(sem_timedwait(&ready, &ts), 0);
+}
 
 int main(int argc, char **argv)
 {
@@ -18,6 +40,7 @@ int main(int argc, char **argv)
 	char *port;
 	int ret;
 
+	expect(sem_init(&ready, 0, 0), 0);
 	sset=spawn_server(&port, proto_server, sync_server_accept, NULL, 1);
 	mrpc_set_disconnect_func(sset, disconnect_normal);
 	mrpc_set_ioerr_func(sset, handle_ioerr);
@@ -37,11 +60,11 @@ int main(int argc, char **argv)
 
 	start_monitored_dispatcher(cset);
 	expect(send_buffer_sync(conn), MINIRPC_ENCODING_ERR);
-	expect(proto_ping(conn), 0);
+	do_ping(conn);
 	expect(recv_buffer_sync(conn), MINIRPC_ENCODING_ERR);
-	expect(proto_ping(conn), 0);
+	do_ping(conn);
 	msg_buffer_sync(conn);
-	expect(proto_ping(conn), 0);
+	do_ping(conn);
 	mrpc_conn_close(conn);
 	mrpc_conn_unref(conn);
 	mrpc_conn_set_unref(cset);
