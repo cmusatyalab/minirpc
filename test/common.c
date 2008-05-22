@@ -8,8 +8,6 @@
  * the file COPYING.
  */
 
-#define TIMEOUT 5
-
 #include <stdio.h>
 #include <stdarg.h>
 #include <pthread.h>
@@ -168,7 +166,7 @@ void dispatcher_barrier(void)
 {
 	struct timespec timeout = {0};
 
-	timeout.tv_sec=time(NULL) + TIMEOUT;
+	timeout.tv_sec=time(NULL) + FAILURE_TIMEOUT;
 	pthread_mutex_lock(&stats.lock);
 	while (stats.running_dispatchers)
 		if (pthread_cond_timedwait(&stats.dispatcher_cond, &stats.lock,

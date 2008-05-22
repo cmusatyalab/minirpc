@@ -11,6 +11,8 @@
 #ifndef TEST_COMMON_H
 #define TEST_COMMON_H
 
+#define FAILURE_TIMEOUT 15	/* seconds */
+
 #include <stdlib.h>
 #include <errno.h>
 #include <pthread.h>

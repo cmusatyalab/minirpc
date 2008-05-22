@@ -89,7 +89,7 @@ static mrpc_status_t do_trigger_callback(void *conn_data,
 	if (ret)
 		die("Notify returned %d", ret);
 	free_CondVarPtr(&cvp, 0);
-	ts.tv_sec=time(NULL) + 5;
+	ts.tv_sec=time(NULL) + FAILURE_TIMEOUT;
 	rval=pthread_cond_timedwait(&cond, &lock, &ts);
 	if (rval == ETIMEDOUT)
 		die("Timed out waiting for notify completion");

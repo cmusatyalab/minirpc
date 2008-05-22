@@ -220,7 +220,7 @@ void async_client_finish(void)
 	struct timespec ts = {0};
 	int ret;
 
-	ts.tv_sec = time(NULL) + 5;
+	ts.tv_sec = time(NULL) + FAILURE_TIMEOUT;
 	pthread_mutex_lock(&pending_replies.lock);
 	while (pending_replies.count) {
 		ret=pthread_cond_timedwait(&pending_replies.cond,
