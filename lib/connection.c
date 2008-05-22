@@ -757,10 +757,10 @@ exported int mrpc_listen(struct mrpc_conn_set *set, int family,
 		}
 	}
 	freeaddrinfo(ai);
+out:
 	conn_set_put(set);
 	if (count)
 		return 0;
-out:
 	return ret;
 }
 
