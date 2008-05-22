@@ -158,9 +158,11 @@ int main(int argc, char **argv)
 			else
 				continue;
 		}
-		if (!WIFEXITED(stat))
-			die("Unexpected return from wait()");
-		if (WEXITSTATUS(stat)) {
+		if (WIFSIGNALED(stat)) {
+			message("Client died on signal %d", WTERMSIG(stat));
+			ret=1;
+		}
+		if (WIFEXITED(stat) && WEXITSTATUS(stat)) {
 			message("Client returned %d", WEXITSTATUS(stat));
 			ret=1;
 		}
