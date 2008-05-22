@@ -98,6 +98,10 @@ void client(int files)
 		ret=mrpc_connect(conn, AF_UNSPEC, NULL, port);
 		if (ret)
 			die("%s", strerror(ret));
+		/* Make sure the server has accepted the connection before
+		   we close it, so that expect_disconnects() on the server
+		   turns out right */
+		expect(proto_ping(conn), 0);
 		oconn=g_slice_new0(struct open_conn);
 		oconn->conn=conn;
 		gettimeofday(&oconn->expire, NULL);
