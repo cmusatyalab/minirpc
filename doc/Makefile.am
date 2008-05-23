@@ -3,20 +3,21 @@ DOCFILES     = main.dox common.dox example.dox
 DOCFILES    += example_minirpc.h example_client.h example_server.h example_xdr.h
 EXAMPLES     = example.mx example_client.c example_server.c
 EXAMPLEPATHS = $(foreach file,$(EXAMPLES),$(top_srcdir)/example/$(file))
+CONFFILES    = Doxyfile footer.html
 
 SRCPATHS  = $(foreach file,$(DOCFILES),$(srcdir)/$(file)) $(DOCHEADERS)
-EXTRA_DIST = Doxyfile $(DOCFILES)
+EXTRA_DIST = $(CONFFILES) $(DOCFILES)
 
-DOXYCMD = SRCFILES="$(SRCPATHS)" EXAMPLE_PATH=$(top_srcdir)/example \
-			$(DOXYGEN) $< >/dev/null
+DOXYCMD = SRCFILES="$(SRCPATHS)" SRCPATH=$(top_srcdir) VERSION=$(VERSION) \
+			$(DOXYGEN) $(srcdir)/Doxyfile >/dev/null
 
 if HAVE_DOXYGEN
-html.stamp: $(srcdir)/Doxyfile $(SRCPATHS) $(EXAMPLEPATHS)
+html.stamp: $(CONFFILES) $(SRCPATHS) $(EXAMPLEPATHS)
 	rm -rf html
 	GENERATE_HTML=YES GENERATE_LATEX=NO $(DOXYCMD)
 	touch html.stamp
 
-pdf.stamp: $(srcdir)/Doxyfile $(SRCPATHS) $(EXAMPLEPATHS)
+pdf.stamp: $(CONFFILES) $(SRCPATHS) $(EXAMPLEPATHS)
 	rm -rf latex
 	GENERATE_HTML=NO GENERATE_LATEX=YES $(DOXYCMD)
 	$(MAKE) $(AM_MAKEFLAGS) -C latex pdf
