@@ -107,6 +107,7 @@ int main(int argc, char **argv)
 	expect(mrpc_listen(sset, AF_INET, NULL, &port), 0);
 	expect(mrpc_conn_create(&conn, cset, NULL), 0);
 	expect(mrpc_connect(conn, AF_UNSPEC, NULL, port), 0);
+	expect(proto_ping(conn), 0);
 	mrpc_listen_close(NULL);
 	mrpc_listen_close(sset);
 	mrpc_conn_unref(conn);
