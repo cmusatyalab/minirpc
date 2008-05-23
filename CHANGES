@@ -1,3 +1,13 @@
+====== 0.3.1 (2008-05-23)
+
+- Fix conn set refcounting bug in mrpc_listen() error path
+- Fix building documentation from source tarball
+- Minor fix to minirpcgen usage message
+- Add miniRPC version number to generated documentation
+- Fix several problems when running tests under Valgrind
+- Fix spurious failures in several test cases
+- Minor cleanups to test code
+
 ====== 0.3 (2008-05-07)
 
 ------ Library
