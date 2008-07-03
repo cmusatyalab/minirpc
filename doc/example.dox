@@ -154,11 +154,15 @@ input file:
 - @c MINIRPC is defined when generating all other output files
 
 For the XDR passes @em only, you can embed literal strings in the output files
-by prefixing them with "%":
+by prefixing them with "%". Using both literal strings and defines it is
+possible to declare common data structures in a @c .mx file and include it
+into several others with the following fragment:
 
 @verbatim
-#ifdef RPC_XDR
-%#include "some_other_header.h"
+#ifdef MINIRPC
+#include "common.mx"
+#else
+%#include "common_xdr.h"
 #endif
 @endverbatim
 
