@@ -335,13 +335,15 @@ mrpc_status_t ${base}_${func}(struct mrpc_connection *conn$inarg);
 EOF
 }
 
-sub gen_free_proc_c {
+sub gen_free_proc_h {
 	my $fh = shift;
 	my $type = shift;
 
 	print $fh wrapc(<<EOF);
 
-void free_$type($type *in, int container)
+#ifndef MRPC_FREE_${type}_DEFINED
+#define MRPC_FREE_${type}_DEFINED
+static inline void free_$type($type *in, int container)
 {
 	if (in == NULL)
 		return;
@@ -349,15 +351,7 @@ void free_$type($type *in, int container)
 	if (container)
 		free(in);
 }
-EOF
-}
-
-sub gen_free_proc_h {
-	my $fh = shift;
-	my $type = shift;
-
-	print $fh wrapc(<<EOF);
-void free_$type($type *in, int container);
+#endif
 EOF
 }
 
@@ -676,7 +670,6 @@ sub genstubs_noreply {
 }
 
 sub genstubs_free {
-	my $cf = shift;
 	my $hf = shift;
 
 	my @typelist;
@@ -684,9 +677,7 @@ sub genstubs_free {
 
 	@typelist = grep(!/^void$/, sort keys %types);
 	return if !@typelist;
-	print $hf "\n";
 	foreach $type (@typelist) {
-		gen_free_proc_c($cf, $type);
 		gen_free_proc_h($hf, $type);
 	}
 }
@@ -786,7 +777,7 @@ sub genstubs {
 		$hf = ($role eq "server") ? *CHF : *SHF;
 		genstubs_noreply($role, $procSets{$role}, *MCF, $hf);
 	}
-	genstubs_free(*MCF, *MHF);
+	genstubs_free(*MHF);
 
 	foreach $hf (*MHF, *CHF, *SHF) {
 		print $hf "\n#endif\n";
