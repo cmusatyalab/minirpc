@@ -11,7 +11,7 @@
 ## Process this file with autoconf to produce a configure script.
 
 AC_PREREQ(2.59)
-AC_INIT([miniRPC], [0.3.1])
+AC_INIT([miniRPC], [0.3.2])
 AM_INIT_AUTOMAKE([foreign])
 AC_COPYRIGHT([Copyright (C) 2007-2008 Carnegie Mellon University])
 AC_CONFIG_SRCDIR([lib/connection.c])
