@@ -1,3 +1,10 @@
+====== 0.3.2 (2008-07-03)
+
+- No library changes
+- Work around application link failures with multiple protocols sharing common
+  data types
+- Minor documentation update
+
 ====== 0.3.1 (2008-05-23)
 
 - Fix conn set refcounting bug in mrpc_listen() error path
