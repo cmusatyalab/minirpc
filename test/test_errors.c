@@ -10,6 +10,8 @@
 
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <fcntl.h>
 #include <unistd.h>
 #include "common.h"
 
@@ -152,7 +154,11 @@ int main(int argc, char **argv)
 	expect(listen(fd, 16), 0);
 	expect(mrpc_bind_fd(conn, fd), ENOTCONN);
 	close(fd);
-	expect(mrpc_bind_fd(conn, 0), ENOTSOCK);
+	fd=open("/dev/null", O_RDWR);
+	if (fd == -1)
+		die("Couldn't open /dev/null");
+	expect(mrpc_bind_fd(conn, fd), ENOTSOCK);
+	close(fd);
 	expect(socketpair(AF_UNIX, SOCK_DGRAM, 0, fdpair), 0);
 	expect(mrpc_bind_fd(conn, fdpair[0]), EPROTONOSUPPORT);
 	close(fdpair[0]);
