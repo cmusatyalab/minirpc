@@ -8,6 +8,7 @@
  * the file COPYING.
  */
 
+#define _GNU_SOURCE
 #include <semaphore.h>
 #include "common.h"
 
