@@ -8,8 +8,9 @@
  * the file COPYING.
  */
 
+#define FDLIMIT 100
+#define FDCOUNT (FDLIMIT - 25)  /* buffer for overhead FDs */
 #define MULTIPLE 5
-#define BUFFER 25
 #define DELAY 2
 
 #define _GNU_SOURCE
@@ -36,13 +37,15 @@ struct open_conn {
 	struct timeval expire;
 } sentinel;
 
-int get_max_files(void)
+void set_max_files(void)
 {
 	struct rlimit rlim;
 
 	if (getrlimit(RLIMIT_NOFILE, &rlim))
 		die("Couldn't get system fd limit");
-	return rlim.rlim_cur;
+	rlim.rlim_cur=FDLIMIT;
+	if (setrlimit(RLIMIT_NOFILE, &rlim))
+		die("Couldn't set system fd limit");
 }
 
 void *closer(void *arg)
@@ -70,7 +73,7 @@ void *closer(void *arg)
 	return NULL;
 }
 
-void client(int files)
+void client(void)
 {
 	struct mrpc_conn_set *cset;
 	struct mrpc_connection *conn;
@@ -91,7 +94,7 @@ void client(int files)
 	sem_post(&shared->ready);
 	sem_wait(&shared->start);
 	port=g_strdup_printf("%u", g_atomic_int_get(&shared->port));
-	for (i=0; i < files - BUFFER; i++) {
+	for (i=0; i < FDCOUNT; i++) {
 		ret=mrpc_conn_create(&conn, cset, NULL);
 		if (ret)
 			die("%s", strerror(ret));
@@ -112,7 +115,7 @@ void client(int files)
 	pthread_join(thr, NULL);
 	g_async_queue_unref(queue);
 	mrpc_conn_set_unref(cset);
-	expect_disconnects(files - BUFFER, 0, 0);
+	expect_disconnects(FDCOUNT, 0, 0);
 	g_free(port);
 	exit(0);
 }
@@ -123,7 +126,6 @@ int main(int argc, char **argv)
 	char *port;
 	int stat;
 	int ret=0;
-	int files;
 	int i;
 
 	/* Valgrind keeps a reserved FD range at the upper end of the FD
@@ -135,7 +137,7 @@ int main(int argc, char **argv)
 	   Valgrind don't support process-shared semaphores.) */
 	exclude_valgrind();
 
-	files=get_max_files();
+	set_max_files();
 	shared=mmap(NULL, sizeof(*shared), PROT_READ|PROT_WRITE,
 				MAP_SHARED|MAP_ANONYMOUS, 0, 0);
 	if (shared == MAP_FAILED)
@@ -147,7 +149,7 @@ int main(int argc, char **argv)
 
 	for (i=0; i<MULTIPLE; i++)
 		if (!fork())
-			client(files);
+			client();
 	for (i=0; i<MULTIPLE; i++)
 		sem_wait(&shared->ready);
 	sset=spawn_server(&port, proto_server, sync_server_accept, NULL, 1);
@@ -173,7 +175,7 @@ int main(int argc, char **argv)
 	}
 	mrpc_listen_close(sset);
 	mrpc_conn_set_unref(sset);
-	expect_disconnects(0, MULTIPLE * (files - BUFFER), 0);
+	expect_disconnects(0, MULTIPLE * FDCOUNT, 0);
 	sem_destroy(&shared->ready);
 	sem_destroy(&shared->start);
 	free(port);
