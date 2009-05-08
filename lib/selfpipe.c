@@ -36,10 +36,10 @@ int selfpipe_create(struct selfpipe **new)
 		ret=errno;
 		goto bad_free;
 	}
+	ret=set_nonblock(sp->pipe[0]);
+	if (ret)
+		goto bad_close;
 	for (i=0; i < 2; i++) {
-		ret=set_nonblock(sp->pipe[i]);
-		if (ret)
-			goto bad_close;
 		ret=set_cloexec(sp->pipe[i]);
 		if (ret)
 			goto bad_close;
@@ -66,7 +66,7 @@ void selfpipe_set(struct selfpipe *sp)
 {
 	pthread_mutex_lock(&sp->lock);
 	if (!sp->set) {
-		write(sp->pipe[1], "a", 1);
+		while (write(sp->pipe[1], "a", 1) < 1);
 		sp->set=1;
 		pthread_cond_broadcast(&sp->cond);
 	}
