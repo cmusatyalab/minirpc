@@ -33,7 +33,8 @@ $(check_SCRIPTS): %: %.in Makefile
 	@echo "Generating $@ from $<"
 	@sed -e "s=!!ENABLE_VALGRIND!!=$(enable_valgrind)=g" \
 				-e "s=!!VALGRIND!!=$(VALGRIND)=g" \
-				-e "s=!!LIBTOOL!!=$(LIBTOOL)=g" $< > $@
+				-e "s=!!LIBTOOL!!=$(LIBTOOL)=g" \
+				-e "s=!!SRCDIR!!=$(srcdir)=g" $< > $@
 	@chmod +x $@
 
 check_PROGRAMS  = test_basic
