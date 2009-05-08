@@ -22,7 +22,7 @@
 static __thread struct mrpc_event *active_event;
 static __thread GList *dispatching_sets;
 
-struct dispatch_thread_data {
+struct dispatch_thread_launch_data {
 	struct mrpc_conn_set *set;
 	sem_t started;
 };
@@ -536,7 +536,7 @@ exported int mrpc_dispatch_loop(struct mrpc_conn_set *set)
 
 static void *dispatch_thread(void *arg)
 {
-	struct dispatch_thread_data *data=arg;
+	struct dispatch_thread_launch_data *data=arg;
 	struct mrpc_conn_set *set=data->set;
 
 	block_signals();
@@ -549,7 +549,7 @@ static void *dispatch_thread(void *arg)
 
 exported int mrpc_start_dispatch_thread(struct mrpc_conn_set *set)
 {
-	struct dispatch_thread_data data = {0};
+	struct dispatch_thread_launch_data data = {0};
 	pthread_t thr;
 	pthread_attr_t attr;
 	int ret;
