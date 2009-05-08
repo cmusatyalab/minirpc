@@ -8,17 +8,20 @@
  * the file COPYING.
  */
 
-#define _GNU_SOURCE
-#include <semaphore.h>
 #include "common.h"
 
-sem_t ready;
+struct {
+	pthread_mutex_t lock;
+	pthread_cond_t cond;
+} ready;
 
 void ping_cb(void *conn_private, void *msg_private, mrpc_status_t status)
 {
 	if (status != MINIRPC_OK)
 		die("Ping reply was %d", status);
-	sem_post(&ready);
+	pthread_mutex_lock(&ready.lock);
+	pthread_cond_broadcast(&ready.cond);
+	pthread_mutex_unlock(&ready.lock);
 }
 
 /* We use async ping because it synchronizes both the client and the server
@@ -28,9 +31,11 @@ void do_ping(struct mrpc_connection *conn)
 {
 	struct timespec ts = {0};
 
+	pthread_mutex_lock(&ready.lock);
 	expect(proto_ping_async(conn, ping_cb, NULL), 0);
 	ts.tv_sec = time(NULL) + FAILURE_TIMEOUT;
-	expect(sem_timedwait(&ready, &ts), 0);
+	expect(pthread_cond_timedwait(&ready.cond, &ready.lock, &ts), 0);
+	pthread_mutex_unlock(&ready.lock);
 }
 
 int main(int argc, char **argv)
@@ -41,7 +46,8 @@ int main(int argc, char **argv)
 	char *port;
 	int ret;
 
-	expect(sem_init(&ready, 0, 0), 0);
+	pthread_mutex_init(&ready.lock, NULL);
+	pthread_cond_init(&ready.cond, NULL);
 	sset=spawn_server(&port, proto_server, sync_server_accept, NULL, 1);
 	mrpc_set_disconnect_func(sset, disconnect_normal);
 	mrpc_set_ioerr_func(sset, handle_ioerr);
