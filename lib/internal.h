@@ -193,6 +193,7 @@ void pending_kill(struct mrpc_connection *conn);
 void pending_free(struct pending_reply *pending);
 
 /* event.c */
+void mrpc_event_threadlocal_init(void);
 struct mrpc_event *mrpc_alloc_event(struct mrpc_connection *conn,
 			enum event_type type);
 struct mrpc_event *mrpc_alloc_message_event(struct mrpc_message *msg,

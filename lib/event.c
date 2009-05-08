@@ -19,8 +19,12 @@
 #define MINIRPC_INTERNAL
 #include "internal.h"
 
-static __thread struct mrpc_event *active_event;
-static __thread GList *dispatching_sets;
+static pthread_key_t dispatch_thread_data;
+
+struct dispatch_thread_data {
+	GQueue *sets;
+	struct mrpc_event *active_event;
+};
 
 struct dispatch_thread_launch_data {
 	struct mrpc_conn_set *set;
@@ -201,9 +205,12 @@ static int _mrpc_release_event(struct mrpc_event *event)
    dispatch_event().  For external use only! */
 exported int mrpc_release_event(void)
 {
-	if (active_event == NULL)
+	struct dispatch_thread_data *tdata;
+
+	tdata=pthread_getspecific(dispatch_thread_data);
+	if (tdata == NULL || tdata->active_event == NULL)
 		return EPERM;
-	return _mrpc_release_event(active_event);
+	return _mrpc_release_event(tdata->active_event);
 }
 
 exported int mrpc_stop_events(struct mrpc_connection *conn)
@@ -376,6 +383,7 @@ static void run_reply_callback(struct mrpc_event *event)
 static void dispatch_event(struct mrpc_event *event)
 {
 	struct mrpc_connection *conn=event->conn;
+	struct dispatch_thread_data *tdata;
 	mrpc_accept_fn *accept;
 	mrpc_disconnect_fn *disconnect;
 	mrpc_ioerr_fn *ioerr;
@@ -383,8 +391,9 @@ static void dispatch_event(struct mrpc_event *event)
 	int fire_disconnect;
 	enum mrpc_disc_reason reason;
 
-	assert(active_event == NULL);
-	active_event=event;
+	tdata=pthread_getspecific(dispatch_thread_data);
+	assert(tdata->active_event == NULL);
+	tdata->active_event=event;
 	conn_get(conn);
 	pthread_mutex_lock(&conn->sequence_lock);
 	squash=conn->sequence_flags & SEQ_SQUASH_EVENTS;
@@ -441,8 +450,8 @@ static void dispatch_event(struct mrpc_event *event)
 out:
 	finish_event(conn);
 	conn_put(conn);
-	assert(active_event == event);
-	active_event=NULL;
+	assert(tdata->active_event == event);
+	tdata->active_event=NULL;
 }
 
 void destroy_events(struct mrpc_connection *conn)
@@ -458,19 +467,39 @@ void destroy_events(struct mrpc_connection *conn)
 
 exported void mrpc_dispatcher_add(struct mrpc_conn_set *set)
 {
+	struct dispatch_thread_data *tdata;
+
 	if (set == NULL)
 		return;
 	pthread_mutex_lock(&set->events_lock);
 	set->events_threads++;
 	pthread_mutex_unlock(&set->events_lock);
-	dispatching_sets=g_list_prepend(dispatching_sets, set);
+	tdata=pthread_getspecific(dispatch_thread_data);
+	if (tdata == NULL) {
+		tdata=g_slice_new0(struct dispatch_thread_data);
+		tdata->sets=g_queue_new();
+		pthread_setspecific(dispatch_thread_data, tdata);
+	}
+	g_queue_push_tail(tdata->sets, set);
 }
 
 exported void mrpc_dispatcher_remove(struct mrpc_conn_set *set)
 {
+	struct dispatch_thread_data *tdata;
+
 	if (set == NULL)
 		return;
-	dispatching_sets=g_list_remove(dispatching_sets, set);
+	tdata=pthread_getspecific(dispatch_thread_data);
+	if (tdata == NULL)
+		return;
+	assert(tdata->active_event == NULL ||
+				tdata->active_event->conn->set != set);
+	g_queue_remove(tdata->sets, set);
+	if (g_queue_is_empty(tdata->sets)) {
+		g_queue_free(tdata->sets);
+		g_slice_free(struct dispatch_thread_data, tdata);
+		pthread_setspecific(dispatch_thread_data, NULL);
+	}
 	pthread_mutex_lock(&set->events_lock);
 	set->events_threads--;
 	pthread_cond_broadcast(&set->events_threads_cond);
@@ -479,9 +508,12 @@ exported void mrpc_dispatcher_remove(struct mrpc_conn_set *set)
 
 static int mrpc_dispatch_validate(struct mrpc_conn_set *set)
 {
+	struct dispatch_thread_data *tdata;
+
 	if (set == NULL)
 		return EINVAL;
-	if (g_list_find(dispatching_sets, set) == NULL)
+	tdata=pthread_getspecific(dispatch_thread_data);
+	if (tdata == NULL || g_queue_find(tdata->sets, set) == NULL)
 		return EPERM;
 	return 0;
 }
@@ -575,4 +607,10 @@ out_attr:
 out_sem:
 	sem_destroy(&data.started);
 	return ret;
+}
+
+void mrpc_event_threadlocal_init(void)
+{
+	if (pthread_key_create(&dispatch_thread_data, NULL))
+		assert(0);
 }

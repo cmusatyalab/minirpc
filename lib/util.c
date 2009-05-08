@@ -21,6 +21,7 @@ static void _mrpc_init(void)
 {
 	if (!g_thread_supported())
 		g_thread_init(NULL);
+	mrpc_event_threadlocal_init();
 }
 
 void mrpc_init(void)
