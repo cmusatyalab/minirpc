@@ -15,22 +15,15 @@
 
 #define _GNU_SOURCE
 #include <sys/types.h>
+#include <sys/socket.h>
 #include <sys/wait.h>
-#include <sys/mman.h>
 #include <sys/time.h>
 #include <sys/resource.h>
 #include <time.h>
-#include <semaphore.h>
 #include <unistd.h>
 #include <glib.h>
 #include <pthread.h>
 #include "common.h"
-
-static struct {
-	sem_t ready;
-	sem_t start;
-	int port;
-} *shared;
 
 struct open_conn {
 	struct mrpc_connection *conn;
@@ -73,7 +66,7 @@ void *closer(void *arg)
 	return NULL;
 }
 
-void client(void)
+void client(int sock)
 {
 	struct mrpc_conn_set *cset;
 	struct mrpc_connection *conn;
@@ -82,6 +75,7 @@ void client(void)
 	pthread_t thr;
 	int i;
 	int ret;
+	uint32_t port_i;
 	char *port;
 
 	if (mrpc_conn_set_create(&cset, proto_client, NULL))
@@ -91,9 +85,14 @@ void client(void)
 	queue=g_async_queue_new();
 	pthread_create(&thr, NULL, closer, queue);
 
-	sem_post(&shared->ready);
-	sem_wait(&shared->start);
-	port=g_strdup_printf("%u", g_atomic_int_get(&shared->port));
+	/* Indicate readiness */
+	if (write(sock, "a", 1) != 1)
+		die("Short write");
+	/* Wait until we're told to start, and what port number to use */
+	if (read(sock, &port_i, 4) != 4)
+		die("Short read");
+	close(sock);
+	port=g_strdup_printf("%u", port_i);
 	for (i=0; i < FDCOUNT; i++) {
 		ret=mrpc_conn_create(&conn, cset, NULL);
 		if (ret)
@@ -124,39 +123,49 @@ int main(int argc, char **argv)
 {
 	struct mrpc_conn_set *sset;
 	char *port;
+	uint32_t port_i;
 	int stat;
 	int ret=0;
+	int clients[MULTIPLE];
+	int sock[2];
 	int i;
+	int j;
 
 	/* Valgrind keeps a reserved FD range at the upper end of the FD
 	   space, but doesn't use all of the FDs in it.  If accept() returns
 	   an fd inside this space, Valgrind converts the return value into
 	   EMFILE and closes the fd (!!!).  This causes the client to receive
 	   unexpected connection closures and makes the test fail.  So we
-	   don't run this test under Valgrind.  (Also, some versions of
-	   Valgrind don't support process-shared semaphores.) */
+	   don't run this test under Valgrind. */
 	exclude_valgrind();
 
 	set_max_files();
-	shared=mmap(NULL, sizeof(*shared), PROT_READ|PROT_WRITE,
-				MAP_SHARED|MAP_ANONYMOUS, 0, 0);
-	if (shared == MAP_FAILED)
-		die("Couldn't map shared segment: %s", strerror(errno));
-	if (sem_init(&shared->ready, 1, 0))
-		die("Couldn't initialize semaphore: %s", strerror(errno));
-	if (sem_init(&shared->start, 1, 0))
-		die("Couldn't initialize semaphore: %s", strerror(errno));
 
+	for (i=0; i<MULTIPLE; i++) {
+		if (socketpair(AF_UNIX, SOCK_STREAM, 0, sock))
+			die("Couldn't create socket pair: %s",
+						strerror(errno));
+		clients[i]=sock[0];
+		if (!fork()) {
+			for (j = i; j >= 0; j--)
+				close(clients[j]);
+			client(sock[1]);
+		}
+		close(sock[1]);
+	}
+	/* Wait for clients to become ready */
 	for (i=0; i<MULTIPLE; i++)
-		if (!fork())
-			client();
-	for (i=0; i<MULTIPLE; i++)
-		sem_wait(&shared->ready);
+		if (read(clients[i], &j, 1) != 1)
+			die("Short read");
 	sset=spawn_server(&port, proto_server, sync_server_accept, NULL, 1);
 	mrpc_set_disconnect_func(sset, disconnect_normal);
-	g_atomic_int_set(&shared->port, atoi(port));
-	for (i=0; i<MULTIPLE; i++)
-		sem_post(&shared->start);
+	port_i=atoi(port);
+	/* Start them running */
+	for (i=0; i<MULTIPLE; i++) {
+		if (write(clients[i], &port_i, 4) != 4)
+			die("Short write");
+		close(clients[i]);
+	}
 	while (1) {
 		if (wait(&stat) == -1) {
 			if (errno == ECHILD)
@@ -176,8 +185,6 @@ int main(int argc, char **argv)
 	mrpc_listen_close(sset);
 	mrpc_conn_set_unref(sset);
 	expect_disconnects(0, MULTIPLE * FDCOUNT, 0);
-	sem_destroy(&shared->ready);
-	sem_destroy(&shared->start);
 	free(port);
 	return ret;
 }
