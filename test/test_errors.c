@@ -131,7 +131,6 @@ int main(int argc, char **argv)
 	expect(mrpc_connect(NULL, AF_INET, "localhost", port), EINVAL);
 	expect(mrpc_connect(conn, 90500, "localhost", port), EAFNOSUPPORT);
 	expect(mrpc_connect(conn, AF_INET, "localhost", NULL), EINVAL);
-	expect(mrpc_connect(conn, AF_INET, "localhost", "0"), ECONNREFUSED);
 
 	fd=socket(PF_INET, SOCK_STREAM, 0);
 	if (fd == -1)
