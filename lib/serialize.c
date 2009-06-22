@@ -8,6 +8,8 @@
  * the file COPYING.
  */
 
+#include <stdlib.h>
+#include <string.h>
 #include <assert.h>
 #include <pthread.h>
 #define MINIRPC_INTERNAL

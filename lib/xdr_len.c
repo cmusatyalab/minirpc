@@ -8,6 +8,7 @@
  * the file COPYING.
  */
 
+#include <rpc/types.h>
 #include <rpc/xdr.h>
 #define MINIRPC_INTERNAL
 #include "internal.h"
@@ -83,8 +84,10 @@ static struct xdr_ops ops = {
 	.x_setpostn = setpos,
 	.x_inline = doinline,
 	.x_destroy = destroy,
+#ifdef HAVE_X_GETINT32
 	.x_getint32 = getint32,
 	.x_putint32 = putint32
+#endif
 };
 
 void xdrlen_create(XDR *xdrs)

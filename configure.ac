@@ -74,6 +74,15 @@ CHECK_LINK([for epoll], [AC_LANG_PROGRAM([#include <sys/epoll.h>],
 			[int fd=epoll_create(8)])], HAVE_EPOLL,
 			[Define if the C library supports the epoll system calls.])
 
+#check for x_getint32 field.
+CHECK_LINK([for x_getint32 field],
+	   [AC_LANG_PROGRAM([
+#include <rpc/types.h>
+#include <rpc/xdr.h>
+bool_t getint32(XDR *xdrs, int32_t *ip) { return 0;}],
+	   [struct xdr_ops ops; ops.x_getint32 = getint32;])], HAVE_X_GETINT32,
+           [Define if xdr_ops struct includes a x_getint32 field.])
+
 # Generate the library version code.
 VERSION_CODE=`echo $PACKAGE_VERSION | tr . ' ' | {
 	read maj min rev

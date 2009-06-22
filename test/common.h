@@ -13,7 +13,9 @@
 
 #define FAILURE_TIMEOUT 15	/* seconds */
 
+#include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <errno.h>
 #include <pthread.h>
 #include <minirpc/minirpc.h>

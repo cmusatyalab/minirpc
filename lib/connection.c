@@ -30,6 +30,8 @@ static int try_close_fd(struct mrpc_connection *conn);
 
 static int setsockoptval(int fd, int level, int optname, int value)
 {
+	if (optname == -1) /* optname not supported */
+		return 0;
 	if (setsockopt(fd, level, optname, &value, sizeof(value)))
 		return errno;
 	return 0;

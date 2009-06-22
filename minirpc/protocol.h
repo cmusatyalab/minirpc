@@ -15,6 +15,7 @@
 #ifndef MINIRPC_PROTOCOL_H
 #define MINIRPC_PROTOCOL_H
 
+#include <rpc/types.h>
 #include <rpc/xdr.h>
 #include <minirpc/minirpc.h>
 
