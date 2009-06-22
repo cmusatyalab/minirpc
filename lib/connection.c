@@ -146,6 +146,7 @@ static void try_read_conn(void *data)
 			break;
 		default:
 			assert(0);
+			return;  /* Avoid warning */
 		}
 
 		if (conn->recv_remaining) {
@@ -265,6 +266,7 @@ static void try_write_conn(void *data)
 			break;
 		default:
 			assert(0);
+			return;  /* Avoid warning */
 		}
 
 		if (conn->send_offset < len) {
