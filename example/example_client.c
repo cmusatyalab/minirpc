@@ -31,7 +31,7 @@ int main(int argc, char **argv)
 		die("Couldn't create connection handle");
 	ret=mrpc_connect(conn, AF_UNSPEC, host, port);
 	if (ret)
-		die("Couldn't connect to %s:%u: %s", host, port, strerror(ret));
+		die("Couldn't connect to %s:%s: %s", host, port, strerror(ret));
 
 	if (example_get_num_colors(conn, &count))
 		die("get_num_colors failed");
