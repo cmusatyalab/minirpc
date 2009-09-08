@@ -128,7 +128,6 @@ void ping_cb(void *conn_private, void *msg_private, mrpc_status_t status)
 
 void do_round(int cli_pl, int srv_pl)
 {
-	struct mrpc_connection *sconn;
 	struct mrpc_connection *cconn;
 	int i;
 
@@ -142,7 +141,6 @@ void do_round(int cli_pl, int srv_pl)
 	server.current=0;
 	server.highwater=0;
 	server.parallel=srv_pl;
-	sconn=server.conn;
 	pthread_mutex_unlock(&server.lock);
 
 	for (i=0; i<ITERS; i++)
