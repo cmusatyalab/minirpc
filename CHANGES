@@ -1,3 +1,11 @@
+====== 0.3.3 (2010-09-03)
+
+- Fix incorrect format string in example_client
+- Fix "make check" with --enable-valgrind and VPATH builds
+- Internal changes for NetBSD support
+- Fix spurious failures in several test cases
+- Other minor updates
+
 ====== 0.3.2 (2008-07-03)
 
 - No library changes
